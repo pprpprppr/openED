@@ -23,12 +23,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.BubbleChart
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -77,6 +81,8 @@ fun HomeScreen(
     onNavigateToWizard: () -> Unit,
     onNavigateToWorkspace: (String, String?) -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToFlashcards: () -> Unit = {},
+    onNavigateToGraph: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -120,6 +126,22 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    // Knowledge graph button
+                    IconButton(onClick = onNavigateToGraph) {
+                        Icon(imageVector = Icons.Default.BubbleChart, contentDescription = "Knowledge Graph")
+                    }
+                    // Flashcard review badge
+                    BadgedBox(
+                        badge = {
+                            if (uiState.dueFlashcardCount > 0) {
+                                Badge { Text(uiState.dueFlashcardCount.toString()) }
+                            }
+                        }
+                    ) {
+                        IconButton(onClick = onNavigateToFlashcards) {
+                            Icon(imageVector = Icons.Default.Style, contentDescription = "Review Flashcards")
+                        }
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings & Backup")
                     }

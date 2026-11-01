@@ -69,9 +69,10 @@ fun buildInteractiveAnnotatedString(
         // 1. [[Wiki Links]]
         // 2. [Markdown Links](url)
         // 3. `inline code`
-        // 4. **bold**
-        // 5. *italic*
-        val tokenRegex = Regex("""(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\*\*(.*?)\*\*)|(\*(.*?)\*)""")
+        // 4. $inline math$
+        // 5. **bold**
+        // 6. *italic*
+        val tokenRegex = Regex("""(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)""")
         var lastIndex = 0
 
         for (match in tokenRegex.findAll(text)) {
@@ -130,9 +131,25 @@ fun buildInteractiveAnnotatedString(
                     pop()
                 }
 
+                // $inline math$
+                fullMatch.startsWith("$") && fullMatch.endsWith("$") && fullMatch.length > 2 -> {
+                    val mathExpr = match.groupValues[9]
+                    val formatted = formatLatexForDisplay(mathExpr)
+                    pushStyle(
+                        SpanStyle(
+                            fontStyle = FontStyle.Italic,
+                            color = Color(0xFF6366F1),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                    )
+                    append(formatted)
+                    pop()
+                }
+
                 // **bold**
                 fullMatch.startsWith("**") && fullMatch.endsWith("**") -> {
-                    val boldText = match.groupValues[9]
+                    val boldText = match.groupValues[11]
                     pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
                     append(boldText)
                     pop()
@@ -140,7 +157,7 @@ fun buildInteractiveAnnotatedString(
 
                 // *italic*
                 fullMatch.startsWith("*") && fullMatch.endsWith("*") -> {
-                    val italicText = match.groupValues[11]
+                    val italicText = match.groupValues[13]
                     pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
                     append(italicText)
                     pop()

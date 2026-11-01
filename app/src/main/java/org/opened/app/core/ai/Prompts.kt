@@ -181,4 +181,89 @@ Provide a clear, engaging, and pedagogically sound Socratic answer.
 4. Keep the answer structured and readable in Markdown.
 """.trimIndent()
     }
+
+    fun generateFlashcardsPrompt(chapterTitle: String, chapterContent: String): String {
+        return """
+You are openED's Spaced-Repetition Flashcard Engine.
+Generate 5 to 10 high-yield active-recall flashcards from the following chapter.
+
+CHAPTER: "$chapterTitle"
+CONTENT:
+${chapterContent.take(4000)}
+
+RULES:
+- Each flashcard front must be a concise question or cloze-deletion prompt.
+- Each flashcard back must be a complete, self-contained answer (1-4 sentences). Include key formulas or code snippets where critical.
+- Prioritize conceptual understanding and edge cases over trivial definitions.
+- Vary difficulty: include foundational, intermediate, and application-level cards.
+
+Return ONLY a valid JSON object:
+{
+  "flashcards": [
+    { "front": "Question text?", "back": "Answer text." }
+  ]
+}
+Do not wrap in markdown code fences. Return raw JSON only.
+""".trimIndent()
+    }
+
+    fun adaptiveQuizPrompt(chapterTitle: String, chapterContent: String): String {
+        return """
+You are openED's Adaptive Mastery Examiner.
+Create 5 scenario-based multiple-choice questions for the chapter below.
+
+CHAPTER: "$chapterTitle"
+CONTENT:
+${chapterContent.take(4000)}
+
+REQUIREMENTS:
+- Questions must require understanding, not mere recall.
+- Each question has exactly 4 options (A–D).
+- Include real-world scenario framing where possible.
+- Provide a clear explanation for why the correct answer is right and others are wrong.
+
+Return ONLY a valid JSON object:
+{
+  "questions": [
+    {
+      "question": "Scenario-based question text?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctIndex": 0,
+      "explanation": "Why A is correct and B/C/D are wrong."
+    }
+  ]
+}
+Do not wrap in markdown code fences. Return raw JSON only.
+""".trimIndent()
+    }
+
+    fun feynmanEvaluationPrompt(chapterTitle: String, chapterContent: String, userExplanation: String): String {
+        return """
+You are openED's Feynman Technique Evaluator.
+A learner has explained the core concept of the chapter below in their own words.
+Your job is to evaluate the quality and completeness of their explanation.
+
+CHAPTER: "$chapterTitle"
+CHAPTER CONTENT (Ground Truth):
+${chapterContent.take(3000)}
+
+LEARNER'S EXPLANATION:
+"$userExplanation"
+
+EVALUATION CRITERIA:
+1. Conceptual accuracy — did they get the fundamental mechanism right?
+2. Completeness — did they cover the key ideas?
+3. Clarity — could a beginner understand their explanation?
+4. Missing concepts — what important ideas did they omit?
+
+Return ONLY a valid JSON object:
+{
+  "score": 78,
+  "whatYouGotRight": ["Correctly identified X", "Good analogy for Y"],
+  "missingConcepts": ["Did not mention Z", "No discussion of edge case W"],
+  "refinedExplanation": "A clear, complete, beginner-friendly explanation of the chapter's core concept."
+}
+Do not wrap in markdown code fences. Return raw JSON only.
+""".trimIndent()
+    }
 }

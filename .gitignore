@@ -16,6 +16,11 @@ gen/
 out/
 build/
 app/build/
+**/build/
+
+# Planning & temporary files
+TASK_PLAN.md
+TASK_PLAN*.md
 
 # Gradle files
 .gradle/

@@ -5,6 +5,8 @@ import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterLinkCrossRef
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.ChapterRevisionEntity
+import org.opened.app.core.database.entity.FlashcardEntity
+import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.StudyPathEntity
 
@@ -18,5 +20,7 @@ data class BackupBundle(
     val chapters: List<ChapterEntity> = emptyList(),
     val revisions: List<ChapterRevisionEntity> = emptyList(),
     val links: List<ChapterLinkCrossRef> = emptyList(),
-    val qas: List<ChapterQaEntity> = emptyList()
+    val qas: List<ChapterQaEntity> = emptyList(),
+    val flashcards: List<FlashcardEntity> = emptyList(),
+    val masteryQuizzes: List<MasteryQuizEntity> = emptyList()
 )

@@ -4,6 +4,9 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Wizard : Screen("wizard")
     object Settings : Screen("settings")
+    object KnowledgeGraph : Screen("knowledge_graph")
+    object FlashcardReview : Screen("flashcard_review")
+
     object Workspace : Screen("workspace/{pathId}?chapterId={chapterId}") {
         fun createRoute(pathId: String, chapterId: String? = null): String {
             return if (chapterId != null) {

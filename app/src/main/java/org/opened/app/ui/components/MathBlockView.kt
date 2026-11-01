@@ -139,7 +139,7 @@ fun MathBlockView(
     }
 }
 
-private fun formatLatexForDisplay(raw: String): String {
+fun formatLatexForDisplay(raw: String): String {
     var text = raw.trim()
         .removePrefix("$$").removeSuffix("$$")
         .removePrefix("\\[").removeSuffix("\\]")

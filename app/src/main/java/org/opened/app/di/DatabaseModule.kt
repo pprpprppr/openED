@@ -12,6 +12,8 @@ import org.opened.app.core.database.dao.ChapterDao
 import org.opened.app.core.database.dao.ChapterLinkDao
 import org.opened.app.core.database.dao.ChapterQaDao
 import org.opened.app.core.database.dao.ChapterRevisionDao
+import org.opened.app.core.database.dao.FlashcardDao
+import org.opened.app.core.database.dao.MasteryQuizDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
 import org.opened.app.domain.repository.OpenEDRepository
@@ -30,27 +32,18 @@ object DatabaseModule {
             OpenEDDatabase::class.java,
             OpenEDDatabase.DATABASE_NAME
         )
-            .fallbackToDestructiveMigration()
+            .addMigrations(OpenEDDatabase.MIGRATION_1_2)
             .build()
     }
 
-    @Provides
-    fun provideStudyPathDao(database: OpenEDDatabase): StudyPathDao = database.studyPathDao()
-
-    @Provides
-    fun provideModuleDao(database: OpenEDDatabase): ModuleDao = database.moduleDao()
-
-    @Provides
-    fun provideChapterDao(database: OpenEDDatabase): ChapterDao = database.chapterDao()
-
-    @Provides
-    fun provideChapterRevisionDao(database: OpenEDDatabase): ChapterRevisionDao = database.chapterRevisionDao()
-
-    @Provides
-    fun provideChapterLinkDao(database: OpenEDDatabase): ChapterLinkDao = database.chapterLinkDao()
-
-    @Provides
-    fun provideChapterQaDao(database: OpenEDDatabase): ChapterQaDao = database.chapterQaDao()
+    @Provides fun provideStudyPathDao(database: OpenEDDatabase): StudyPathDao = database.studyPathDao()
+    @Provides fun provideModuleDao(database: OpenEDDatabase): ModuleDao = database.moduleDao()
+    @Provides fun provideChapterDao(database: OpenEDDatabase): ChapterDao = database.chapterDao()
+    @Provides fun provideChapterRevisionDao(database: OpenEDDatabase): ChapterRevisionDao = database.chapterRevisionDao()
+    @Provides fun provideChapterLinkDao(database: OpenEDDatabase): ChapterLinkDao = database.chapterLinkDao()
+    @Provides fun provideChapterQaDao(database: OpenEDDatabase): ChapterQaDao = database.chapterQaDao()
+    @Provides fun provideFlashcardDao(database: OpenEDDatabase): FlashcardDao = database.flashcardDao()
+    @Provides fun provideMasteryQuizDao(database: OpenEDDatabase): MasteryQuizDao = database.masteryQuizDao()
 
     @Provides
     @Singleton

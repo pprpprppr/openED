@@ -38,13 +38,14 @@ class DriveBackupManager @Inject constructor(
     }
 
     private val backupFileName = "opened_backup_v1.zip"
+    private val legacyBackupFileName = "cortexa_backup_v1.zip"
     private val jsonEntryName = "opened_manifest.json"
 
     private fun getDriveService(): Drive? {
         val account = authManager.getLastSignedInAccount() ?: return null
         val credential = GoogleAccountCredential.usingOAuth2(
             context,
-            Collections.singleton(DriveScopes.DRIVE_FILE)
+            listOf(DriveScopes.DRIVE_FILE, DriveScopes.DRIVE_APPDATA)
         ).apply {
             selectedAccount = account.account
         }
@@ -103,7 +104,7 @@ class DriveBackupManager @Inject constructor(
 
             // Check if file already exists in Drive
             val existingFiles = drive.files().list()
-                .setQ("name = '$backupFileName' and trashed = false")
+                .setQ("(name = '$backupFileName' or name = '$legacyBackupFileName') and trashed = false")
                 .setSpaces("drive")
                 .setFields("files(id, name, modifiedTime)")
                 .execute()
@@ -141,7 +142,7 @@ class DriveBackupManager @Inject constructor(
                 ?: throw IllegalStateException("Google Drive account not authorized. Please sign in via Settings.")
 
             val files = drive.files().list()
-                .setQ("name = '$backupFileName' and trashed = false")
+                .setQ("(name = '$backupFileName' or name = '$legacyBackupFileName') and trashed = false")
                 .setSpaces("drive")
                 .setFields("files(id, name, modifiedTime)")
                 .execute()

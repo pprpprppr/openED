@@ -2,6 +2,7 @@ package org.opened.app.ui.workspace
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,8 +23,12 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Style
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -66,6 +71,7 @@ import org.opened.app.ui.components.InlineRefineBottomSheet
 import org.opened.app.ui.components.OutgoingBacklinksSection
 import org.opened.app.ui.components.RichMarkdownRenderer
 import org.opened.app.ui.components.SocraticQaSection
+import org.opened.app.ui.mastery.MasteryBottomSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +82,7 @@ fun CourseWorkspaceScreen(
     viewModel: CourseWorkspaceViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val ttsState by viewModel.ttsState.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -87,6 +94,13 @@ fun CourseWorkspaceScreen(
     LaunchedEffect(uiState.errorMessage) {
         uiState.errorMessage?.let { error ->
             snackbarHostState.showSnackbar(error)
+        }
+    }
+
+    LaunchedEffect(uiState.flashcardSnackMessage) {
+        uiState.flashcardSnackMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearFlashcardMessage()
         }
     }
 
@@ -137,6 +151,26 @@ fun CourseWorkspaceScreen(
                     },
                     actions = {
                         if (currentChapter != null && currentChapter.status == ChapterStatus.COMPLETED && !uiState.isStreaming) {
+                            IconButton(
+                                onClick = { viewModel.generateFlashcards() },
+                                enabled = !uiState.isGeneratingFlashcards
+                            ) {
+                                if (uiState.isGeneratingFlashcards) {
+                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(imageVector = Icons.Default.Style, contentDescription = "Generate Flashcards")
+                                }
+                            }
+                            IconButton(onClick = { viewModel.toggleTtsPlayer() }) {
+                                Icon(
+                                    imageVector = Icons.Default.VolumeUp,
+                                    contentDescription = "Commute Audio Reader",
+                                    tint = if (uiState.showTtsPlayer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(onClick = { viewModel.openRevisionSheet() }) {
+                                Icon(imageVector = Icons.Default.History, contentDescription = "Revision History")
+                            }
                             IconButton(onClick = { viewModel.openRefineSheet() }) {
                                 Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Refine Passage")
                             }
@@ -154,44 +188,95 @@ fun CourseWorkspaceScreen(
                 )
             },
             bottomBar = {
-                // Floating Contextual Action Bar
+                // Floating Contextual Action Bar & TTS Mini Player
                 if (currentChapter != null && currentChapter.status == ChapterStatus.COMPLETED && !uiState.isStreaming) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                        tonalElevation = 6.dp
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        AnimatedVisibility(visible = uiState.showTtsPlayer) {
+                            TtsMiniPlayer(
+                                ttsState = ttsState,
+                                onPlay = { viewModel.ttsPlay() },
+                                onPause = { viewModel.ttsPause() },
+                                onResume = { viewModel.ttsResume() },
+                                onStop = { viewModel.ttsStop() },
+                                onSetSpeed = { viewModel.ttsSetSpeed(it) },
+                                onDismiss = { viewModel.toggleTtsPlayer() }
+                            )
+                        }
+
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+                            tonalElevation = 6.dp
                         ) {
-                            FilledTonalButton(
-                                onClick = { viewModel.openRefineSheet() },
-                                shape = RoundedCornerShape(10.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Highlight & Refine", style = MaterialTheme.typography.labelMedium)
-                            }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    FilledTonalButton(
+                                        onClick = { viewModel.openRefineSheet() },
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Refine", style = MaterialTheme.typography.labelMedium)
+                                    }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "Revisions: ${chapterDetails.revisions.size}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Q&As: ${chapterDetails.qas.size}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                    FilledTonalButton(
+                                        onClick = { viewModel.openMasterySheet() },
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Mastery", style = MaterialTheme.typography.labelMedium)
+                                    }
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { viewModel.openRevisionSheet() }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.History,
+                                                contentDescription = "Revision History",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Revisions (${chapterDetails.revisions.size})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Q&As: ${chapterDetails.qas.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -303,6 +388,86 @@ fun CourseWorkspaceScreen(
                                     onChapterClick = { viewModel.navigateToChapterByTitle(it) }
                                 )
                             }
+
+                            // Mastery Challenge Card (Adaptive Quiz & Feynman Technique)
+                            item {
+                                Spacer(modifier = Modifier.height(24.dp))
+                                ElevatedCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.elevatedCardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                                    )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(18.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Surface(
+                                                modifier = Modifier.size(40.dp),
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.primary
+                                            ) {
+                                                Box(contentAlignment = Alignment.Center) {
+                                                    Icon(
+                                                        Icons.Default.School,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.onPrimary,
+                                                        modifier = Modifier.size(22.dp)
+                                                    )
+                                                }
+                                            }
+                                            Column {
+                                                Text(
+                                                    "Mastery Challenge",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    "Test your retention with adaptive quiz & Feynman challenge",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(14.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Button(
+                                                onClick = { viewModel.openMasterySheet() },
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Test Mastery", style = MaterialTheme.typography.labelMedium)
+                                            }
+
+                                            FilledTonalButton(
+                                                onClick = { viewModel.generateFlashcards() },
+                                                enabled = !uiState.isGeneratingFlashcards,
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                if (uiState.isGeneratingFlashcards) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                                } else {
+                                                    Icon(Icons.Default.Style, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Flashcards", style = MaterialTheme.typography.labelMedium)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -318,6 +483,23 @@ fun CourseWorkspaceScreen(
                 onApplyRefinement = { action, customPrompt ->
                     viewModel.applyRefinement(action, customPrompt)
                 }
+            )
+        }
+
+        // Mastery Challenge Bottom Sheet (Adaptive Quiz & Feynman Mode)
+        if (uiState.showMasterySheet && currentChapter != null) {
+            MasteryBottomSheet(
+                chapterId = currentChapter.id,
+                onDismiss = { viewModel.closeMasterySheet() }
+            )
+        }
+
+        // Revision History Bottom Sheet Dialog
+        if (uiState.showRevisionSheet && chapterDetails != null) {
+            RevisionHistoryBottomSheet(
+                revisions = chapterDetails.revisions,
+                onRestoreRevision = { viewModel.restoreRevision(it) },
+                onDismiss = { viewModel.closeRevisionSheet() }
             )
         }
     }

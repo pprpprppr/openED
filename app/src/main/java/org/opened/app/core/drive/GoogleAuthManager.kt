@@ -1,6 +1,10 @@
 package org.opened.app.core.drive
 
 import android.content.Context
+import com.google.android.gms.auth.api.identity.AuthorizationClient
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.AuthorizationResult
+import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -19,8 +23,18 @@ class GoogleAuthManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val preferencesRepository: UserPreferencesRepository
 ) {
-    private val driveScope = Scope(DriveScopes.DRIVE_FILE)
-    private val appDataScope = Scope(DriveScopes.DRIVE_APPDATA)
+    val driveScope = Scope(DriveScopes.DRIVE_FILE)
+    val appDataScope = Scope(DriveScopes.DRIVE_APPDATA)
+
+    val authorizationClient: AuthorizationClient by lazy {
+        Identity.getAuthorizationClient(context)
+    }
+
+    fun buildAuthorizationRequest(): AuthorizationRequest {
+        return AuthorizationRequest.builder()
+            .setRequestedScopes(listOf(driveScope, appDataScope))
+            .build()
+    }
 
     private val gso: GoogleSignInOptions by lazy {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -39,6 +53,13 @@ class GoogleAuthManager @Inject constructor(
             account
         } else {
             null
+        }
+    }
+
+    suspend fun handleAuthorizationResult(result: AuthorizationResult) = withContext(Dispatchers.IO) {
+        val account = result.toGoogleSignInAccount()
+        if (account != null) {
+            preferencesRepository.setBackupAccountEmail(account.email)
         }
     }
 

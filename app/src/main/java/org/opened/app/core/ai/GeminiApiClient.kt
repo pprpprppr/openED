@@ -112,28 +112,59 @@ class GeminiApiClient @Inject constructor(
         body.byteStream().use { inputStream ->
             BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
                 var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    val currentLine = line?.trim().orEmpty()
-                    if (currentLine.startsWith("data:")) {
-                        val jsonPart = currentLine.removePrefix("data:").trim()
-                        if (jsonPart.isNotEmpty()) {
-                            try {
-                                val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), jsonPart)
-                                val chunkText = parsed.candidates
-                                    ?.firstOrNull()
-                                    ?.content
-                                    ?.parts
-                                    ?.joinToString("") { it.text }
-                                    .orEmpty()
+                val sseDataBuffer = StringBuilder()
 
-                                if (chunkText.isNotEmpty()) {
-                                    emit(chunkText)
+                suspend fun tryParseAndEmit(jsonStr: String): Boolean {
+                    if (jsonStr.isBlank()) return false
+                    return try {
+                        val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), jsonStr)
+                        val chunkText = parsed.candidates
+                            ?.firstOrNull()
+                            ?.content
+                            ?.parts
+                            ?.joinToString("") { it.text }
+                            .orEmpty()
+
+                        if (chunkText.isNotEmpty()) {
+                            emit(chunkText)
+                        }
+                        true
+                    } catch (e: Exception) {
+                        false
+                    }
+                }
+
+                while (reader.readLine().also { line = it } != null) {
+                    val rawLine = line ?: break
+                    val trimmed = rawLine.trim()
+
+                    if (trimmed.isEmpty()) {
+                        // Empty line signals dispatch of current SSE event block
+                        if (sseDataBuffer.isNotEmpty()) {
+                            tryParseAndEmit(sseDataBuffer.toString())
+                            sseDataBuffer.clear()
+                        }
+                    } else if (trimmed.startsWith("data:")) {
+                        val payload = trimmed.substring(5).trim()
+                        if (payload.isNotEmpty()) {
+                            // First attempt immediate parsing of single-line data event
+                            val parsedImmediately = tryParseAndEmit(payload)
+                            if (!parsedImmediately) {
+                                // Accumulate in buffer for multi-line JSON events
+                                if (sseDataBuffer.isNotEmpty()) {
+                                    sseDataBuffer.append("\n")
                                 }
-                            } catch (e: Exception) {
-                                // If partial JSON chunk or heartbeat, continue
+                                sseDataBuffer.append(payload)
+                            } else {
+                                sseDataBuffer.clear()
                             }
                         }
                     }
+                }
+
+                // Flush any remaining buffer at end of stream
+                if (sseDataBuffer.isNotEmpty()) {
+                    tryParseAndEmit(sseDataBuffer.toString())
                 }
             }
         }

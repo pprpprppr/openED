@@ -15,8 +15,10 @@ import org.opened.app.core.datastore.UserPreferencesRepository
 import org.opened.app.core.drive.DriveBackupManager
 import org.opened.app.core.drive.GoogleAuthManager
 import org.opened.app.core.drive.SyncConflictResolution
+import org.opened.app.core.export.ExportManager
 import org.opened.app.core.security.SecureApiKeyStorage
 import org.opened.app.core.worker.BackupScheduler
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,7 +27,8 @@ class SettingsViewModel @Inject constructor(
     private val preferencesRepository: UserPreferencesRepository,
     private val authManager: GoogleAuthManager,
     private val driveBackupManager: DriveBackupManager,
-    private val backupScheduler: BackupScheduler
+    private val backupScheduler: BackupScheduler,
+    private val exportManager: ExportManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -136,6 +139,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun getSignInIntent(): android.content.Intent = authManager.signInClient.signInIntent
+
     fun onGoogleSignInResult(account: GoogleSignInAccount?) {
         viewModelScope.launch {
             authManager.handleSignInResult(account)
@@ -218,5 +223,33 @@ class SettingsViewModel @Inject constructor(
 
     fun clearStatus() {
         _uiState.update { it.copy(statusMessage = null, errorMessage = null) }
+    }
+
+    fun exportObsidianVault(onResult: (File) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, errorMessage = null) }
+            runCatching { exportManager.exportObsidianVault() }
+                .onSuccess { file ->
+                    _uiState.update { it.copy(isBusy = false, statusMessage = "Obsidian Vault exported.") }
+                    onResult(file)
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isBusy = false, errorMessage = e.message ?: "Export failed.") }
+                }
+        }
+    }
+
+    fun exportAnkiCsv(onResult: (File) -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isBusy = true, errorMessage = null) }
+            runCatching { exportManager.exportAnkiCsv() }
+                .onSuccess { file ->
+                    _uiState.update { it.copy(isBusy = false, statusMessage = "Anki deck exported.") }
+                    onResult(file)
+                }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isBusy = false, errorMessage = e.message ?: "Export failed.") }
+                }
+        }
     }
 }

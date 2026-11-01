@@ -7,6 +7,8 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import org.opened.app.ui.flashcards.FlashcardReviewScreen
+import org.opened.app.ui.graph.KnowledgeGraphScreen
 import org.opened.app.ui.home.HomeScreen
 import org.opened.app.ui.settings.SettingsScreen
 import org.opened.app.ui.wizard.DiagnosticWizardScreen
@@ -24,23 +26,19 @@ fun OpenEDNavHost(
     ) {
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateToWizard = {
-                    navController.navigate(Screen.Wizard.route)
-                },
+                onNavigateToWizard = { navController.navigate(Screen.Wizard.route) },
                 onNavigateToWorkspace = { pathId, chapterId ->
                     navController.navigate(Screen.Workspace.createRoute(pathId, chapterId))
                 },
-                onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
-                }
+                onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                onNavigateToFlashcards = { navController.navigate(Screen.FlashcardReview.route) },
+                onNavigateToGraph = { navController.navigate(Screen.KnowledgeGraph.route) }
             )
         }
 
         composable(Screen.Wizard.route) {
             DiagnosticWizardScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                },
+                onNavigateBack = { navController.popBackStack() },
                 onCourseCreated = { pathId ->
                     navController.navigate(Screen.Workspace.createRoute(pathId)) {
                         popUpTo(Screen.Home.route)
@@ -62,20 +60,30 @@ fun OpenEDNavHost(
         ) { backStackEntry ->
             val pathId = backStackEntry.arguments?.getString("pathId").orEmpty()
             val chapterId = backStackEntry.arguments?.getString("chapterId")
-
             CourseWorkspaceScreen(
                 pathId = pathId,
                 initialChapterId = chapterId,
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
         composable(Screen.Settings.route) {
             SettingsScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.FlashcardReview.route) {
+            FlashcardReviewScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.KnowledgeGraph.route) {
+            KnowledgeGraphScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToChapter = { pathId, chapterId ->
+                    navController.navigate(Screen.Workspace.createRoute(pathId, chapterId))
                 }
             )
         }

@@ -9,5 +9,6 @@ data class HomeUiState(
     val searchResults: List<SearchResultItem> = emptyList(),
     val isSearching: Boolean = false,
     val isLoading: Boolean = false,
-    val hasApiKey: Boolean = true
+    val hasApiKey: Boolean = true,
+    val dueFlashcardCount: Int = 0
 )

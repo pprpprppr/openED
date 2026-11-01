@@ -4,8 +4,11 @@ import kotlinx.coroutines.flow.Flow
 import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.ChapterRevisionEntity
+import org.opened.app.core.database.entity.FlashcardEntity
+import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.StudyPathEntity
+import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.database.model.ChapterWithDetails
 import org.opened.app.core.database.model.SearchResultItem
@@ -39,6 +42,24 @@ interface OpenEDRepository {
     suspend fun recalculatePathProgress(pathId: String)
     suspend fun search(query: String): List<SearchResultItem>
 
+    // --- Flashcards ---
+    fun getFlashcardsForChapterFlow(chapterId: String): Flow<List<FlashcardEntity>>
+    fun getDueFlashcardsFlow(nowMillis: Long = System.currentTimeMillis()): Flow<List<FlashcardEntity>>
+    fun getDueFlashcardCount(): Flow<Int>
+    suspend fun insertFlashcards(cards: List<FlashcardEntity>)
+    suspend fun updateFlashcard(card: FlashcardEntity)
+    suspend fun deleteFlashcardsForChapter(chapterId: String)
+    suspend fun getAllFlashcards(): List<FlashcardEntity>
+
+    // --- Mastery / Feynman ---
+    fun getMasteryQuizzesFlow(chapterId: String): Flow<List<MasteryQuizEntity>>
+    suspend fun saveMasteryQuiz(quiz: MasteryQuizEntity)
+    suspend fun getAllQuizzes(): List<MasteryQuizEntity>
+
+    // --- Knowledge Graph ---
+    suspend fun getAllChapterLinkNodes(): List<ChapterLinkNode>
+
+    // --- Backup/Restore ---
     suspend fun exportDatabase(): BackupBundle
     suspend fun importDatabase(bundle: BackupBundle, overwrite: Boolean)
 }

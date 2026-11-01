@@ -59,6 +59,28 @@
 - **Background Sync via WorkManager:** Scheduled periodic backups and on-demand manual sync using Jetpack `WorkManager`.
 - **Conflict Resolution Engine:** Choose between **Merge Local** (preserves local edits and additions) and **Overwrite Local** (replaces local database with remote snapshot).
 
+### 9. 🧠 Spaced Repetition Flashcards (SuperMemo SM-2)
+- **AI Card Synthesis:** Extract 5–10 high-yield active recall flashcards from any chapter using Gemini Structured JSON schema.
+- **SM-2 Scheduling:** Local calculation of repetition counts, ease factor adjustments, and exponential interval progression (`FlashcardEntity`).
+- **Interactive 3D Review Deck:** Card flip animations with tactile rating controls (*Again*, *Hard*, *Good*, *Easy*) and a live Home badge indicating cards due today.
+
+### 10. 🎯 Feynman Challenge & Adaptive Mastery Quizzes
+- **Scenario-Based Adaptive Quizzes:** 5 generated multiple-choice questions assessing deep comprehension with detailed explanations for every option.
+- **Feynman Technique Evaluator:** Explain concepts in your own words; Gemini analyzes your response and provides structured feedback (`score`, `whatYouGotRight`, `missingConcepts`, `refinedExplanation`).
+- **Mastery Auditing:** All quiz attempts and Feynman sessions are saved locally to `MasteryQuizEntity`.
+
+### 11. 🕸️ Interactive 2D Knowledge Graph
+- **Force-Directed Physics Simulation:** Visualizes all course chapters and their bi-directional wiki-link connections on a 2D Canvas with gesture-based pan and pinch-to-zoom (`detectTransformGestures`).
+- **Color-Coded Mastery Status:** Completed, generating, and pending nodes rendered dynamically. Tapping any node navigates straight to that lesson.
+
+### 12. 🎧 Commute Audio Mode (Offline TTS Reader)
+- **Embedded Text-to-Speech:** Integrated Android `TextToSpeech` with speed toggles (1.0x, 1.5x, 2.0x) and floating mini-player bar.
+- **Smart Markdown Normalization:** Automatically strips headers, markdown punctuation, raw code blocks, and LaTeX math formatting before vocalization for an uninterrupted listening experience.
+
+### 13. 📦 Obsidian Vault & Anki Exports
+- **Obsidian Vault Export (.zip):** Exports all courses as nested folders containing `.md` files formatted with standard YAML frontmatter and `[[WikiLinks]]`.
+- **Anki Deck Export (.tsv):** Exports all generated flashcards into a clean tab-separated format ready for immediate import into Anki.
+
 ---
 
 ## 🏗️ Architecture & Component Design
@@ -68,10 +90,13 @@ openED is built following modern Android Architecture guidelines with reactive U
 ```mermaid
 flowchart TD
     subgraph UI ["Jetpack Compose UI (Material 3)"]
-        Home["HomeLibraryScreen\nSearch & Study Paths Grid"]
+        Home["HomeLibraryScreen\nSearch, Due Badge & Grid"]
         Wizard["DiagnosticWizardSheet\nTopic & AI Interview Flow"]
-        Workspace["CourseWorkspaceScreen\nSplit Tree & Markdown Reader"]
-        Settings["SettingsAndBackupScreen\nBYOK & Drive Controls"]
+        Workspace["CourseWorkspaceScreen\nSplit Tree, Reader & TTS Player"]
+        Settings["SettingsAndBackupScreen\nBYOK, Drive & Vault Export"]
+        Graph["KnowledgeGraphScreen\n2D Interactive Canvas"]
+        Cards["FlashcardReviewScreen\n3D Flip & SM-2 Rating"]
+        Mastery["MasteryBottomSheet\nAdaptive Quiz & Feynman"]
     end
 
     subgraph ViewModelLayer ["ViewModel & State Layer (MVI/MVVM)"]
@@ -79,11 +104,16 @@ flowchart TD
         WVM["DiagnosticWizardViewModel"]
         CWVM["CourseWorkspaceViewModel"]
         SVM["SettingsViewModel"]
+        GVM["KnowledgeGraphViewModel"]
+        FVM["FlashcardReviewViewModel"]
+        MVM["MasteryViewModel"]
     end
 
     subgraph CoreEngine ["Core Services & Engines"]
         ALE["AiLearningEngine\nPrompt Engineering & Orchestration"]
         DBM["DriveBackupManager\nZIP Dump & Restore Engine"]
+        EXM["ExportManager\nObsidian Vault & Anki TSV"]
+        TTS["TtsManager\nOffline Markdown Speech"]
         BS["BackupScheduler / WorkManager"]
         KEY["SecureApiKeyStorage\nAndroid Keystore MasterKey"]
         DS["UserPreferencesRepository\nJetpack DataStore"]
@@ -91,7 +121,7 @@ flowchart TD
 
     subgraph DataLayer ["Data & Repository Layer"]
         REPO["OpenEDRepository\nSearch, Revisions & Wiki-Link Engine"]
-        ROOM[("Room Database / SQLite\n6 Entities & Cascading FKs")]
+        ROOM[("Room Database / SQLite\n8 Entities & Cascading FKs")]
     end
 
     subgraph RemoteAPIs ["Remote APIs (Direct BYOK)"]
@@ -107,6 +137,7 @@ flowchart TD
     ALE --> DS
     DBM --> DRIVE
     DBM --> REPO
+    EXM --> REPO
     BS --> DBM
     REPO --> ROOM
 ```
@@ -115,7 +146,7 @@ flowchart TD
 
 ## 🗄️ Database Schema (Room SQLite)
 
-openED models learning paths, modular lesson hierarchies, revision logs, and knowledge graph cross-links through 6 normalized Room entities with cascading deletes:
+openED models learning paths, modular lesson hierarchies, revision logs, knowledge graph cross-links, spaced repetition flashcards, and mastery quizzes through 8 normalized Room entities with cascading deletes:
 
 ```mermaid
 erDiagram
@@ -125,6 +156,8 @@ erDiagram
     CHAPTER ||--o{ CHAPTER_QA : records
     CHAPTER ||--o{ CHAPTER_LINK_CROSS_REF : sources
     CHAPTER ||--o{ CHAPTER_LINK_CROSS_REF : targets
+    CHAPTER ||--o{ FLASHCARD : generates
+    CHAPTER ||--o{ MASTERY_QUIZ : evaluates
 
     STUDY_PATH {
         string id PK
@@ -178,6 +211,28 @@ erDiagram
         string userQuestion
         string aiAnswer
         boolean isMergedIntoContent
+        long timestamp
+    }
+
+    FLASHCARD {
+        string id PK
+        string chapterId FK
+        string pathId FK
+        string front
+        string back
+        int intervalDays
+        float easeFactor
+        int repetitions
+        long nextReviewTimestamp
+        long createdAt
+    }
+
+    MASTERY_QUIZ {
+        string id PK
+        string chapterId FK
+        string quizType
+        string sessionDataJson
+        int score
         long timestamp
     }
 ```

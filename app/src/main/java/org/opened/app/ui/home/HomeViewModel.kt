@@ -29,6 +29,7 @@ class HomeViewModel @Inject constructor(
     init {
         checkApiKey()
         loadStudyPaths()
+        observeDueFlashcardCount()
     }
 
     fun checkApiKey() {
@@ -45,6 +46,14 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun observeDueFlashcardCount() {
+        viewModelScope.launch {
+            repository.getDueFlashcardCount().collectLatest { count ->
+                _uiState.update { it.copy(dueFlashcardCount = count) }
+            }
+        }
+    }
+
     fun onSearchQueryChanged(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
         searchJob?.cancel()
@@ -56,7 +65,7 @@ class HomeViewModel @Inject constructor(
 
         searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isSearching = true) }
-            delay(250) // Debounce
+            delay(250)
             val results = repository.search(query.trim())
             _uiState.update { it.copy(searchResults = results, isSearching = false) }
         }
@@ -73,3 +82,4 @@ class HomeViewModel @Inject constructor(
         }
     }
 }
+
