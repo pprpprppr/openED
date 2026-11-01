@@ -1,0 +1,234 @@
+# openED 🧠
+> **Personal, Local-First, AI-Powered Self-Learning & Knowledge-Graph Studio**
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple.svg)](https://kotlinlang.org/)
+[![Jetpack Compose](https://img.shields.io/badge/Compose-Material_3-brightgreen.svg)](https://developer.android.com/jetpack/compose)
+[![Room](https://img.shields.io/badge/Room-SQLite_2.6.1-orange.svg)](https://developer.android.com/training/data-storage/room)
+[![Gemini](https://img.shields.io/badge/AI-Google_Gemini_REST_API-4285F4.svg)](https://ai.google.dev/)
+[![Google Drive](https://img.shields.io/badge/Sync-Google_Drive_v3-34A853.svg)](https://developers.google.com/drive)
+
+**openED** is a production-grade, open-source native Android application designed to transform any topic—from eBPF kernel programming to nutritional biochemistry—into an adaptive, interconnected self-study curriculum powered by Google's Gemini models (BYOK) and synchronized privately to Google Drive.
+
+---
+
+## 🌟 Key Features & AI Workflows
+
+### 1. 🎯 Diagnostic & Personalization Interviewer (Pre-Path Generation)
+- **Structured AI Profiling:** Enter any learning subject or topic to trigger a 3–5 question diagnostic interview generated via Gemini Structured JSON Output (`responseMimeType: "application/json"`).
+- **Adaptive Questioning:** Evaluates prior knowledge baseline, target depth (introductory, intermediate, mastery), learning goals, and practical vs. theoretical orientation.
+- **Interactive Chip UI:** Multi-select chips and custom free-text input allow fluid personalization before syllabus construction.
+
+### 2. 📚 Dynamic Curriculum & Syllabus Synthesis
+- **Structured Knowledge Hierarchy:** Synthesizes complete courses broken into chronological Modules and ordered Chapters, equipped with estimated study times, prerequisite chains, and core concept summaries.
+- **Instant Local Persistence:** Automatically transactions the entire course hierarchy into Room SQLite, enabling immediate offline access and tracking.
+- **Real-Time Progress Tracking:** Reactive calculation of overall course progress as chapters are completed.
+
+### 3. ⚡ On-the-Spot Lesson Streaming & Wiki-Linking
+- **Server-Sent Events (SSE) Streaming:** Streams rich Markdown lessons from Gemini (`streamGenerateContent?alt=sse`) in real time with smooth token emission.
+- **Automated Cross-Reference Detection:** Scans generated text for references to other chapters across your entire library, automatically converting them into clickable `[[Chapter Title]]` wiki-links.
+- **Bi-Directional Knowledge Graph:** Persists link edges in the `ChapterLinkCrossRef` table and renders both **Outgoing Links** and **Backlinks** at the bottom of every chapter reader screen.
+- **Dynamic Tangent Branching:** Highlight any concept in the reader to generate a dedicated tangent sub-chapter on the fly.
+
+### 4. ✍️ Contextual Refinement & Socratic Assistant
+- **Floating/Bottom Action Bar:** Select any text passage or entire section to trigger contextual AI modifications:
+  - **Simplify:** Clarify dense language without sacrificing technical accuracy.
+  - **Add Code / Math Example:** Embed concrete syntax-highlighted code or LaTeX formulas.
+  - **Fact-Check & Correct:** Verify assertions and correct discrepancies.
+  - **Custom Mutation Prompt:** Provide any custom prompt to adapt the text in place.
+- **Full Version Control:** Every mutation archives a snapshot to `ChapterRevisionEntity`, enabling complete rollback and revision auditing.
+- **Socratic Q&A Assistant:** Ask follow-up questions anchored to the active chapter; tap a single button to append the explanation as a GitHub-style callout block (`> [!NOTE]`) directly into the lesson content.
+
+### 5. 📊 Rich Markdown, Math & Code Rendering Engine
+- **Mathematical Typography:** Renders LaTeX formulas formatted cleanly for display math (`$$...$$`) and inline math (`$...$`).
+- **Code Syntax Highlighting:** Dark card presentation with language tags, line wrapping, and one-tap copy-to-clipboard functionality.
+- **GitHub-Style Alerts:** Native rendering for callout alerts: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, and `[!CAUTION]`.
+- **Interactive Wiki-Links:** Clickable `[[Chapter Title]]` tokens that navigate immediately to target chapters or offer to generate them if pending.
+
+### 6. 🔍 Offline Instant Full-Text Search
+- Instantaneous search across all study paths, modules, chapters, revision histories, and Socratic Q&A threads.
+- Direct jump from search results into the exact chapter and highlighted context.
+
+### 7. 🔒 Zero-Knowledge BYOK & Keystore Security
+- **Bring Your Own Key (BYOK):** No backend proxy or third-party servers; the app communicates directly with Google's Gemini API endpoints.
+- **Android Keystore Encryption:** API keys are encrypted at rest with AES-256 GCM using `EncryptedSharedPreferences` backed by the Android Keystore Master Key (`opened_secure_vault`).
+- **Model Selector:** Support for selecting `gemini-3.5-flash`, `gemini-2.5-flash`, or custom Gemini models, plus customizable system instructions.
+
+### 8. ☁️ Google Drive Backup & Synchronization
+- **Portable ZIP Export Bundle:** Serializes the full Room database into a clean JSON bundle packaged in `opened_backup_v1.zip` (excluding private API keys).
+- **Background Sync via WorkManager:** Scheduled periodic backups and on-demand manual sync using Jetpack `WorkManager`.
+- **Conflict Resolution Engine:** Choose between **Merge Local** (preserves local edits and additions) and **Overwrite Local** (replaces local database with remote snapshot).
+
+---
+
+## 🏗️ Architecture & Component Design
+
+openED is built following modern Android Architecture guidelines with reactive Unidirectional Data Flow (MVI/MVVM), Jetpack Compose (Material 3), Hilt Dependency Injection, Room SQLite with `@Transaction` relations, and Coroutine Flows.
+
+```mermaid
+flowchart TD
+    subgraph UI ["Jetpack Compose UI (Material 3)"]
+        Home["HomeLibraryScreen\nSearch & Study Paths Grid"]
+        Wizard["DiagnosticWizardSheet\nTopic & AI Interview Flow"]
+        Workspace["CourseWorkspaceScreen\nSplit Tree & Markdown Reader"]
+        Settings["SettingsAndBackupScreen\nBYOK & Drive Controls"]
+    end
+
+    subgraph ViewModelLayer ["ViewModel & State Layer (MVI/MVVM)"]
+        HVM["HomeViewModel"]
+        WVM["DiagnosticWizardViewModel"]
+        CWVM["CourseWorkspaceViewModel"]
+        SVM["SettingsViewModel"]
+    end
+
+    subgraph CoreEngine ["Core Services & Engines"]
+        ALE["AiLearningEngine\nPrompt Engineering & Orchestration"]
+        DBM["DriveBackupManager\nZIP Dump & Restore Engine"]
+        BS["BackupScheduler / WorkManager"]
+        KEY["SecureApiKeyStorage\nAndroid Keystore MasterKey"]
+        DS["UserPreferencesRepository\nJetpack DataStore"]
+    end
+
+    subgraph DataLayer ["Data & Repository Layer"]
+        REPO["OpenEDRepository\nSearch, Revisions & Wiki-Link Engine"]
+        ROOM[("Room Database / SQLite\n6 Entities & Cascading FKs")]
+    end
+
+    subgraph RemoteAPIs ["Remote APIs (Direct BYOK)"]
+        GEMINI["Google Gemini REST API\nv1beta SSE Streaming & JSON Mode"]
+        DRIVE["Google Drive REST API v3\nApp Data & File Storage"]
+    end
+
+    UI --> ViewModelLayer
+    ViewModelLayer --> CoreEngine
+    ViewModelLayer --> REPO
+    ALE --> GEMINI
+    ALE --> KEY
+    ALE --> DS
+    DBM --> DRIVE
+    DBM --> REPO
+    BS --> DBM
+    REPO --> ROOM
+```
+
+---
+
+## 🗄️ Database Schema (Room SQLite)
+
+openED models learning paths, modular lesson hierarchies, revision logs, and knowledge graph cross-links through 6 normalized Room entities with cascading deletes:
+
+```mermaid
+erDiagram
+    STUDY_PATH ||--o{ MODULE : contains
+    MODULE ||--o{ CHAPTER : contains
+    CHAPTER ||--o{ CHAPTER_REVISION : tracks
+    CHAPTER ||--o{ CHAPTER_QA : records
+    CHAPTER ||--o{ CHAPTER_LINK_CROSS_REF : sources
+    CHAPTER ||--o{ CHAPTER_LINK_CROSS_REF : targets
+
+    STUDY_PATH {
+        string id PK
+        string title
+        string topic
+        string userLevel
+        string learningGoalsJson
+        long createdAt
+        long updatedAt
+        float progress
+    }
+
+    MODULE {
+        string id PK
+        string pathId FK
+        string title
+        int orderIndex
+        string summary
+    }
+
+    CHAPTER {
+        string id PK
+        string moduleId FK
+        string pathId FK
+        string title
+        int orderIndex
+        string markdownContent
+        string summary
+        string status
+        long createdAt
+        long updatedAt
+    }
+
+    CHAPTER_REVISION {
+        string id PK
+        string chapterId FK
+        string previousMarkdown
+        string changeReason
+        long timestamp
+    }
+
+    CHAPTER_LINK_CROSS_REF {
+        string sourceChapterId PK,FK
+        string targetChapterId PK,FK
+        string anchorText
+    }
+
+    CHAPTER_QA {
+        string id PK
+        string chapterId FK
+        string userQuestion
+        string aiAnswer
+        boolean isMergedIntoContent
+        long timestamp
+    }
+```
+
+---
+
+## 🚀 Setup & Getting Started
+
+### 1. Prerequisites
+- **Android Studio**: Ladybug / Meerkat (or newer)
+- **JDK**: Java 21 OpenJDK
+- **Android SDK**: Compile SDK 35, Min SDK 26
+
+### 2. Gemini API Key (Bring Your Own Key)
+1. Generate an API Key from [Google AI Studio](https://aistudio.google.com/).
+2. Open **openED** on your device or emulator.
+3. Open **Settings** from the top app bar.
+4. Input your Gemini API key and tap **Save Key Securely**.
+5. Select your default model (defaulting to `gemini-3.5-flash` or `gemini-2.5-flash`).
+
+### 3. Google Drive Cloud Sync Configuration
+1. Navigate to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create or select your Google Cloud project.
+3. Enable the **Google Drive API** in APIs & Services.
+4. Set up an OAuth Consent Screen (External / Internal) and add the `https://www.googleapis.com/auth/drive.file` scope.
+5. Create an Android OAuth 2.0 Client ID:
+   - **Package Name:** `org.opened.app`
+   - **SHA-1 Fingerprint:** Run `./gradlew signingReport` and copy the SHA-1 of your signing key.
+6. In openED, go to **Settings > Google Drive Backup** to sign in and initiate sync.
+
+---
+
+## 🛠️ Verification & Build Commands
+
+```bash
+# Check Kotlin syntax and compile
+./gradlew compileDebugKotlin
+
+# Run all unit tests
+./gradlew test
+
+# Assemble debug APK
+./gradlew assembleDebug
+```
+
+The compiled debug APK will be generated at:
+`app/build/outputs/apk/debug/app-debug.apk`
+
+---
+
+## 📄 License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).  
+Copyright © 2026 openED Contributors.
