@@ -33,21 +33,44 @@ class AiLearningEngine @Inject constructor(
         coerceInputValues = true
     }
 
-    private fun getEffectiveSystemInstruction(baseInstruction: String, userLevel: String): String {
+    fun detectAcademicDomain(
+        topic: String,
+        courseTitle: String = "",
+        chapterTitle: String = ""
+    ): AcademicDomain {
+        return AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
+    }
+
+    private fun getEffectiveSystemInstruction(
+        baseInstruction: String,
+        userLevel: String,
+        domain: AcademicDomain = AcademicDomain.GENERAL_INTERDISCIPLINARY
+    ): String {
         val levelNormalized = userLevel.trim().lowercase()
         val isBeginner = levelNormalized.contains("begin") || levelNormalized.contains("found") ||
                 levelNormalized.contains("intro") || levelNormalized.contains("novice") ||
                 (!levelNormalized.contains("intermed") && !levelNormalized.contains("adv") && !levelNormalized.contains("expert"))
 
-        return if (isBeginner) {
+        val nonCodeRule = if (domain != AcademicDomain.SOFTWARE_AND_CS) {
             """
-CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general instructions asking for mathematical rigor or deep internals. Use plain, everyday English, zero unexplained jargon, relatable analogies, and gradual step-by-step examples.
-
-$baseInstruction
+DISCIPLINE INTEGRITY & NON-PROGRAMMING RULE:
+This course is in the discipline of ${domain.displayName}.
+STRICTLY FORBID generating Python, JavaScript, C++, or any programming code blocks (```python, ```javascript, etc.) or pseudocode!
+Do not force software engineering or programming paradigms into this academic discipline. Use discipline-authentic models, case studies, formulas ($$...$$) if mathematically necessary, or Markdown tables.
 """.trimIndent()
         } else {
-            baseInstruction
+            ""
         }
+
+        val beginnerRule = if (isBeginner) {
+            """
+CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general instructions asking for excessive complexity or deep internals. Use plain, everyday English, zero unexplained jargon, relatable analogies, and gradual step-by-step examples.
+""".trimIndent()
+        } else {
+            ""
+        }
+
+        return listOf(nonCodeRule, beginnerRule, baseInstruction).filter { it.isNotBlank() }.joinToString("\n\n")
     }
 
     suspend fun generateDiagnosticQuestions(topic: String): Result<List<DiagnosticQuestion>> = withContext(Dispatchers.IO) {
@@ -73,14 +96,15 @@ $baseInstruction
     ): Result<SyllabusResponse> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
+            val domain = AcademicDomainClassifier.detectAcademicDomain(topic)
             val summaryBuilder = StringBuilder()
             summaryBuilder.append("User Self-Assessed Level: $userLevel\n")
             for ((q, ansList) in answers) {
                 summaryBuilder.append("- $q: ${ansList.joinToString(", ")}\n")
             }
 
-            val prompt = Prompts.syllabusGenerationPrompt(topic, userLevel, summaryBuilder.toString())
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, userLevel)
+            val prompt = Prompts.syllabusGenerationPrompt(topic, userLevel, summaryBuilder.toString(), domain)
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, userLevel, domain)
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
@@ -144,14 +168,16 @@ $baseInstruction
                 modWithChapters.module.title to modWithChapters.sortedChapters.map { it.title }
             }
 
+            val domain = AcademicDomainClassifier.detectAcademicDomain(studyPath.topic, studyPath.title)
             val prompt = Prompts.expandCoursePrompt(
                 courseTitle = studyPath.title,
                 topic = studyPath.topic,
                 userLevel = studyPath.userLevel,
-                existingModulesWithChapters = existingOutline
+                existingModulesWithChapters = existingOutline,
+                domain = domain
             )
 
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, studyPath.userLevel)
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, studyPath.userLevel, domain)
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
@@ -213,9 +239,14 @@ $baseInstruction
 
         repository.updateChapterStatus(chapterId, ChapterStatus.GENERATING)
 
+        val domain = AcademicDomainClassifier.detectAcademicDomain(
+            topic = pathWithModules.studyPath.topic,
+            courseTitle = pathWithModules.studyPath.title,
+            chapterTitle = chapter.title
+        )
         val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: pathWithModules.studyPath.userLevel
         val prefs = preferencesRepository.userPreferencesFlow.first()
-        val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel)
+        val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel, domain)
         val prompt = Prompts.chapterContentPrompt(
             courseTitle = pathWithModules.studyPath.title,
             topic = pathWithModules.studyPath.topic,
@@ -224,7 +255,8 @@ $baseInstruction
             chapterTitle = chapter.title,
             chapterSummary = chapter.summary,
             keyConcepts = emptyList(),
-            otherChapterTitles = allOtherChapterTitles
+            otherChapterTitles = allOtherChapterTitles,
+            domain = domain
         )
 
         val accumulatedText = StringBuilder()
@@ -263,16 +295,22 @@ $baseInstruction
         runCatching {
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
             val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
+            val domain = AcademicDomainClassifier.detectAcademicDomain(
+                topic = studyPath?.topic.orEmpty(),
+                courseTitle = studyPath?.title.orEmpty(),
+                chapterTitle = chapter.title
+            )
             val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: (studyPath?.userLevel ?: "BEGINNER")
             val prefs = preferencesRepository.userPreferencesFlow.first()
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel)
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel, domain)
 
             val prompt = Prompts.inlineRefinePrompt(
                 chapterContext = chapter.markdownContent,
                 selectedText = selectedText,
                 action = action,
                 customInstruction = customInstruction,
-                userLevel = effectiveUserLevel
+                userLevel = effectiveUserLevel,
+                domain = domain
             )
 
             val replacement = multiAiClient.generateContent(
@@ -310,10 +348,17 @@ $baseInstruction
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
             val prefs = preferencesRepository.userPreferencesFlow.first()
 
+            val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
+            val domain = AcademicDomainClassifier.detectAcademicDomain(
+                topic = studyPath?.topic.orEmpty(),
+                courseTitle = studyPath?.title.orEmpty(),
+                chapterTitle = chapter.title
+            )
             val prompt = Prompts.socraticQaPrompt(
                 chapterTitle = chapter.title,
                 chapterContent = chapter.markdownContent,
-                userQuestion = question
+                userQuestion = question,
+                domain = domain
             )
 
             val answer = multiAiClient.generateContent(

@@ -86,7 +86,14 @@ fun RichMarkdownRenderer(
 ) {
     val nodes = remember(markdown) {
         if (markdown.isBlank()) emptyList()
-        else runCatching { parseMarkdown(markdown) }.getOrElse { emptyList() }
+        else runCatching {
+            parseMarkdown(markdown).filter { node ->
+                when (node) {
+                    is MarkdownNode.Paragraph -> node.text.isNotBlank()
+                    else -> true
+                }
+            }
+        }.getOrElse { emptyList() }
     }
 
     if (nodes.isEmpty()) {
@@ -237,13 +244,15 @@ fun RichMarkdownRenderer(
                     }
 
                     is MarkdownNode.Paragraph -> {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        InteractiveMarkdownText(
-                            text = node.text,
-                            onChapterClick = onChapterClick,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        if (node.text.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            InteractiveMarkdownText(
+                                text = node.text,
+                                onChapterClick = onChapterClick,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
                     }
 
                     is MarkdownNode.Divider -> {
@@ -518,7 +527,10 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
             i++
         }
         if (paragraphLines.isNotEmpty()) {
-            nodes.add(MarkdownNode.Paragraph(paragraphLines.joinToString(" ")))
+            val paragraphContent = paragraphLines.joinToString(" ").trim()
+            if (paragraphContent.isNotBlank()) {
+                nodes.add(MarkdownNode.Paragraph(paragraphContent))
+            }
         }
     }
 

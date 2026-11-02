@@ -19,13 +19,21 @@ class ExportManager @Inject constructor(
     private val repository: OpenEDRepository
 ) {
 
+    private fun getExportDirectory(): File {
+        val exportDir = File(context.cacheDir, "exports")
+        if (!exportDir.exists()) {
+            exportDir.mkdirs()
+        }
+        return exportDir
+    }
+
     /**
      * Exports all courses as an Obsidian-compatible Markdown vault ZIP.
      * Structure: CourseTitle/ModuleTitle/ChapterTitle.md
      * Each .md file has YAML frontmatter + [[WikiLinks]] preserved.
      */
     suspend fun exportObsidianVault(): File = withContext(Dispatchers.IO) {
-        val outputFile = File(context.cacheDir, "openED_obsidian_vault.zip")
+        val outputFile = File(getExportDirectory(), "openED_obsidian_vault.zip")
         val allPaths = repository.getAllStudyPathsFlow().first()
 
         ZipOutputStream(FileOutputStream(outputFile)).use { zip ->
@@ -80,7 +88,7 @@ class ExportManager @Inject constructor(
      * Format per line: Front\tBack\tTags
      */
     suspend fun exportAnkiCsv(): File = withContext(Dispatchers.IO) {
-        val outputFile = File(context.cacheDir, "openED_anki_flashcards.tsv")
+        val outputFile = File(getExportDirectory(), "openED_anki_flashcards.tsv")
         val allCards = repository.getAllFlashcards()
 
         outputFile.bufferedWriter(Charsets.UTF_8).use { writer ->

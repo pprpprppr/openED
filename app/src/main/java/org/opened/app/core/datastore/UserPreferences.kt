@@ -18,6 +18,6 @@ data class UserPreferences(
         const val DEFAULT_CUSTOM_BASE_URL = "http://localhost:11434/v1"
         val SUPPORTED_MODELS = AiProviderModels.GEMINI_MODELS
         const val DEFAULT_SYSTEM_INSTRUCTIONS =
-            "You are openED, an elite polymath mentor. Deliver engaging, intuitive, and clearly structured self-learning courses tailored precisely to the learner's expertise level. Combine crystal-clear conceptual explanations with practical code examples, diagrams, and real-world applications."
+            "You are openED, an elite polymath mentor across the sciences, humanities, commerce, and engineering. Deliver engaging, intuitive, and clearly structured self-learning courses tailored precisely to the subject discipline and the learner's expertise level. Combine crystal-clear conceptual explanations with authentic domain examples, diagrams, and real-world applications."
     }
 }

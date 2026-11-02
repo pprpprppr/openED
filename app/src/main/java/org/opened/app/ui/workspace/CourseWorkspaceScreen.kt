@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import org.opened.app.core.ai.AcademicDomainClassifier
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.ui.components.InlineRefineBottomSheet
 import org.opened.app.ui.components.OutgoingBacklinksSection
@@ -548,13 +549,19 @@ fun CourseWorkspaceScreen(
 
         // Inline Refine Bottom Sheet Dialog
         if (uiState.showRefineSheet) {
+            val domain = AcademicDomainClassifier.detectAcademicDomain(
+                topic = uiState.pathWithModules?.studyPath?.topic.orEmpty(),
+                courseTitle = uiState.pathWithModules?.studyPath?.title.orEmpty(),
+                chapterTitle = currentChapter?.title.orEmpty()
+            )
             InlineRefineBottomSheet(
                 selectedSnippet = uiState.refineSnippet.orEmpty(),
                 isRefining = uiState.isRefining,
                 onDismiss = { viewModel.closeRefineSheet() },
                 onApplyRefinement = { snippet, action, customPrompt ->
                     viewModel.applyRefinement(action, customPrompt, snippet)
-                }
+                },
+                domain = domain
             )
         }
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude all hardware-backed keystore vaults and credentials from auto-backup -->
+    <exclude domain="sharedpref" path="opened_keystore_vault.xml" />
+    <exclude domain="sharedpref" path="opened_secure_vault.xml" />
+    <exclude domain="sharedpref" path="opened_secure_vault_fallback.xml" />
+    <!-- Exclude temporary exports and cache -->
+    <exclude domain="cache" path="." />
+</full-backup-content>

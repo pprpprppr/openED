@@ -37,12 +37,76 @@ Do not wrap in markdown quotes or code fences. Return raw JSON only.
     fun syllabusGenerationPrompt(
         topic: String,
         userLevel: String = "BEGINNER",
-        diagnosticSummary: String
+        diagnosticSummary: String,
+        domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic)
     ): String {
         val levelNormalized = userLevel.trim().lowercase()
         val isBeginner = levelNormalized.contains("begin") || levelNormalized.contains("found") ||
                 levelNormalized.contains("intro") || levelNormalized.contains("novice") ||
                 (!levelNormalized.contains("intermed") && !levelNormalized.contains("adv") && !levelNormalized.contains("expert"))
+
+        val domainProgressionGuidance = when (domain) {
+            AcademicDomain.HISTORY_GEOPOLITICS_AND_SOCIAL -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (HISTORY, GEOPOLITICS & LAW):
+Structure the 6 to 8 Modules chronologically and structurally:
+- Modules 1–2: Origins, Preconditions & Foundational Context (the historical/social stage).
+- Modules 3–4: Key Eras, Conflicts & Structural Shifts (turning points, key actors, treaties/laws).
+- Modules 5–6: Ideological Dynamics, Historiographical Debates & Institutional Evolution.
+- Modules 7–8: Modern Order, Lasting Legacy & Contemporary Geopolitical/Legal Parallels.
+CRITICAL MANDATE: This is a humanities/social sciences course. Never use programming/software terms (like "API", "syntax", "code") in chapter titles.
+"""
+            AcademicDomain.COMMERCE_ECONOMICS_AND_FINANCE -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (COMMERCE, ECONOMICS & FINANCE):
+Structure the 6 to 8 Modules from core incentives to applied markets:
+- Modules 1–2: Foundational Principles & Core Economic/Business Mental Models.
+- Modules 3–4: Microeconomic / Firm Mechanics (costs, revenue, financial statements, valuation).
+- Modules 5–6: Macroeconomic Systems, Monetary/Fiscal Policy & Market Instruments.
+- Modules 7–8: Applied Strategy, Investment Management, Corporate Governance & Case Studies.
+CRITICAL MANDATE: Focus on financial/market dynamics and ledger models. Never use programming code terms unless the topic is explicitly FinTech/Algorithmic Trading.
+"""
+            AcademicDomain.PHILOSOPHY_PSYCHOLOGY_AND_HUMANITIES -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (PHILOSOPHY, PSYCHOLOGY & HUMANITIES):
+Structure the 6 to 8 Modules from fundamental human inquiry to modern application:
+- Modules 1–2: The Fundamental Questions, Human Nature & Core Definitions.
+- Modules 3–4: Classical Frameworks & Foundational Schools of Thought.
+- Modules 5–6: Modern Perspectives, Empirical Research & Competing Critiques.
+- Modules 7–8: Applied Ethics, Cognitive Strategies, Decision-Making & Cultural Impact.
+CRITICAL MANDATE: Focus on thought experiments, psychological mechanisms, and dialectical arguments. Zero programming code.
+"""
+            AcademicDomain.LIFE_SCIENCES_AND_MEDICINE -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (LIFE SCIENCES & MEDICINE):
+Structure the 6 to 8 Modules from micro-scale mechanisms to whole-system health:
+- Modules 1–2: Macro Foundations, Cellular Architecture & Bio-Chemical Building Blocks.
+- Modules 3–4: Molecular Mechanisms, Cellular Energetics & Genetic Pathways.
+- Modules 5–6: Organ Systems, Physiological Regulation & Homeostasis.
+- Modules 7–8: Pathophysiology, Clinical Case Studies, Pharmacology & Modern Frontiers.
+CRITICAL MANDATE: This is an authentic life sciences course. Do not use software/coding analogies or toy scripts.
+"""
+            AcademicDomain.MATH_AND_PHYSICAL_SCIENCES -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (MATHEMATICS & PHYSICAL SCIENCES):
+Structure the 6 to 8 Modules from geometric/physical intuition to rigorous application:
+- Modules 1–2: Intuitive Mental Models, Core Definitions & Geometric/Physical Foundations.
+- Modules 3–4: Core Mathematical Machinery, Laws & Fundamental Equations.
+- Modules 5–6: Key Theorems, Conservation Principles & Analytical Methods.
+- Modules 7–8: Advanced Problem Solving, Boundary Conditions & Real-World Physical Applications.
+"""
+            AcademicDomain.SOFTWARE_AND_CS -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (SOFTWARE & COMPUTER SCIENCE):
+Structure the 6 to 8 Modules from Day-1 mental models to production systems:
+- Modules 1–2: Absolute Day-1 Foundations, Setup, Basic Building Blocks & Mental Models.
+- Modules 3–4: Core Language Mechanics, Data Structures & Standard Algorithms.
+- Modules 5–6: Idiomatic Design Patterns, Error Handling & Real-World Integration.
+- Modules 7–8: Production Architecture, Concurrency/Optimization & Capstone Projects.
+"""
+            AcademicDomain.GENERAL_INTERDISCIPLINARY -> """
+DISCIPLINE CURRICULUM ARCHITECTURE (INTERDISCIPLINARY):
+Structure the 6 to 8 Modules from first principles to real-world mastery:
+- Modules 1–2: Foundational Concepts, Core Vocabulary & Intuitive Big Picture.
+- Modules 3–4: Key Mechanics, Frameworks & Structural Principles.
+- Modules 5–6: Practical Trade-offs, Nuances & Intermediate Applications.
+- Modules 7–8: Capstone Real-World Case Studies, Advanced Problem Solving & Future Frontiers.
+"""
+        }
 
         val levelGuidance = if (isBeginner) {
             """
@@ -66,12 +130,15 @@ PEDAGOGY LEVEL GUIDANCE (INTERMEDIATE):
         }
 
         return """
-You are openED's Master Curriculum Architect.
+You are openED's Master Curriculum Architect for ${domain.displayName}.
 The user wants to study: "$topic"
+Academic Discipline: ${domain.displayName}
 Target Skill Level: $userLevel
 
 Diagnostic Assessment Profile:
 $diagnosticSummary
+
+$domainProgressionGuidance
 
 $levelGuidance
 
@@ -80,10 +147,7 @@ MANDATORY CURRICULUM ARCHITECTURE RULES:
    - Exactly 6 to 8 Modules ordered chronologically from absolute fundamentals to practical projects.
    - Exactly 4 to 6 Chapters per Module (totaling 24 to 40 bite-sized, focused chapters).
 2. SINGLE-CONCEPT CHAPTERS: Each chapter must cover ONE clear, digestible, focused topic rather than cramming an entire "Master Class" into one chapter.
-3. LOGICAL PROGRESSION:
-   - Early modules (Modules 1 & 2): Fundamentals, terminology, basic building blocks, intuitive mental models.
-   - Middle modules: Core mechanics, standard patterns, data structures, and control flow.
-   - Later modules: Real-world practical applications, error handling, best practices, and capstone projects.
+3. LOGICAL PROGRESSION: Follow the discipline curriculum architecture outlined above.
 
 For each chapter, provide:
 - Exact chapter title
@@ -118,6 +182,230 @@ Do not wrap in markdown quotes or code fences. Return raw JSON only.
 """.trimIndent()
     }
 
+    fun buildDomainPedagogicalBlueprint(domain: AcademicDomain, userLevel: String): String {
+        val levelNormalized = userLevel.trim().lowercase()
+
+        return when (domain) {
+            AcademicDomain.HISTORY_GEOPOLITICS_AND_SOCIAL -> """
+PEDAGOGY PROFILE: HISTORY, GEOPOLITICS & SOCIAL SCIENCES (${userLevel.uppercase()})
+STRICT NON-PROGRAMMING RULE:
+This is an academic humanities and social science course. Strictly forbid generating any Python, JavaScript, C++, pseudocode, or any programming code blocks (```python, ```javascript, etc.)! Express all concepts through historical context, geopolitical analysis, legal frameworks, and primary sources.
+
+MANDATORY 5-SECTION STRUCTURE:
+Your lesson MUST contain ALL 5 of the following structured Markdown sections in order:
+
+## 🌍 Context & The Big Picture
+- Describe the historical background, geography, geopolitical stakes, and societal atmosphere.
+- Start with an accessible real-world comparison to help learners connect with historical realities.
+- Define all foundational terminology (e.g., treaties, factions, legal doctrines) clearly with zero unexplained jargon.
+
+## 🏛️ Key Actors, Geopolitical Interests & Driving Forces
+- Analyze the motivations, strategies, and material interests of key nations, leaders, socio-economic classes, and institutions.
+- Unpack underlying structural drivers: economic pressures, territorial ambitions, ideological movements, or alliance commitments.
+
+## ⏳ Chronological Walkthrough & Pivotal Turning Points
+- Walk chronologically through the sequence of events, crises, negotiations, treaties, and decisive turning points.
+- Include a clear visual timeline, causal chain, or alliance map using a ```diagram flowchart:
+  ```diagram
+  flowchart TD
+      A["Event / Crisis (Year)"] --> B["Key Decision or Battle"]
+      B --> C["Treaty / Consequence"]
+  ```
+
+## ⚖️ Multiple Perspectives & Historiography
+- Present contrasting interpretations from different historical schools or opposing geopolitical perspectives.
+- Analyze how different nations, factions, or modern historians interpret the causes and consequences.
+- Reference key primary sources, treaty clauses, or constitutional precedents where relevant.
+
+## 🌐 Lasting Impact & Modern Parallels
+- Evaluate the enduring legacy, institutional precedents, and direct parallels to contemporary geopolitics, governance, or international law.
+- Provide a clear Markdown summary table comparing key factions, treaties, or geopolitical outcomes.
+- Include structured callouts:
+  > [!NOTE] Essential historical or constitutional principle
+  > [!TIP] Memory hook or historiographical nuance
+  > [!WARNING] Common misconception or historical myth debunked
+"""
+
+            AcademicDomain.COMMERCE_ECONOMICS_AND_FINANCE -> """
+PEDAGOGY PROFILE: COMMERCE, ECONOMICS & FINANCE (${userLevel.uppercase()})
+STRICT NON-PROGRAMMING RULE:
+This is an academic business, economics, and finance course. Strictly forbid generating any Python, JavaScript, C++, pseudocode, or programming code blocks! Express all financial mechanisms through market dynamics, accounting ledgers, cash flows, and mathematical/financial calculations.
+
+MANDATORY 4-SECTION STRUCTURE:
+Your lesson MUST contain ALL 4 of the following structured Markdown sections in order:
+
+## 💡 Core Economic & Business Intuition
+- Introduce the core concept through an everyday market scenario, consumer dilemma, or entrepreneurial decision.
+- Define all economic and financial terms (e.g., liquidity, margin, fiscal policy, price elasticity) with clarity.
+
+## ⚙️ How the Mechanism Works (Incentives & Flows)
+- Explain the underlying mechanics: supply and demand shifts, incentive structures, cash flow cycles, or institutional operations.
+- Include a visual market loop, cash flow diagram, or decision tree using a ```diagram flowchart:
+  ```diagram
+  flowchart TD
+      A["Market Catalyst / Policy"] --> B["Incentive Shift"]
+      B --> C["Price / Volume Adjustment"]
+  ```
+
+## 📊 Worked Numerical / Ledger Example & Real-World Case Study
+- Walk through a complete, step-by-step numerical calculation (e.g., DCF valuation, balance sheet ledger entries, ROI, elasticity coefficient, or portfolio return) showing all intermediate math steps clearly.
+- Ground the numbers with a concrete real-world corporate or macroeconomic case study.
+
+## ⚠️ Risks, Trade-Offs & Market Failures
+- Analyze externalities, credit/liquidity risks, inflation effects, behavioral biases, or unintended regulatory consequences.
+- Provide a clean Markdown comparison table summarizing trade-offs, financial ratios, or strategic options.
+- Include structured callouts:
+  > [!NOTE] Fundamental economic law or market rule
+  > [!TIP] Practical financial analysis or decision-making insight
+  > [!WARNING] Market risk, cognitive bias, or common analytical pitfall
+"""
+
+            AcademicDomain.PHILOSOPHY_PSYCHOLOGY_AND_HUMANITIES -> """
+PEDAGOGY PROFILE: PHILOSOPHY, PSYCHOLOGY & HUMANITIES (${userLevel.uppercase()})
+STRICT NON-PROGRAMMING RULE:
+This is an academic philosophy and human sciences course. Strictly forbid generating any Python, JavaScript, C++, pseudocode, or programming code blocks! Express all concepts through philosophical arguments, cognitive frameworks, thought experiments, and empirical studies.
+
+MANDATORY 5-SECTION STRUCTURE:
+Your lesson MUST contain ALL 5 of the following structured Markdown sections in order:
+
+## 🧠 The Central Question & Human Intuition
+- Frame the central dilemma, philosophical paradox, or psychological phenomenon with an intuitive scenario.
+- Connect the abstract inquiry directly to everyday human experience and conscious decision-making.
+
+## 🧩 Core Framework & Theory Breakdown
+- Break down the foundational theory, premises, cognitive models, or deductive argument step-by-step.
+- Include a concept map, cognitive loop, or logical argument tree using a ```diagram flowchart:
+  ```diagram
+  flowchart TD
+      P1["Premise 1 / Stimulus"] --> P2["Premise 2 / Cognitive Processing"]
+      P2 --> C["Conclusion / Behavioral Response"]
+  ```
+
+## 🔬 Classic Thought Experiments & Landmark Studies
+- Explore a famous philosophical thought experiment (e.g. Trolley Problem, Ship of Theseus, Experience Machine) or seminal psychological study (e.g. Kahneman-Tversky heuristics, Milgram, Bandura).
+- Analyze the underlying reasoning, methodology, and what it illuminates about cognition, morality, or reality.
+
+## ⚖️ Competing Schools of Thought & Critiques
+- Contrast opposing philosophical traditions (e.g., Deontology vs Consequentialism, Rationalism vs Empiricism) or psychological paradigms.
+- Provide a clean Markdown comparison table contrasting core premises, virtues, and major counterarguments.
+
+## 🌟 Practical Application to Everyday Thinking & Life
+- Demonstrate how this framework sharpens everyday critical thinking, mental models, emotional intelligence, or ethical choices.
+- Include structured callouts:
+  > [!NOTE] Core philosophical premise or psychological mechanism
+  > [!TIP] Practical heuristic or mental model for daily reasoning
+  > [!WARNING] Logical fallacy, cognitive trap, or common misinterpretation
+"""
+
+            AcademicDomain.LIFE_SCIENCES_AND_MEDICINE -> """
+PEDAGOGY PROFILE: LIFE SCIENCES & MEDICINE (${userLevel.uppercase()})
+STRICT NON-PROGRAMMING RULE:
+This is an academic life science and medical course. Strictly forbid generating any Python, JavaScript, C++, pseudocode, or programming code blocks! Express all mechanisms through biological pathways, anatomical structures, physiological feedback loops, and clinical case studies.
+
+MANDATORY 5-SECTION STRUCTURE:
+Your lesson MUST contain ALL 5 of the following structured Markdown sections in order:
+
+## 🔬 Biological Foundations & Intuitive Analogy
+- Introduce the biological system, organ, or cellular mechanism using a relatable physical analogy.
+- Explain the evolutionary or physiological purpose: what vital life function does this system perform?
+
+## 🧬 Structural & Molecular Breakdown
+- Detail the anatomical structures, cellular components, organelles, enzymes, or receptor complexes involved.
+- Use precise biochemical reactions or equations (${'$'}${'$'}...${'$'}${'$'}) where appropriate (e.g. cellular respiration, enzyme kinetics).
+
+## ⚙️ Step-by-Step Mechanistic Pathway
+- Trace the biological sequence of events, molecular signaling cascade, enzyme interactions, or hormonal feedback loops.
+- Include a biological pathway or cellular flow using a ```diagram flowchart:
+  ```diagram
+  flowchart TD
+      A["Stimulus / Ligand Binding"] --> B["Intracellular Signal Cascade"]
+      B --> C["Cellular / Physiological Response"]
+  ```
+
+## 🏥 Clinical & Real-World Case Studies
+- Present a realistic clinical case study, pathological disorder, genetic mutation, or pharmacological intervention showing what happens when the pathway malfunctions.
+- Detail diagnostic markers, physiological manifestations, and clinical rationale.
+
+## ⚠️ Common Misconceptions & Summary Comparison
+- Debunk 2 to 3 persistent biological or medical misconceptions.
+- Provide a clean Markdown summary table comparing healthy vs pathological states or related biological structures.
+- Include structured callouts:
+  > [!NOTE] Physiological principle or biological mechanism
+  > [!TIP] Diagnostic clue or clinical takeaway
+  > [!WARNING] Critical pathological danger, contraindication, or misconception
+"""
+
+            AcademicDomain.MATH_AND_PHYSICAL_SCIENCES -> """
+PEDAGOGY PROFILE: MATHEMATICS & PHYSICAL SCIENCES (${userLevel.uppercase()})
+STRICT NON-PROGRAMMING RULE:
+This is an academic mathematics and physical sciences course. Strictly forbid generating any Python, JavaScript, C++, pseudocode, or programming code blocks unless explicitly requested! Express all concepts through rigorous mathematical formulations, geometric proofs, and physical derivations.
+
+MANDATORY 4-SECTION STRUCTURE:
+Your lesson MUST contain ALL 4 of the following structured Markdown sections in order:
+
+## 📐 The Big Picture & Geometric/Physical Intuition
+- Explain why this mathematical or physical concept exists and its underlying geometric or physical meaning before equations.
+- Ground the concept with visual intuition and historical discovery context.
+
+## 🧩 Core Mathematical Formulations & Definitions
+- State the governing equations and definitions rigorously in LaTeX math blocks (${'$'}${'$'}...${'$'}${'$'}).
+- Clearly define all variables, physical units, constants, and coordinate conventions.
+
+## 📝 Step-by-Step Derivation & Worked Numerical Problems
+- Provide 2 to 3 fully worked, step-by-step derivations and numerical problems with all intermediate steps and explicit units.
+- Include a geometric relationship, thermodynamic cycle, or vector diagram using a ```diagram flowchart:
+  ```diagram
+  flowchart LR
+      A["Initial State / Boundary Condition"] --> B["Governing Operator / Transformation"]
+      B --> C["Final State / Conservation Law"]
+  ```
+
+## ⚠️ Common Pitfalls & Boundary Conditions
+- Highlight critical boundary conditions, extreme limits, sign conventions, and common mathematical errors (e.g., division by zero, non-convergent series).
+- Provide a clean Markdown summary table of formulas, identities, or physical properties.
+- Include structured callouts:
+  > [!NOTE] Fundamental theorem or physical law
+  > [!IMPORTANT] Invariant condition or boundary constraint
+  > [!WARNING] Common mathematical trap (sign error, unit mismatch, domain restriction)
+"""
+
+            AcademicDomain.GENERAL_INTERDISCIPLINARY -> """
+PEDAGOGY PROFILE: GENERAL & INTERDISCIPLINARY (${userLevel.uppercase()})
+STRICT NON-PROGRAMMING RULE:
+This is an interdisciplinary academic course. Strictly forbid generating any Python, JavaScript, C++, pseudocode, or programming code blocks! Express concepts through systematic frameworks, case studies, and conceptual analysis.
+
+MANDATORY 4-SECTION STRUCTURE:
+Your lesson MUST contain ALL 4 of the following structured Markdown sections in order:
+
+## 🌟 Core Concept & Intuitive Overview
+- Explain what this concept is and why it matters using a clear, relatable everyday analogy.
+- Define foundational vocabulary with zero jargon.
+
+## 🧩 Foundational Framework & Mechanics
+- Break down the underlying framework, components, and causal relationships step-by-step.
+- Include a system overview, process flowchart, or hierarchy using a ```diagram flowchart:
+  ```diagram
+  flowchart TD
+      A["Inputs / Drivers"] --> B["System Process"]
+      B --> C["Outcomes / Impacts"]
+  ```
+
+## 📋 Real-World Case Studies & Practical Applications
+- Provide 2 to 3 concrete real-world case studies demonstrating how this framework operates in practice.
+- Analyze the key decisions, context, and outcomes.
+
+## ⚖️ Trade-Offs, Nuances & Comparison Table
+- Provide a clean Markdown comparison table analyzing competing approaches, best practices, and trade-offs.
+- Include structured callouts:
+  > [!NOTE] Core conceptual insight
+  > [!TIP] Practical recommendation or rule of thumb
+  > [!WARNING] Common pitfall or nuance to keep in mind
+"""
+
+            AcademicDomain.SOFTWARE_AND_CS -> ""
+        }
+    }
+
     fun buildBeginnerChapterPrompt(
         courseTitle: String,
         topic: String,
@@ -125,9 +413,31 @@ Do not wrap in markdown quotes or code fences. Return raw JSON only.
         chapterTitle: String,
         chapterSummary: String,
         keyConcepts: List<String>,
-        otherChapterTitles: List<String>
+        otherChapterTitles: List<String>,
+        domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val crossRefInstruction = formatWikiLinkingInstruction(otherChapterTitles)
+
+        if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+            val blueprint = buildDomainPedagogicalBlueprint(domain, "BEGINNER")
+            return """
+You are openED, a world-class scholar, educator, and mentor in ${domain.displayName}.
+You are generating a complete, foundational, step-by-step lesson for:
+
+Course: $courseTitle ($topic)
+Learner Level: BEGINNER (Zero Assumptions)
+Module: $moduleTitle
+Chapter: $chapterTitle
+Chapter Goal: $chapterSummary
+Key Concepts: ${keyConcepts.joinToString(", ")}
+
+$crossRefInstruction
+
+$blueprint
+
+Stream the full lesson content directly in Markdown.
+""".trimIndent()
+        }
 
         return """
 You are openED, a world-class mentor dedicated to clear, empathetic, and exceptionally practical teaching.
@@ -194,9 +504,31 @@ Stream the full lesson content directly in Markdown.
         chapterTitle: String,
         chapterSummary: String,
         keyConcepts: List<String>,
-        otherChapterTitles: List<String>
+        otherChapterTitles: List<String>,
+        domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val crossRefInstruction = formatWikiLinkingInstruction(otherChapterTitles)
+
+        if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+            val blueprint = buildDomainPedagogicalBlueprint(domain, "INTERMEDIATE")
+            return """
+You are openED, an expert scholar and practitioner in ${domain.displayName}.
+You are generating a complete, applied, and comprehensive lesson for:
+
+Course: $courseTitle ($topic)
+Learner Level: INTERMEDIATE (Practical & Architectural)
+Module: $moduleTitle
+Chapter: $chapterTitle
+Chapter Goal: $chapterSummary
+Key Concepts: ${keyConcepts.joinToString(", ")}
+
+$crossRefInstruction
+
+$blueprint
+
+Stream the full lesson content directly in Markdown.
+""".trimIndent()
+        }
 
         return """
 You are openED, a senior staff software architect and engineering instructor.
@@ -234,9 +566,31 @@ Stream the full lesson content directly in Markdown.
         chapterTitle: String,
         chapterSummary: String,
         keyConcepts: List<String>,
-        otherChapterTitles: List<String>
+        otherChapterTitles: List<String>,
+        domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val crossRefInstruction = formatWikiLinkingInstruction(otherChapterTitles)
+
+        if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+            val blueprint = buildDomainPedagogicalBlueprint(domain, "ADVANCED")
+            return """
+You are openED, a world-class academic researcher, university professor, and senior scholar in ${domain.displayName}.
+You are generating a complete, rigorous, high-level scholarly lesson for:
+
+Course: $courseTitle ($topic)
+Learner Level: ADVANCED (Systems Rigor & Deep Dive)
+Module: $moduleTitle
+Chapter: $chapterTitle
+Chapter Goal: $chapterSummary
+Key Concepts: ${keyConcepts.joinToString(", ")}
+
+$crossRefInstruction
+
+$blueprint
+
+Stream the full lesson content directly in Markdown.
+""".trimIndent()
+        }
 
         return """
 You are openED, a world-class polymath instructor, university professor, and senior systems architect.
@@ -275,7 +629,8 @@ Stream the full lesson content directly in Markdown.
         chapterTitle: String,
         chapterSummary: String,
         keyConcepts: List<String>,
-        otherChapterTitles: List<String>
+        otherChapterTitles: List<String>,
+        domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val levelNormalized = userLevel.trim().lowercase()
         val isBeginner = levelNormalized.contains("begin") || levelNormalized.contains("found") ||
@@ -291,7 +646,8 @@ Stream the full lesson content directly in Markdown.
                 chapterTitle = chapterTitle,
                 chapterSummary = chapterSummary,
                 keyConcepts = keyConcepts,
-                otherChapterTitles = otherChapterTitles
+                otherChapterTitles = otherChapterTitles,
+                domain = domain
             )
             isAdvanced -> buildAdvancedChapterPrompt(
                 courseTitle = courseTitle,
@@ -300,7 +656,8 @@ Stream the full lesson content directly in Markdown.
                 chapterTitle = chapterTitle,
                 chapterSummary = chapterSummary,
                 keyConcepts = keyConcepts,
-                otherChapterTitles = otherChapterTitles
+                otherChapterTitles = otherChapterTitles,
+                domain = domain
             )
             else -> buildIntermediateChapterPrompt(
                 courseTitle = courseTitle,
@@ -309,7 +666,8 @@ Stream the full lesson content directly in Markdown.
                 chapterTitle = chapterTitle,
                 chapterSummary = chapterSummary,
                 keyConcepts = keyConcepts,
-                otherChapterTitles = otherChapterTitles
+                otherChapterTitles = otherChapterTitles,
+                domain = domain
             )
         }
     }
@@ -318,19 +676,30 @@ Stream the full lesson content directly in Markdown.
         courseTitle: String,
         topic: String,
         userLevel: String,
-        existingModulesWithChapters: List<Pair<String, List<String>>>
+        existingModulesWithChapters: List<Pair<String, List<String>>>,
+        domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle)
     ): String {
         val existingOutline = existingModulesWithChapters.joinToString("\n\n") { (modTitle, chList) ->
             "Module: $modTitle\n" + chList.joinToString("\n") { "  - $it" }
         }
 
+        val nonCodeRule = if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+            """
+DISCIPLINE INTEGRITY RULE:
+This course is in ${domain.displayName}.
+STRICTLY FORBID programming or coding chapters. Design curriculum modules and chapters authentically rooted in ${domain.displayName}.
+"""
+        } else ""
+
         return """
-You are openED's Master Curriculum Architect.
+You are openED's Master Curriculum Architect for ${domain.displayName}.
 The user is studying: "$courseTitle" ($topic)
 Target Skill Level: $userLevel
 
 EXISTING MODULES & CHAPTERS ALREADY COMPLETED OR SCHEDULED:
 $existingOutline
+
+$nonCodeRule
 
 TASK:
 Design EXACTLY 2 NEW progressive Modules that logically continue and expand this curriculum beyond the existing modules.
@@ -378,7 +747,8 @@ Always inject `[[Chapter Title]]` links naturally into the text when discussing 
         selectedText: String,
         action: RefineAction,
         customInstruction: String?,
-        userLevel: String = "BEGINNER"
+        userLevel: String = "BEGINNER",
+        domain: AcademicDomain = AcademicDomain.SOFTWARE_AND_CS
     ): String {
         val isFullChapter = selectedText.isBlank()
         val levelNormalized = userLevel.trim().lowercase()
@@ -386,25 +756,39 @@ Always inject `[[Chapter Title]]` links naturally into the text when discussing 
                 levelNormalized.contains("intro") || levelNormalized.contains("novice") ||
                 (!levelNormalized.contains("intermed") && !levelNormalized.contains("adv") && !levelNormalized.contains("expert"))
 
+        val nonCodeRule = if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+            "STRICT NON-PROGRAMMING RULE: This course is in ${domain.displayName}. Strictly forbid generating Python, JavaScript, C++, or any programming language code blocks (```python, ```javascript, etc.) or pseudocode! Use discipline-native explanations, formulas ($$...$$) if mathematical, or real-world case studies."
+        } else {
+            ""
+        }
+
         val levelExtra = if (isBeginner) {
-            "TARGET LEARNER LEVEL: BEGINNER. Strictly avoid obscure compiler/C internals or artificial LaTeX math blocks. Use plain, intuitive explanations, concrete code examples, and clear analogies."
+            "TARGET LEARNER LEVEL: BEGINNER. Strictly avoid obscure compiler/C internals or artificial LaTeX math blocks. Use plain, intuitive explanations, concrete examples, and clear analogies."
         } else {
             "TARGET LEARNER LEVEL: $userLevel."
         }
 
         val instructionText = when (action) {
-            RefineAction.SIMPLIFY -> "Simplify this content. Make it accessible and clear with an intuitive analogy while retaining core technical accuracy."
-            RefineAction.ADD_CODE_MATH -> "Enhance this content by providing concrete code examples or LaTeX math derivations (${'$'}${'$'}...${'$'}${'$'}) to make it actionable and rigorous."
-            RefineAction.FACT_CHECK_CORRECT -> "Fact-check this content against state-of-the-art standards, verify technical claims, fix inaccuracies, and update nuances."
+            RefineAction.SIMPLIFY -> "Simplify this content. Make it accessible and clear with an intuitive analogy while retaining core academic accuracy."
+            RefineAction.ADD_CODE_MATH -> {
+                when (domain) {
+                    AcademicDomain.SOFTWARE_AND_CS -> "Enhance this content by providing concrete code examples or LaTeX math derivations (${'$'}${'$'}...${'$'}${'$'}) to make it actionable and rigorous."
+                    AcademicDomain.MATH_AND_PHYSICAL_SCIENCES -> "Enhance this content by providing rigorous LaTeX mathematical derivations (${'$'}${'$'}...${'$'}${'$'}) and step-by-step numerical/physical proofs."
+                    else -> "Enhance this content by providing detailed real-world case studies, historical examples, or worked numerical breakdowns (NO programming code) to make this passage concrete and applied."
+                }
+            }
+            RefineAction.FACT_CHECK_CORRECT -> "Fact-check this content against state-of-the-art academic standards, verify disciplinary claims, fix inaccuracies, and update nuances."
             RefineAction.CUSTOM -> customInstruction ?: "Refine and improve this content."
         }
 
+        val rules = listOf(levelExtra, nonCodeRule).filter { it.isNotBlank() }.joinToString("\n")
+
         return if (isFullChapter) {
             """
-You are openED's Master Academic Editor.
+You are openED's Master Academic Editor in ${domain.displayName}.
 You are rewriting the entire chapter below to adjust its depth, clarity, and quality.
 
-$levelExtra
+$rules
 
 CURRENT CHAPTER CONTENT:
 ${chapterContext.take(5000)}
@@ -417,10 +801,10 @@ Return ONLY the complete updated Markdown content. Do not include introductory c
 """.trimIndent()
         } else {
             """
-You are openED's In-Chapter AI Editor.
+You are openED's In-Chapter AI Editor in ${domain.displayName}.
 You are asked to refine a specific passage within a chapter.
 
-$levelExtra
+$rules
 
 CHAPTER CONTEXT:
 ${chapterContext.take(1500)}
@@ -441,10 +825,15 @@ Return ONLY the refined replacement text for the selected passage in Markdown. D
     fun socraticQaPrompt(
         chapterTitle: String,
         chapterContent: String,
-        userQuestion: String
+        userQuestion: String,
+        domain: AcademicDomain = AcademicDomain.GENERAL_INTERDISCIPLINARY
     ): String {
+        val nonCodeRule = if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+            "STRICT NON-PROGRAMMING RULE: This is an academic course in ${domain.displayName}. Do NOT generate programming code or pseudocode."
+        } else ""
+
         return """
-You are openED's Socratic Teaching Assistant.
+You are openED's Socratic Teaching Assistant for ${domain.displayName}.
 The learner is reading the chapter "$chapterTitle" and has asked a question:
 
 LEARNER QUESTION:
@@ -453,11 +842,13 @@ LEARNER QUESTION:
 CURRENT CHAPTER CONTENT (GROUND TRUTH CONTEXT):
 ${chapterContent.take(4000)}
 
+$nonCodeRule
+
 TASK:
 Provide a clear, engaging, and pedagogically sound Socratic answer.
 1. Answer the specific question directly.
 2. Anchor your explanation to the concepts introduced in this chapter.
-3. If relevant, include a brief code snippet, formula (${'$'}${'$'}...${'$'}${'$'}), or thought-provoking follow-up question to test their understanding.
+3. If relevant, include a brief discipline-appropriate formula (${'$'}${'$'}...${'$'}${'$'}), case study example, or thought-provoking follow-up question to test their understanding.
 4. Keep the answer structured and readable in Markdown.
 """.trimIndent()
     }

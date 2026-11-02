@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.opened.app.core.ai.AcademicDomain
 import org.opened.app.core.ai.RefineAction
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -56,12 +57,25 @@ fun InlineRefineBottomSheet(
     selectedSnippet: String,
     isRefining: Boolean,
     onDismiss: () -> Unit,
-    onApplyRefinement: (String, RefineAction, String?) -> Unit
+    onApplyRefinement: (String, RefineAction, String?) -> Unit,
+    domain: AcademicDomain = AcademicDomain.SOFTWARE_AND_CS
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedAction by remember { mutableStateOf(RefineAction.SIMPLIFY) }
     var customPrompt by remember { mutableStateOf("") }
     var snippetText by remember { mutableStateOf(selectedSnippet) }
+
+    val isCsDomain = domain == AcademicDomain.SOFTWARE_AND_CS
+    val addCodeMathLabel = when (domain) {
+        AcademicDomain.SOFTWARE_AND_CS -> "Add Code/Math Example"
+        AcademicDomain.MATH_AND_PHYSICAL_SCIENCES -> "Add Math Formulation"
+        else -> "Add Case Study / Example"
+    }
+    val customPlaceholder = if (isCsDomain) {
+        "e.g. Rewrite with async/await coroutines in Kotlin..."
+    } else {
+        "e.g. Add a real-world case study or historical context..."
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -116,44 +130,85 @@ fun InlineRefineBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                DepthPresetCard(
-                    title = "🌱 Explain for Beginners (Step-by-Step + Examples)",
-                    description = "Clear real-world analogies, zero obscure compiler/C internals, 3-4 code walkthroughs, visual diagram & pitfalls table.",
-                    isEnabled = !isRefining,
-                    onClick = {
-                        onApplyRefinement(
-                            "",
-                            RefineAction.CUSTOM,
-                            "Rewrite this entire chapter from zero assumptions for a beginner. Strictly forbid obscure compiler/C-struct internals. Start with a clear everyday real-world analogy. Include a simple ```diagram flowchart, 3 to 4 progressive well-commented code walkthroughs with inputs and outputs, and a common pitfalls section with a markdown table. Only use LaTeX math if it is a pure math topic."
-                        )
-                    }
-                )
+                if (isCsDomain) {
+                    DepthPresetCard(
+                        title = "🌱 Explain for Beginners (Step-by-Step + Examples)",
+                        description = "Clear real-world analogies, zero obscure compiler/C internals, 3-4 code walkthroughs, visual diagram & pitfalls table.",
+                        isEnabled = !isRefining,
+                        onClick = {
+                            onApplyRefinement(
+                                "",
+                                RefineAction.CUSTOM,
+                                "Rewrite this entire chapter from zero assumptions for a beginner. Strictly forbid obscure compiler/C-struct internals. Start with a clear everyday real-world analogy. Include a simple ```diagram flowchart, 3 to 4 progressive well-commented code walkthroughs with inputs and outputs, and a common pitfalls section with a markdown table. Only use LaTeX math if it is a pure math topic."
+                            )
+                        }
+                    )
 
-                DepthPresetCard(
-                    title = "⚡ Practical & Hands-On (More Code & Real-World Use Cases)",
-                    description = "Idiomatic patterns, realistic architectures, practical trade-offs, and production debugging scenarios.",
-                    isEnabled = !isRefining,
-                    onClick = {
-                        onApplyRefinement(
-                            "",
-                            RefineAction.CUSTOM,
-                            "Rewrite this chapter with a practical, hands-on focus. Include idiomatic patterns, real-world architecture, multiple concrete code examples solving realistic problems, and common production debugging scenarios."
-                        )
-                    }
-                )
+                    DepthPresetCard(
+                        title = "⚡ Practical & Hands-On (More Code & Real-World Use Cases)",
+                        description = "Idiomatic patterns, realistic architectures, practical trade-offs, and production debugging scenarios.",
+                        isEnabled = !isRefining,
+                        onClick = {
+                            onApplyRefinement(
+                                "",
+                                RefineAction.CUSTOM,
+                                "Rewrite this chapter with a practical, hands-on focus. Include idiomatic patterns, real-world architecture, multiple concrete code examples solving realistic problems, and common production debugging scenarios."
+                            )
+                        }
+                    )
 
-                DepthPresetCard(
-                    title = "🔬 Deep Technical Dive",
-                    description = "Under-the-hood systems internals, memory layout, algorithmic complexity proofs, and advanced scaling.",
-                    isEnabled = !isRefining,
-                    onClick = {
-                        onApplyRefinement(
-                            "",
-                            RefineAction.CUSTOM,
-                            "Rewrite this chapter as a deep technical dive. Explore under-the-hood systems architecture, memory layout, algorithmic complexity proofs, and advanced edge-case performance optimizations."
-                        )
-                    }
-                )
+                    DepthPresetCard(
+                        title = "🔬 Deep Technical Dive",
+                        description = "Under-the-hood systems internals, memory layout, algorithmic complexity proofs, and advanced scaling.",
+                        isEnabled = !isRefining,
+                        onClick = {
+                            onApplyRefinement(
+                                "",
+                                RefineAction.CUSTOM,
+                                "Rewrite this chapter as a deep technical dive. Explore under-the-hood systems architecture, memory layout, algorithmic complexity proofs, and advanced edge-case performance optimizations."
+                            )
+                        }
+                    )
+                } else {
+                    DepthPresetCard(
+                        title = "🌱 Explain for Beginners (Foundational & Accessible)",
+                        description = "Clear real-world analogies, zero unexplained jargon, step-by-step conceptual walkthroughs, and visual diagram.",
+                        isEnabled = !isRefining,
+                        onClick = {
+                            onApplyRefinement(
+                                "",
+                                RefineAction.CUSTOM,
+                                "Rewrite this entire chapter from zero assumptions for a beginner in ${domain.displayName}. Strictly forbid any programming code or pseudocode. Start with a clear everyday real-world analogy, structured visual flowchart, and concrete real-world examples."
+                            )
+                        }
+                    )
+
+                    DepthPresetCard(
+                        title = "⚡ Practical & Applied (Real-World Case Studies)",
+                        description = "Applied case studies, real-world dynamics, concrete examples, and practical trade-offs.",
+                        isEnabled = !isRefining,
+                        onClick = {
+                            onApplyRefinement(
+                                "",
+                                RefineAction.CUSTOM,
+                                "Rewrite this chapter with an applied, practical focus in ${domain.displayName}. Provide realistic case studies, practical mechanisms, and concrete worked examples. Strictly forbid any programming code or pseudocode."
+                            )
+                        }
+                    )
+
+                    DepthPresetCard(
+                        title = "🔬 Deep Academic Dive",
+                        description = "Scholarly rigor, primary literature, advanced theoretical models, and boundary condition analysis.",
+                        isEnabled = !isRefining,
+                        onClick = {
+                            onApplyRefinement(
+                                "",
+                                RefineAction.CUSTOM,
+                                "Rewrite this chapter as a deep academic dive in ${domain.displayName}. Explore advanced theoretical models, nuanced historical/scientific frameworks, and boundary conditions. Strictly forbid any programming code or pseudocode."
+                            )
+                        }
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -201,8 +256,8 @@ fun InlineRefineBottomSheet(
                 )
 
                 RefineChip(
-                    label = "Add Code/Math Example",
-                    icon = Icons.Default.Code,
+                    label = addCodeMathLabel,
+                    icon = if (isCsDomain) Icons.Default.Code else Icons.Default.AutoAwesome,
                     isSelected = selectedAction == RefineAction.ADD_CODE_MATH,
                     onClick = { selectedAction = RefineAction.ADD_CODE_MATH }
                 )
@@ -228,7 +283,7 @@ fun InlineRefineBottomSheet(
                     value = customPrompt,
                     onValueChange = { customPrompt = it },
                     label = { Text("Custom Refinement Instruction") },
-                    placeholder = { Text("e.g. Rewrite with async/await coroutines in Kotlin...") },
+                    placeholder = { Text(customPlaceholder) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
