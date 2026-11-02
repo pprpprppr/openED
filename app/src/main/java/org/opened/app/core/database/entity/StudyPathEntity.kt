@@ -10,7 +10,8 @@ import kotlinx.serialization.Serializable
     tableName = "study_paths",
     indices = [
         Index(value = ["topic"]),
-        Index(value = ["createdAt"])
+        Index(value = ["createdAt"]),
+        Index(value = ["updatedAt"])
     ]
 )
 data class StudyPathEntity(

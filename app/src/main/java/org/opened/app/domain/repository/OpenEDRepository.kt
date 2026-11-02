@@ -13,6 +13,7 @@ import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
+import org.opened.app.core.database.entity.SyncTombstoneEntity
 import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.database.model.ChapterWithDetails
@@ -86,6 +87,10 @@ interface OpenEDRepository {
     suspend fun getChunksForDocuments(documentIds: List<String>): List<DocumentChunkEntity>
     suspend fun searchDocumentChunks(query: String, limit: Int = 20): List<DocumentChunkEntity>
     suspend fun deleteDocument(documentId: String)
+
+    // --- Multi-Device Sync & Tombstones (Phase 9) ---
+    suspend fun getAllTombstones(): List<SyncTombstoneEntity>
+    suspend fun recordTombstone(entityType: String, entityId: String)
 
     // --- Knowledge Graph ---
     suspend fun getAllChapterLinkNodes(): List<ChapterLinkNode>

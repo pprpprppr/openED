@@ -1,0 +1,108 @@
+<resources>
+    <string name="app_name">openED</string>
+    <string name="app_tagline">Universidad Global Personal con IA</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Inicio</string>
+    <string name="nav_courses">Cursos</string>
+    <string name="nav_flashcards">Tarjetas de Repaso</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="nav_back">Atrás</string>
+    <string name="nav_close">Cerrar</string>
+
+    <!-- Home & Dashboard -->
+    <string name="home_title">Estudio de Conocimiento</string>
+    <string name="home_subtitle">Tu universidad autodirigida offline impulsada por IA</string>
+    <string name="home_create_course">Nueva Ruta de Estudio</string>
+    <string name="home_search_placeholder">Buscar conceptos, capítulos, fórmulas…</string>
+    <string name="home_due_reviews">Pendientes de Repaso</string>
+    <string name="home_recent_courses">Mis Cursos</string>
+    <string name="home_no_courses">No hay rutas creadas aún. ¡Comienza arriba!</string>
+    <string name="home_progress">Progreso</string>
+    <string name="home_documents">Biblioteca de Investigación</string>
+    <string name="home_import_document">Importar Documento</string>
+    <string name="home_interactive_lab_shortcut">Laboratorio Interactivo</string>
+
+    <!-- Diagnostic & Course Wizard -->
+    <string name="wizard_title">Arquitecto de Cursos</string>
+    <string name="wizard_prompt_placeholder">¿Qué deseas dominar hoy? (ej. Bioenergética Celular, Teoría de Juegos, Macroeconomía, Computación Cuántica)</string>
+    <string name="wizard_start_diagnostic">Diseñar Currículo</string>
+    <string name="wizard_diagnosing">Analizando disciplina académica y diagnosticando requisitos previos…</string>
+    <string name="wizard_generating_syllabus">Sintetizando currículo multimodular completo…</string>
+    <string name="wizard_level_beginner">Principiante</string>
+    <string name="wizard_level_intermediate">Intermedio</string>
+    <string name="wizard_level_advanced">Avanzado</string>
+    <string name="wizard_select_level">Nivel de Maestría Objetivo</string>
+    <string name="wizard_academic_domain">Disciplina Académica</string>
+    <string name="wizard_domain_auto">Detectar Automáticamente</string>
+
+    <!-- Workspace & Lesson Reader -->
+    <string name="course_tree">Temario y Módulos</string>
+    <string name="course_generate_chapter">Sintetizar Capítulo</string>
+    <string name="course_regenerate">Regenerar</string>
+    <string name="course_refine">Refinar Contenido</string>
+    <string name="course_qa">Mentor Socrático</string>
+    <string name="course_mastery">Evaluación de Maestría</string>
+    <string name="course_interactive_lab">Laboratorio Interactivo</string>
+    <string name="course_listen">Escuchar</string>
+    <string name="course_revisions">Historial de Revisiones</string>
+    <string name="course_evidence_badge">Fundamentación en Evidencia</string>
+    <string name="course_reading_time">%1$d min de lectura</string>
+    <string name="course_disclaimer_medical">Aviso médico: Este curso tiene propósitos estrictamente académicos y educativos. No constituye asesoramiento clínico ni médico.</string>
+    <string name="course_disclaimer_legal">Aviso legal: Este contenido es exclusivamente para fines educativos y teóricos. No constituye asesoría jurídica.</string>
+    <string name="course_disclaimer_financial">Aviso financiero: Este material es solo para educación conceptual económica y financiera, no asesoramiento de inversión.</string>
+
+    <!-- Interactive Knowledge Laboratory -->
+    <string name="lab_title">Laboratorio Interactivo de Conocimiento</string>
+    <string name="lab_math_plot">Gráfico de Función Matemática 2D</string>
+    <string name="lab_physics">Simulación Cinemática</string>
+    <string name="lab_economics">Mercado de Oferta y Demanda</string>
+    <string name="lab_biology">Ruta de Bioenergética Celular</string>
+    <string name="lab_history">Línea de Tiempo Geopolítica e Histórica</string>
+    <string name="lab_logic">Mapa de Argumentación Epistémica</string>
+    <string name="lab_reset">Restablecer</string>
+    <string name="lab_zoom_in">Acercar</string>
+    <string name="lab_zoom_out">Alejar</string>
+    <string name="lab_pan">Desplazar</string>
+
+    <!-- Mastery & FSRS Flashcards -->
+    <string name="mastery_title">Maestría del Capítulo</string>
+    <string name="mastery_feynman_title">Explicación Técnica Feynman</string>
+    <string name="mastery_quiz_title">Cuestionario Conceptual Adaptativo</string>
+    <string name="mastery_score">Puntuación de Maestría: %1$d%%</string>
+    <string name="fsrs_again">Repetir</string>
+    <string name="fsrs_hard">Difícil</string>
+    <string name="fsrs_good">Bueno</string>
+    <string name="fsrs_easy">Fácil</string>
+    <string name="fsrs_flip_card">Voltear Tarjeta</string>
+    <string name="fsrs_no_cards_due">¡No hay tarjetas pendientes de repaso en este momento! ¡Excelente trabajo!</string>
+    <string name="remedial_lesson_title">Microlección de Refuerzo</string>
+
+    <!-- Settings & Customization -->
+    <string name="settings_title">Ajustes y Preferencias</string>
+    <string name="settings_ai_provider">Proveedor de Inteligencia IA</string>
+    <string name="settings_api_key">Clave API (Almacenada en Android Keystore AES-256-GCM)</string>
+    <string name="settings_save_key">Guardar Clave</string>
+    <string name="settings_model_selection">Selección de Modelo</string>
+    <string name="settings_connection_test">Probar Conexión</string>
+    <string name="settings_learning_language">Idioma de Aprendizaje</string>
+    <string name="settings_bilingual_terms">Terminología Bilingüe</string>
+    <string name="settings_bilingual_terms_desc">Mostrar términos técnicos en idioma nativo e inglés</string>
+    <string name="settings_high_contrast">Tema de Alto Contraste</string>
+    <string name="settings_high_contrast_desc">Mejora la legibilidad con contraste WCAG AAA</string>
+    <string name="settings_reduced_motion">Reducción de Movimiento</string>
+    <string name="settings_reduced_motion_desc">Minimiza animaciones y transiciones dinámicas</string>
+    <string name="settings_sync_backup">Sincronización Multidispositivo y Respaldo</string>
+    <string name="settings_sync_provider">Motor de Sincronización</string>
+    <string name="settings_sync_now">Sincronizar Ahora</string>
+    <string name="settings_sync_auto">Copia de Seguridad Periódica Automática</string>
+
+    <!-- Accessibility & TalkBack Semantics -->
+    <string name="cd_math_formula">Formulación matemática: %1$s</string>
+    <string name="cd_diagram">Diagrama conceptual: %1$s</string>
+    <string name="cd_chart">Gráfico de datos: %1$s</string>
+    <string name="cd_interactive_canvas">Lienzo interactivo de visualización: %1$s</string>
+    <string name="cd_close">Cerrar</string>
+    <string name="cd_open_drawer">Abrir menú de navegación</string>
+    <string name="cd_back">Navegar hacia arriba</string>
+</resources>

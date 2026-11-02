@@ -44,7 +44,9 @@ class AiLearningEngine @Inject constructor(
     private fun getEffectiveSystemInstruction(
         baseInstruction: String,
         userLevel: String,
-        domain: AcademicDomain = AcademicDomain.GENERAL_INTERDISCIPLINARY
+        domain: AcademicDomain = AcademicDomain.GENERAL_INTERDISCIPLINARY,
+        learningLanguage: String = "English",
+        bilingualTerminology: Boolean = false
     ): String {
         val levelNormalized = userLevel.trim().lowercase()
         val isBeginner = levelNormalized.contains("begin") || levelNormalized.contains("found") ||
@@ -70,7 +72,17 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             ""
         }
 
-        return listOf(nonCodeRule, beginnerRule, baseInstruction).filter { it.isNotBlank() }.joinToString("\n\n")
+        val languageRule = if (!learningLanguage.equals("English", ignoreCase = true)) {
+            """
+GLOBAL LOCALIZATION RULE:
+Teach and generate all lesson content, explanations, and concepts natively in $learningLanguage.
+${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing key concepts or specialized domain terms, display the $learningLanguage terminology alongside the standard English terminology in parentheses (e.g. 'Termino (\$'English Term')')." else ""}
+""".trimIndent()
+        } else {
+            ""
+        }
+
+        return listOf(languageRule, nonCodeRule, beginnerRule, baseInstruction).filter { it.isNotBlank() }.joinToString("\n\n")
     }
 
     suspend fun generateDiagnosticQuestions(topic: String): Result<List<DiagnosticQuestion>> = withContext(Dispatchers.IO) {
@@ -105,7 +117,13 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             }
 
             val prompt = Prompts.syllabusGenerationPrompt(topic, userLevel, summaryBuilder.toString(), domain)
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, userLevel, domain)
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(
+                prefs.customSystemInstructions,
+                userLevel,
+                domain,
+                prefs.learningLanguage,
+                prefs.bilingualTerminologyEnabled
+            )
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
@@ -179,7 +197,13 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
                 domain = domain
             )
 
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, studyPath.userLevel, domain)
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(
+                prefs.customSystemInstructions,
+                studyPath.userLevel,
+                domain,
+                prefs.learningLanguage,
+                prefs.bilingualTerminologyEnabled
+            )
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
@@ -253,7 +277,13 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
         )
         val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: pathWithModules.studyPath.userLevel
         val prefs = preferencesRepository.userPreferencesFlow.first()
-        val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel, domain)
+        val effectiveSystemInstruction = getEffectiveSystemInstruction(
+            prefs.customSystemInstructions,
+            effectiveUserLevel,
+            domain,
+            prefs.learningLanguage,
+            prefs.bilingualTerminologyEnabled
+        )
         val prompt = Prompts.chapterContentPrompt(
             courseTitle = pathWithModules.studyPath.title,
             topic = pathWithModules.studyPath.topic,
@@ -330,7 +360,13 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             )
             val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: (studyPath?.userLevel ?: "BEGINNER")
             val prefs = preferencesRepository.userPreferencesFlow.first()
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel, domain)
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(
+                prefs.customSystemInstructions,
+                effectiveUserLevel,
+                domain,
+                prefs.learningLanguage,
+                prefs.bilingualTerminologyEnabled
+            )
 
             val prompt = Prompts.inlineRefinePrompt(
                 chapterContext = chapter.markdownContent,

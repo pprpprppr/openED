@@ -413,4 +413,48 @@ object LatexParser {
         // Otherwise plain text, clean with cleanInlineLatex
         return Math2DNode.Text(cleanInlineLatex(clean))
     }
+
+    /**
+     * Converts a LaTeX mathematical formula into an accessible natural language string
+     * for TalkBack / Screen Readers (WCAG Accessibility compliance).
+     */
+    fun toSpokenDescription(latex: String): String {
+        var spoken = latex.trim()
+            .removePrefix("$$").removeSuffix("$$")
+            .removePrefix("\\[").removeSuffix("\\]")
+            .removePrefix("$").removeSuffix("$")
+            .trim()
+
+        spoken = spoken.replace(Regex("""\\frac\{([^}]+)\}\{([^}]+)\}"""), "fraction with numerator $1 over denominator $2")
+        spoken = spoken.replace(Regex("""\\sqrt\{([^}]+)\}"""), "square root of $1")
+        spoken = spoken.replace(Regex("""\\sum_\{([^}]+)\}\^\{([^}]+)\}"""), "summation from $1 to $2 of ")
+        spoken = spoken.replace(Regex("""\\int_\{([^}]+)\}\^\{([^}]+)\}"""), "integral from $1 to $2 of ")
+        spoken = spoken.replace(Regex("""\^2\b"""), " squared")
+        spoken = spoken.replace(Regex("""\^3\b"""), " cubed")
+        spoken = spoken.replace(Regex("""\^\{([^}]+)\}"""), " to the power of $1")
+        spoken = spoken.replace(Regex("""_\{([^}]+)\}"""), " subscript $1")
+        spoken = spoken.replace(Regex("""\\[a-zA-Z]+""")) { match ->
+            when (match.value) {
+                "\\alpha" -> "alpha"
+                "\\beta" -> "beta"
+                "\\gamma" -> "gamma"
+                "\\theta" -> "theta"
+                "\\pi" -> "pi"
+                "\\lambda" -> "lambda"
+                "\\sigma" -> "sigma"
+                "\\infty" -> "infinity"
+                "\\approx" -> "approximately equals"
+                "\\neq" -> "not equals"
+                "\\le", "\\leq" -> "less than or equal to"
+                "\\ge", "\\geq" -> "greater than or equal to"
+                "\\times" -> "times"
+                "\\div" -> "divided by"
+                "\\pm" -> "plus or minus"
+                "\\partial" -> "partial derivative"
+                "\\Delta" -> "delta"
+                else -> match.value.removePrefix("\\")
+            }
+        }
+        return spoken.replace("{", "").replace("}", "").trim()
+    }
 }

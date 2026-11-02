@@ -1,3 +1,108 @@
 <resources>
     <string name="app_name">openED</string>
+    <string name="app_tagline">Global Personal AI University</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_courses">Courses</string>
+    <string name="nav_flashcards">Review Cards</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_back">Back</string>
+    <string name="nav_close">Close</string>
+
+    <!-- Home & Dashboard -->
+    <string name="home_title">Knowledge Studio</string>
+    <string name="home_subtitle">Your offline AI-powered self-directed university</string>
+    <string name="home_create_course">New Study Path</string>
+    <string name="home_search_placeholder">Search concepts, chapters, formulas…</string>
+    <string name="home_due_reviews">Due for Review</string>
+    <string name="home_recent_courses">My Courses</string>
+    <string name="home_no_courses">No study paths created yet. Start your journey above!</string>
+    <string name="home_progress">Progress</string>
+    <string name="home_documents">Research Library</string>
+    <string name="home_import_document">Import Document</string>
+    <string name="home_interactive_lab_shortcut">Interactive Lab</string>
+
+    <!-- Diagnostic & Course Wizard -->
+    <string name="wizard_title">Course Architect</string>
+    <string name="wizard_prompt_placeholder">What do you want to master today? (e.g., Cellular Bioenergetics, Game Theory, Modern Macroeconomics, Quantum Computing)</string>
+    <string name="wizard_start_diagnostic">Design Curriculum</string>
+    <string name="wizard_diagnosing">Analyzing academic domain and diagnosing prerequisite depth…</string>
+    <string name="wizard_generating_syllabus">Synthesizing comprehensive multi-module curriculum…</string>
+    <string name="wizard_level_beginner">Beginner</string>
+    <string name="wizard_level_intermediate">Intermediate</string>
+    <string name="wizard_level_advanced">Advanced</string>
+    <string name="wizard_select_level">Target Mastery Level</string>
+    <string name="wizard_academic_domain">Academic Discipline</string>
+    <string name="wizard_domain_auto">Auto-detect Domain</string>
+
+    <!-- Workspace & Lesson Reader -->
+    <string name="course_tree">Syllabus &amp; Modules</string>
+    <string name="course_generate_chapter">Synthesize Chapter</string>
+    <string name="course_regenerate">Regenerate</string>
+    <string name="course_refine">Refine Content</string>
+    <string name="course_qa">Socratic Mentor</string>
+    <string name="course_mastery">Mastery Assessment</string>
+    <string name="course_interactive_lab">Interactive Lab</string>
+    <string name="course_listen">Listen</string>
+    <string name="course_revisions">Revision History</string>
+    <string name="course_evidence_badge">Evidence Grounding</string>
+    <string name="course_reading_time">%1$d min read</string>
+    <string name="course_disclaimer_medical">Medical Disclaimer: This course is for academic, educational purposes only. It is not clinical or medical advice.</string>
+    <string name="course_disclaimer_legal">Legal Disclaimer: This course is for educational and theoretical understanding only. It does not constitute legal counsel.</string>
+    <string name="course_disclaimer_financial">Financial Disclaimer: This content is for conceptual economic and financial education only, not investment advice.</string>
+
+    <!-- Interactive Knowledge Laboratory -->
+    <string name="lab_title">Interactive Knowledge Laboratory</string>
+    <string name="lab_math_plot">2D Math Function Plot</string>
+    <string name="lab_physics">Kinematics Simulation</string>
+    <string name="lab_economics">Supply &amp; Demand Market</string>
+    <string name="lab_biology">Cellular Bioenergetics Pathway</string>
+    <string name="lab_history">Historical Geopolitical Timeline</string>
+    <string name="lab_logic">Epistemic Argument Map</string>
+    <string name="lab_reset">Reset</string>
+    <string name="lab_zoom_in">Zoom In</string>
+    <string name="lab_zoom_out">Zoom Out</string>
+    <string name="lab_pan">Pan</string>
+
+    <!-- Mastery & FSRS Flashcards -->
+    <string name="mastery_title">Chapter Mastery</string>
+    <string name="mastery_feynman_title">Feynman Technique Explanation</string>
+    <string name="mastery_quiz_title">Adaptive Concept Quiz</string>
+    <string name="mastery_score">Mastery Score: %1$d%%</string>
+    <string name="fsrs_again">Again</string>
+    <string name="fsrs_hard">Hard</string>
+    <string name="fsrs_good">Good</string>
+    <string name="fsrs_easy">Easy</string>
+    <string name="fsrs_flip_card">Flip Card</string>
+    <string name="fsrs_no_cards_due">No cards due for review right now! Excellent job!</string>
+    <string name="remedial_lesson_title">Remedial Micro-Lesson</string>
+
+    <!-- Settings & Customization -->
+    <string name="settings_title">Settings &amp; Preferences</string>
+    <string name="settings_ai_provider">AI Intelligence Provider</string>
+    <string name="settings_api_key">API Key (Stored in Android Keystore AES-256-GCM)</string>
+    <string name="settings_save_key">Save Key</string>
+    <string name="settings_model_selection">Model Selection</string>
+    <string name="settings_connection_test">Test Connection</string>
+    <string name="settings_learning_language">Learning Language</string>
+    <string name="settings_bilingual_terms">Bilingual Terminology</string>
+    <string name="settings_bilingual_terms_desc">Display native and English technical terms in tandem</string>
+    <string name="settings_high_contrast">High-Contrast Theme</string>
+    <string name="settings_high_contrast_desc">Enhance legibility with WCAG AAA contrast</string>
+    <string name="settings_reduced_motion">Reduced Motion</string>
+    <string name="settings_reduced_motion_desc">Minimize animations and dynamic transitions</string>
+    <string name="settings_sync_backup">Multi-Device Sync &amp; Backup</string>
+    <string name="settings_sync_provider">Sync Engine</string>
+    <string name="settings_sync_now">Sync Now</string>
+    <string name="settings_sync_auto">Automatic Periodic Backup</string>
+
+    <!-- Accessibility & TalkBack Semantics -->
+    <string name="cd_math_formula">Mathematical formulation: %1$s</string>
+    <string name="cd_diagram">Concept diagram: %1$s</string>
+    <string name="cd_chart">Data chart: %1$s</string>
+    <string name="cd_interactive_canvas">Interactive visualization canvas: %1$s</string>
+    <string name="cd_close">Close</string>
+    <string name="cd_open_drawer">Open navigation drawer</string>
+    <string name="cd_back">Navigate up</string>
 </resources>

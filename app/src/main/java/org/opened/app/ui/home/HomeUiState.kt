@@ -1,8 +1,10 @@
 package org.opened.app.ui.home
 
+import androidx.compose.runtime.Immutable
 import org.opened.app.core.database.model.SearchResultItem
 import org.opened.app.core.database.model.StudyPathWithModules
 
+@Immutable
 data class HomeUiState(
     val studyPaths: List<StudyPathWithModules> = emptyList(),
     val searchQuery: String = "",

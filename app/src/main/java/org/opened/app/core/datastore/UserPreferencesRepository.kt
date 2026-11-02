@@ -34,6 +34,17 @@ class UserPreferencesRepository @Inject constructor(
         val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
         val BACKUP_ACCOUNT_EMAIL = stringPreferencesKey("backup_account_email")
         val BACKUP_DRIVE_FILE_ID = stringPreferencesKey("backup_drive_file_id")
+
+        // Phase 8: Accessibility & Localization
+        val LEARNING_LANGUAGE = stringPreferencesKey("learning_language")
+        val BILINGUAL_TERMINOLOGY_ENABLED = booleanPreferencesKey("bilingual_terminology_enabled")
+        val HIGH_CONTRAST_ENABLED = booleanPreferencesKey("high_contrast_enabled")
+        val REDUCED_MOTION_ENABLED = booleanPreferencesKey("reduced_motion_enabled")
+
+        // Phase 9: Sync Provider
+        val SYNC_PROVIDER_ID = stringPreferencesKey("sync_provider_id")
+        val WEBDAV_SERVER_URL = stringPreferencesKey("webdav_server_url")
+        val WEBDAV_USERNAME = stringPreferencesKey("webdav_username")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data
@@ -54,7 +65,14 @@ class UserPreferencesRepository @Inject constructor(
                 autoBackupEnabled = preferences[PreferencesKeys.AUTO_BACKUP_ENABLED] ?: true,
                 lastBackupTimestamp = preferences[PreferencesKeys.LAST_BACKUP_TIMESTAMP] ?: 0L,
                 backupAccountEmail = preferences[PreferencesKeys.BACKUP_ACCOUNT_EMAIL],
-                backupDriveFileId = preferences[PreferencesKeys.BACKUP_DRIVE_FILE_ID]
+                backupDriveFileId = preferences[PreferencesKeys.BACKUP_DRIVE_FILE_ID],
+                learningLanguage = preferences[PreferencesKeys.LEARNING_LANGUAGE] ?: UserPreferences.DEFAULT_LEARNING_LANGUAGE,
+                bilingualTerminologyEnabled = preferences[PreferencesKeys.BILINGUAL_TERMINOLOGY_ENABLED] ?: false,
+                highContrastEnabled = preferences[PreferencesKeys.HIGH_CONTRAST_ENABLED] ?: false,
+                reducedMotionEnabled = preferences[PreferencesKeys.REDUCED_MOTION_ENABLED] ?: false,
+                syncProviderId = preferences[PreferencesKeys.SYNC_PROVIDER_ID] ?: UserPreferences.DEFAULT_SYNC_PROVIDER,
+                webDavServerUrl = preferences[PreferencesKeys.WEBDAV_SERVER_URL] ?: "",
+                webDavUsername = preferences[PreferencesKeys.WEBDAV_USERNAME] ?: ""
             )
         }
 
@@ -117,6 +135,43 @@ class UserPreferencesRepository @Inject constructor(
             } else {
                 preferences.remove(PreferencesKeys.BACKUP_DRIVE_FILE_ID)
             }
+        }
+    }
+
+    suspend fun setLearningLanguage(language: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LEARNING_LANGUAGE] = language
+        }
+    }
+
+    suspend fun setBilingualTerminologyEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.BILINGUAL_TERMINOLOGY_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setHighContrastEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.HIGH_CONTRAST_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setReducedMotionEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.REDUCED_MOTION_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setSyncProviderId(providerId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SYNC_PROVIDER_ID] = providerId
+        }
+    }
+
+    suspend fun setWebDavConfig(url: String, username: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.WEBDAV_SERVER_URL] = url
+            preferences[PreferencesKeys.WEBDAV_USERNAME] = username
         }
     }
 }

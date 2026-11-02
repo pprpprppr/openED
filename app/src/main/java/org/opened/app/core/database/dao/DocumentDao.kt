@@ -37,4 +37,17 @@ interface DocumentDao {
 
     @Query("DELETE FROM document_chunks WHERE documentId = :documentId")
     suspend fun deleteChunksForDocument(documentId: String)
+
+    // Export / Import
+    @Query("SELECT * FROM documents ORDER BY createdAt DESC")
+    suspend fun getAllDocumentsSync(): List<DocumentEntity>
+
+    @Query("SELECT * FROM document_chunks")
+    suspend fun getAllChunksSync(): List<DocumentChunkEntity>
+
+    @Query("DELETE FROM documents")
+    suspend fun clearAllDocuments()
+
+    @Query("DELETE FROM document_chunks")
+    suspend fun clearAllChunks()
 }

@@ -136,6 +136,23 @@ class DriveBackupManager @Inject constructor(
         }
     }
 
+    suspend fun downloadBackupZipBytes(): Result<ByteArray?> = withContext(Dispatchers.IO) {
+        runCatching {
+            val drive = getDriveService() ?: return@runCatching null
+            val files = drive.files().list()
+                .setQ("(name = '$backupFileName' or name = '$legacyBackupFileName') and trashed = false")
+                .setSpaces("drive")
+                .setFields("files(id, name, modifiedTime)")
+                .execute()
+                .files
+
+            if (files.isNullOrEmpty()) return@runCatching null
+            val fileId = files[0].id
+            val inputStream: InputStream = drive.files().get(fileId).executeMediaAsInputStream()
+            inputStream.use { it.readBytes() }
+        }
+    }
+
     suspend fun restoreBackupFromDrive(resolution: SyncConflictResolution): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val drive = getDriveService()

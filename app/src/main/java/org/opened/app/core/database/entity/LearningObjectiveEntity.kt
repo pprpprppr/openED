@@ -26,7 +26,8 @@ import kotlinx.serialization.Serializable
     indices = [
         Index(value = ["chapterId"]),
         Index(value = ["pathId"]),
-        Index(value = ["conceptKey"])
+        Index(value = ["conceptKey"]),
+        Index(value = ["status"])
     ]
 )
 data class LearningObjectiveEntity(

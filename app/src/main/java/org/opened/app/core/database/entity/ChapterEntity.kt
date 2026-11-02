@@ -28,7 +28,9 @@ import org.opened.app.core.database.model.ChapterStatus
         Index(value = ["moduleId"]),
         Index(value = ["pathId"]),
         Index(value = ["moduleId", "orderIndex"]),
-        Index(value = ["title"])
+        Index(value = ["title"]),
+        Index(value = ["status"]),
+        Index(value = ["updatedAt"])
     ]
 )
 data class ChapterEntity(

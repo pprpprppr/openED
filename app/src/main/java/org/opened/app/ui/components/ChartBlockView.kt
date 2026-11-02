@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.max
@@ -121,7 +123,14 @@ fun ChartBlockView(
                             .clip(RoundedCornerShape(8.dp))
                             .background(Color(0xFF0F172A))
                     ) {
-                        Canvas(modifier = Modifier.matchParentSize()) {
+                        Canvas(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .semantics {
+                                    contentDescription = "2D Vector Plot showing ${chartData.vectors.size} vectors: " +
+                                        chartData.vectors.joinToString(", ") { "${it.label} at (${it.x}, ${it.y})" }
+                                }
+                        ) {
                             if (chartData.vectors.isEmpty()) return@Canvas
                             val w = size.width
                             val h = size.height

@@ -18,6 +18,7 @@ import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
+import org.opened.app.core.database.dao.SyncTombstoneDao
 import org.opened.app.domain.repository.OpenEDRepository
 import org.opened.app.domain.repository.OpenEDRepositoryImpl
 import javax.inject.Singleton
@@ -34,7 +35,11 @@ object DatabaseModule {
             OpenEDDatabase::class.java,
             OpenEDDatabase.DATABASE_NAME
         )
-            .addMigrations(OpenEDDatabase.MIGRATION_1_2, OpenEDDatabase.MIGRATION_2_3)
+            .addMigrations(
+                OpenEDDatabase.MIGRATION_1_2,
+                OpenEDDatabase.MIGRATION_2_3,
+                OpenEDDatabase.MIGRATION_3_4
+            )
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -49,6 +54,7 @@ object DatabaseModule {
     @Provides fun provideMasteryQuizDao(database: OpenEDDatabase): MasteryQuizDao = database.masteryQuizDao()
     @Provides fun provideAdaptiveLearningDao(database: OpenEDDatabase): AdaptiveLearningDao = database.adaptiveLearningDao()
     @Provides fun provideDocumentDao(database: OpenEDDatabase): DocumentDao = database.documentDao()
+    @Provides fun provideSyncTombstoneDao(database: OpenEDDatabase): SyncTombstoneDao = database.syncTombstoneDao()
 
     @Provides
     @Singleton

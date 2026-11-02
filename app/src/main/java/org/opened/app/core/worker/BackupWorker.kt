@@ -6,25 +6,23 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import org.opened.app.core.drive.DriveBackupManager
+import org.opened.app.core.sync.SyncManager
+import org.opened.app.core.sync.SyncResult
 
 @HiltWorker
 class BackupWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
-    private val driveBackupManager: DriveBackupManager
+    private val syncManager: SyncManager
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
         return try {
-            val result = driveBackupManager.uploadBackupToDrive()
-            if (result.isSuccess) {
-                Result.success()
-            } else {
-                if (runAttemptCount < 3) {
-                    Result.retry()
-                } else {
-                    Result.failure()
+            val result = syncManager.synchronize()
+            when (result) {
+                is SyncResult.Success, is SyncResult.ConflictResolved -> Result.success()
+                is SyncResult.Failed -> {
+                    if (runAttemptCount < 3) Result.retry() else Result.failure()
                 }
             }
         } catch (e: Exception) {

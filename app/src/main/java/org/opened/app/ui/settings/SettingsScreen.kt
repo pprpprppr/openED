@@ -23,6 +23,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Contrast
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.ui.res.stringResource
+import org.opened.app.R
+import org.opened.app.core.datastore.UserPreferences
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
@@ -83,7 +93,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.AiProviderModels
-import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.drive.SyncConflictResolution
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -599,6 +608,232 @@ fun SettingsScreen(
                             ) {
                                 Text("Save Persona")
                             }
+                        }
+                    }
+                }
+            }
+
+            // Phase 8: Accessibility & Localization Card
+            item {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Global Accessibility & Localization",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text = "Tailor curriculum language, bilingual technical glossaries, and visual accessibility standards.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+
+                        // Learning Language Selection Chips
+                        Text(
+                            text = "Instruction & Teaching Language",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            UserPreferences.SUPPORTED_LANGUAGES.forEach { lang ->
+                                FilterChip(
+                                    selected = uiState.learningLanguage.equals(lang, ignoreCase = true),
+                                    onClick = { viewModel.setLearningLanguage(lang) },
+                                    label = { Text(lang) }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Bilingual Terminology
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Bilingual Technical Terms",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Show native translation and English domain terms in tandem.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = uiState.bilingualTerminologyEnabled,
+                                onCheckedChange = { viewModel.setBilingualTerminologyEnabled(it) }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // High Contrast Theme (WCAG AAA)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "High-Contrast Palette (WCAG AAA)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Maximizes color contrast ratios and border definitions.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = uiState.highContrastEnabled,
+                                onCheckedChange = { viewModel.setHighContrastEnabled(it) }
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Reduced Motion
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Reduced Motion",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Minimizes animations, dynamic transitions, and infinite loops.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = uiState.reducedMotionEnabled,
+                                onCheckedChange = { viewModel.setReducedMotionEnabled(it) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Phase 9: Multi-Device Sync Architecture Card
+            item {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Devices,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Multi-Device Sync Architecture",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text = "Keep your local Room database as the source of truth with record-level conflict resolution, revision ancestry, and deletion tombstones.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                        )
+
+                        Text(
+                            text = "Active Sync Provider",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = uiState.syncProviderId == "LOCAL",
+                                onClick = { viewModel.setSyncProviderId("LOCAL") },
+                                label = { Text("Local Archive") }
+                            )
+                            FilterChip(
+                                selected = uiState.syncProviderId == "GOOGLE_DRIVE",
+                                onClick = { viewModel.setSyncProviderId("GOOGLE_DRIVE") },
+                                label = { Text("Google Drive") }
+                            )
+                            FilterChip(
+                                selected = uiState.syncProviderId == "WEBDAV",
+                                onClick = { viewModel.setSyncProviderId("WEBDAV") },
+                                label = { Text("WebDAV") }
+                            )
+                        }
+
+                        if (uiState.syncProviderId == "WEBDAV") {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            OutlinedTextField(
+                                value = uiState.webDavServerUrl,
+                                onValueChange = { viewModel.setWebDavConfig(it, uiState.webDavUsername) },
+                                label = { Text("WebDAV / Nextcloud Server URL") },
+                                placeholder = { Text("https://nextcloud.example.com/remote.php/webdav") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            OutlinedTextField(
+                                value = uiState.webDavUsername,
+                                onValueChange = { viewModel.setWebDavConfig(uiState.webDavServerUrl, it) },
+                                label = { Text("WebDAV Username (optional)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { viewModel.syncWithActiveProvider() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !uiState.isBusy,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Synchronize Now")
                         }
                     }
                 }

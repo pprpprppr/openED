@@ -1,5 +1,6 @@
 package org.opened.app.ui.wizard
 
+import androidx.compose.runtime.Immutable
 import org.opened.app.core.ai.DiagnosticQuestion
 import org.opened.app.core.ai.SyllabusResponse
 
@@ -11,6 +12,7 @@ enum class WizardStep {
     REVIEW_SYLLABUS
 }
 
+@Immutable
 data class DiagnosticWizardUiState(
     val currentStep: WizardStep = WizardStep.ENTER_TOPIC,
     val topic: String = "",

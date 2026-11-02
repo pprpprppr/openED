@@ -58,4 +58,23 @@ interface AdaptiveLearningDao {
 
     @Query("UPDATE remedial_lessons SET isCompleted = 1 WHERE id = :id")
     suspend fun markRemedialLessonCompleted(id: String)
+
+    // Export / Import
+    @Query("SELECT * FROM learning_objectives")
+    suspend fun getAllObjectives(): List<LearningObjectiveEntity>
+
+    @Query("SELECT * FROM mistake_records")
+    suspend fun getAllMistakes(): List<MistakeRecordEntity>
+
+    @Query("SELECT * FROM remedial_lessons")
+    suspend fun getAllRemedials(): List<RemedialLessonEntity>
+
+    @Query("DELETE FROM learning_objectives")
+    suspend fun clearAllObjectives()
+
+    @Query("DELETE FROM mistake_records")
+    suspend fun clearAllMistakes()
+
+    @Query("DELETE FROM remedial_lessons")
+    suspend fun clearAllRemedials()
 }

@@ -26,7 +26,8 @@ import kotlinx.serialization.Serializable
     indices = [
         Index(value = ["chapterId"]),
         Index(value = ["pathId"]),
-        Index(value = ["nextReviewTimestamp"])
+        Index(value = ["nextReviewTimestamp"]),
+        Index(value = ["state"])
     ]
 )
 data class FlashcardEntity(

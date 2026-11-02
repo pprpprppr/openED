@@ -48,6 +48,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -251,6 +253,10 @@ fun DiagramBlockView(
                         modifier = Modifier
                             .matchParentSize()
                             .clipToBounds()
+                            .semantics {
+                                contentDescription = "Concept diagram showing ${nodes.size} components: " +
+                                    nodes.joinToString(", ") { it.label }
+                            }
                     ) {
                         if (nodes.isEmpty()) return@Canvas
 

@@ -1,9 +1,11 @@
 package org.opened.app.ui.workspace
 
+import androidx.compose.runtime.Immutable
 import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.model.ChapterWithDetails
 import org.opened.app.core.database.model.StudyPathWithModules
 
+@Immutable
 data class CourseWorkspaceUiState(
     val pathWithModules: StudyPathWithModules? = null,
     val activeChapterId: String? = null,

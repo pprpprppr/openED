@@ -25,6 +25,8 @@ import org.opened.app.core.drive.SyncConflictResolution
 import org.opened.app.core.export.ExportManager
 import org.opened.app.core.security.SecureApiKeyStorage
 import org.opened.app.core.worker.BackupScheduler
+import org.opened.app.core.sync.SyncManager
+import org.opened.app.core.sync.SyncResult
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -38,7 +40,8 @@ class SettingsViewModel @Inject constructor(
     private val driveBackupManager: DriveBackupManager,
     private val backupScheduler: BackupScheduler,
     private val exportManager: ExportManager,
-    private val multiAiClient: MultiAiClient
+    private val multiAiClient: MultiAiClient,
+    private val syncManager: SyncManager
 ) : ViewModel() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -103,7 +106,14 @@ class SettingsViewModel @Inject constructor(
                             systemInstructions = prefs.customSystemInstructions,
                             autoBackupEnabled = prefs.autoBackupEnabled,
                             lastBackupTimestamp = prefs.lastBackupTimestamp,
-                            googleAccountEmail = prefs.backupAccountEmail
+                            googleAccountEmail = prefs.backupAccountEmail,
+                            learningLanguage = prefs.learningLanguage,
+                            bilingualTerminologyEnabled = prefs.bilingualTerminologyEnabled,
+                            highContrastEnabled = prefs.highContrastEnabled,
+                            reducedMotionEnabled = prefs.reducedMotionEnabled,
+                            syncProviderId = prefs.syncProviderId,
+                            webDavServerUrl = prefs.webDavServerUrl,
+                            webDavUsername = prefs.webDavUsername
                         )
                     }
                 }
@@ -406,6 +416,40 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun syncWithActiveProvider() {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            _uiState.update { it.copy(isBusy = true, errorMessage = null, statusMessage = null) }
+            val result = syncManager.synchronize()
+            when (result) {
+                is SyncResult.Success -> {
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            statusMessage = result.message,
+                            lastBackupTimestamp = result.timestamp
+                        )
+                    }
+                }
+                is SyncResult.ConflictResolved -> {
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            statusMessage = result.message
+                        )
+                    }
+                }
+                is SyncResult.Failed -> {
+                    _uiState.update {
+                        it.copy(
+                            isBusy = false,
+                            errorMessage = result.reason
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun backupToGoogleDrive() {
         viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isBusy = true, errorMessage = null, statusMessage = null) }
@@ -515,6 +559,48 @@ class SettingsViewModel @Inject constructor(
     suspend fun importZipBytes(bytes: ByteArray, resolution: SyncConflictResolution) = withContext(Dispatchers.IO) {
         driveBackupManager.restoreFromZipBytes(bytes, resolution)
         _uiState.update { it.copy(statusMessage = "Imported backup successfully.") }
+    }
+
+    fun setLearningLanguage(language: String) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setLearningLanguage(language)
+            _uiState.update { it.copy(learningLanguage = language) }
+        }
+    }
+
+    fun setBilingualTerminologyEnabled(enabled: Boolean) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setBilingualTerminologyEnabled(enabled)
+            _uiState.update { it.copy(bilingualTerminologyEnabled = enabled) }
+        }
+    }
+
+    fun setHighContrastEnabled(enabled: Boolean) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setHighContrastEnabled(enabled)
+            _uiState.update { it.copy(highContrastEnabled = enabled) }
+        }
+    }
+
+    fun setReducedMotionEnabled(enabled: Boolean) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setReducedMotionEnabled(enabled)
+            _uiState.update { it.copy(reducedMotionEnabled = enabled) }
+        }
+    }
+
+    fun setSyncProviderId(providerId: String) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setSyncProviderId(providerId)
+            _uiState.update { it.copy(syncProviderId = providerId) }
+        }
+    }
+
+    fun setWebDavConfig(url: String, username: String) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setWebDavConfig(url, username)
+            _uiState.update { it.copy(webDavServerUrl = url, webDavUsername = username) }
+        }
     }
 
     fun clearStatus() {

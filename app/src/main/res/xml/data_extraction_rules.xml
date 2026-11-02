@@ -5,14 +5,14 @@
         <exclude domain="sharedpref" path="opened_keystore_vault.xml" />
         <exclude domain="sharedpref" path="opened_secure_vault.xml" />
         <exclude domain="sharedpref" path="opened_secure_vault_fallback.xml" />
-        <!-- Exclude temporary exports and cache -->
-        <exclude domain="cache" path="." />
+        <!-- Exclude temporary exports and sync bundles -->
+        <exclude domain="file" path="exports" />
     </cloud-backup>
     <device-transfer>
         <!-- Hardware-backed Keystore keys are non-exportable and cannot be decrypted on a new device -->
         <exclude domain="sharedpref" path="opened_keystore_vault.xml" />
         <exclude domain="sharedpref" path="opened_secure_vault.xml" />
         <exclude domain="sharedpref" path="opened_secure_vault_fallback.xml" />
-        <exclude domain="cache" path="." />
+        <exclude domain="file" path="exports" />
     </device-transfer>
 </data-extraction-rules>

@@ -15,6 +15,7 @@ import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
+import org.opened.app.core.database.dao.SyncTombstoneDao
 import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterLinkCrossRef
 import org.opened.app.core.database.entity.ChapterQaEntity
@@ -28,6 +29,7 @@ import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
+import org.opened.app.core.database.entity.SyncTombstoneEntity
 
 @Database(
     entities = [
@@ -43,9 +45,10 @@ import org.opened.app.core.database.entity.StudyPathEntity
         MistakeRecordEntity::class,
         RemedialLessonEntity::class,
         DocumentEntity::class,
-        DocumentChunkEntity::class
+        DocumentChunkEntity::class,
+        SyncTombstoneEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -60,6 +63,7 @@ abstract class OpenEDDatabase : RoomDatabase() {
     abstract fun masteryQuizDao(): MasteryQuizDao
     abstract fun adaptiveLearningDao(): AdaptiveLearningDao
     abstract fun documentDao(): DocumentDao
+    abstract fun syncTombstoneDao(): SyncTombstoneDao
 
     companion object {
         const val DATABASE_NAME = "opened_database.db"
@@ -217,6 +221,31 @@ abstract class OpenEDDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_document_chunks_documentId` ON `document_chunks` (`documentId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_document_chunks_documentId_chunkIndex` ON `document_chunks` (`documentId`, `chunkIndex`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_document_chunks_pageNumber` ON `document_chunks` (`pageNumber`)")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Create sync_tombstones table for multi-device sync conflict resolution
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `sync_tombstones` (
+                        `id` TEXT NOT NULL,
+                        `entityType` TEXT NOT NULL,
+                        `entityId` TEXT NOT NULL,
+                        `deletedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )"""
+                )
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_tombstones_entityType_entityId` ON `sync_tombstones` (`entityType`, `entityId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_tombstones_deletedAt` ON `sync_tombstones` (`deletedAt`)")
+
+                // 2. Query indexing for Phase 10 performance
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_chapters_status` ON `chapters` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_chapters_updatedAt` ON `chapters` (`updatedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_study_paths_updatedAt` ON `study_paths` (`updatedAt`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_flashcards_state` ON `flashcards` (`state`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_learning_objectives_status` ON `learning_objectives` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_remedial_lessons_isCompleted` ON `remedial_lessons` (`isCompleted`)")
             }
         }
     }

@@ -15,6 +15,7 @@ import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
+import org.opened.app.core.database.dao.SyncTombstoneDao
 import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterLinkCrossRef
 import org.opened.app.core.database.entity.ChapterQaEntity
@@ -28,6 +29,7 @@ import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
+import org.opened.app.core.database.entity.SyncTombstoneEntity
 import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.database.model.ChapterWithDetails
@@ -51,7 +53,8 @@ class OpenEDRepositoryImpl @Inject constructor(
     private val flashcardDao: FlashcardDao,
     private val masteryQuizDao: MasteryQuizDao,
     private val adaptiveLearningDao: AdaptiveLearningDao,
-    private val documentDao: DocumentDao
+    private val documentDao: DocumentDao,
+    private val syncTombstoneDao: SyncTombstoneDao
 ) : OpenEDRepository {
 
     override fun getAllStudyPathsFlow(): Flow<List<StudyPathWithModules>> {
@@ -100,7 +103,16 @@ class OpenEDRepositoryImpl @Inject constructor(
 
     override suspend fun deleteStudyPath(pathId: String) {
         withContext(Dispatchers.IO) {
-            studyPathDao.deleteById(pathId)
+            database.withTransaction {
+                studyPathDao.deleteById(pathId)
+                syncTombstoneDao.insertTombstone(
+                    SyncTombstoneEntity(
+                        entityType = "STUDY_PATH",
+                        entityId = pathId,
+                        deletedAt = System.currentTimeMillis()
+                    )
+                )
+            }
         }
     }
 
@@ -408,7 +420,7 @@ class OpenEDRepositoryImpl @Inject constructor(
     override suspend fun exportDatabase(): BackupBundle {
         return withContext(Dispatchers.IO) {
             BackupBundle(
-                version = 1,
+                version = 2,
                 exportedAt = System.currentTimeMillis(),
                 studyPaths = studyPathDao.getAllForExport(),
                 modules = moduleDao.getAllForExport(),
@@ -417,7 +429,13 @@ class OpenEDRepositoryImpl @Inject constructor(
                 links = linkDao.getAllForExport(),
                 qas = qaDao.getAllForExport(),
                 flashcards = flashcardDao.getAllFlashcards(),
-                masteryQuizzes = masteryQuizDao.getAllQuizzes()
+                masteryQuizzes = masteryQuizDao.getAllQuizzes(),
+                learningObjectives = adaptiveLearningDao.getAllObjectives(),
+                mistakes = adaptiveLearningDao.getAllMistakes(),
+                remedials = adaptiveLearningDao.getAllRemedials(),
+                documents = documentDao.getAllDocumentsSync(),
+                documentChunks = documentDao.getAllChunksSync(),
+                tombstones = syncTombstoneDao.getAllTombstones()
             )
         }
     }
@@ -434,18 +452,112 @@ class OpenEDRepositoryImpl @Inject constructor(
                     chapterDao.clearAll()
                     moduleDao.clearAll()
                     studyPathDao.clearAll()
-                }
-                studyPathDao.insertAll(bundle.studyPaths)
-                moduleDao.insertAll(bundle.modules)
-                chapterDao.insertAll(bundle.chapters)
-                revisionDao.insertAll(bundle.revisions)
-                linkDao.insertLinks(bundle.links)
-                qaDao.insertAll(bundle.qas)
-                if (bundle.flashcards.isNotEmpty()) {
-                    flashcardDao.insertAll(bundle.flashcards)
-                }
-                if (bundle.masteryQuizzes.isNotEmpty()) {
-                    masteryQuizDao.insertAll(bundle.masteryQuizzes)
+                    adaptiveLearningDao.clearAllObjectives()
+                    adaptiveLearningDao.clearAllMistakes()
+                    adaptiveLearningDao.clearAllRemedials()
+                    documentDao.clearAllChunks()
+                    documentDao.clearAllDocuments()
+
+                    // Insert fresh state
+                    studyPathDao.insertAll(bundle.studyPaths)
+                    moduleDao.insertAll(bundle.modules)
+                    chapterDao.insertAll(bundle.chapters)
+                    revisionDao.insertAll(bundle.revisions)
+                    linkDao.insertLinks(bundle.links)
+                    qaDao.insertAll(bundle.qas)
+                    if (bundle.flashcards.isNotEmpty()) flashcardDao.insertAll(bundle.flashcards)
+                    if (bundle.masteryQuizzes.isNotEmpty()) masteryQuizDao.insertAll(bundle.masteryQuizzes)
+                    if (bundle.learningObjectives.isNotEmpty()) adaptiveLearningDao.insertObjectives(bundle.learningObjectives)
+                    if (bundle.mistakes.isNotEmpty()) bundle.mistakes.forEach { adaptiveLearningDao.insertMistake(it) }
+                    if (bundle.remedials.isNotEmpty()) bundle.remedials.forEach { adaptiveLearningDao.insertRemedialLesson(it) }
+                    if (bundle.documents.isNotEmpty()) bundle.documents.forEach { documentDao.insertDocument(it) }
+                    if (bundle.documentChunks.isNotEmpty()) documentDao.insertChunks(bundle.documentChunks)
+                    if (bundle.tombstones.isNotEmpty()) syncTombstoneDao.insertTombstones(bundle.tombstones)
+                } else {
+                    // Record-level merge with conflict resolution & tombstone preservation
+                    // 1. Merge incoming tombstones
+                    if (bundle.tombstones.isNotEmpty()) {
+                        syncTombstoneDao.insertTombstones(bundle.tombstones)
+                    }
+                    val allTombstones = syncTombstoneDao.getAllTombstones().associateBy { "${it.entityType}:${it.entityId}" }
+
+                    // 2. Filter deleted study paths
+                    val validStudyPaths = bundle.studyPaths.filter { path ->
+                        val tombstone = allTombstones["STUDY_PATH:${path.id}"]
+                        tombstone == null || path.updatedAt > tombstone.deletedAt
+                    }
+                    studyPathDao.insertAll(validStudyPaths)
+                    moduleDao.insertAll(bundle.modules)
+
+                    // 3. Record-level chapter merge preserving user revision ancestry ("Never silently overwrite newer user content")
+                    for (remoteChapter in bundle.chapters) {
+                        val tombstone = allTombstones["CHAPTER:${remoteChapter.id}"]
+                        if (tombstone != null && remoteChapter.updatedAt <= tombstone.deletedAt) continue
+
+                        val localChapter = chapterDao.getById(remoteChapter.id)
+                        if (localChapter == null) {
+                            chapterDao.insert(remoteChapter)
+                        } else if (localChapter.markdownContent != remoteChapter.markdownContent) {
+                            if (remoteChapter.updatedAt > localChapter.updatedAt) {
+                                // Remote is newer: archive local content to revisions before applying remote update
+                                revisionDao.insert(
+                                    ChapterRevisionEntity(
+                                        id = UUID.randomUUID().toString(),
+                                        chapterId = localChapter.id,
+                                        previousMarkdown = localChapter.markdownContent,
+                                        changeReason = "Pre-sync merge local backup snapshot",
+                                        timestamp = System.currentTimeMillis()
+                                    )
+                                )
+                                chapterDao.update(remoteChapter)
+                            } else {
+                                // Local is newer: preserve local content, archive incoming remote to revisions
+                                revisionDao.insert(
+                                    ChapterRevisionEntity(
+                                        id = UUID.randomUUID().toString(),
+                                        chapterId = localChapter.id,
+                                        previousMarkdown = remoteChapter.markdownContent,
+                                        changeReason = "Remote sync conflict revision backup",
+                                        timestamp = remoteChapter.updatedAt
+                                    )
+                                )
+                            }
+                        } else {
+                            chapterDao.update(remoteChapter)
+                        }
+                    }
+
+                    // 4. Merge revisions, links, QAs
+                    revisionDao.insertAll(bundle.revisions)
+                    linkDao.insertLinks(bundle.links)
+                    qaDao.insertAll(bundle.qas)
+
+                    // 5. Merge flashcards (prefer higher repetitions / stability)
+                    for (remoteCard in bundle.flashcards) {
+                        val localCard = flashcardDao.getById(remoteCard.id)
+                        if (localCard == null) {
+                            flashcardDao.insert(remoteCard)
+                        } else if (remoteCard.repetitions > localCard.repetitions || remoteCard.lastReviewTimestamp > localCard.lastReviewTimestamp) {
+                            flashcardDao.update(remoteCard)
+                        }
+                    }
+
+                    // 6. Merge quizzes & adaptive mastery
+                    if (bundle.masteryQuizzes.isNotEmpty()) masteryQuizDao.insertAll(bundle.masteryQuizzes)
+                    if (bundle.learningObjectives.isNotEmpty()) adaptiveLearningDao.insertObjectives(bundle.learningObjectives)
+                    if (bundle.mistakes.isNotEmpty()) bundle.mistakes.forEach { adaptiveLearningDao.insertMistake(it) }
+                    if (bundle.remedials.isNotEmpty()) bundle.remedials.forEach { adaptiveLearningDao.insertRemedialLesson(it) }
+
+                    // 7. Merge documents & chunks
+                    for (remoteDoc in bundle.documents) {
+                        val tombstone = allTombstones["DOCUMENT:${remoteDoc.id}"]
+                        if (tombstone == null || remoteDoc.createdAt > tombstone.deletedAt) {
+                            documentDao.insertDocument(remoteDoc)
+                        }
+                    }
+                    if (bundle.documentChunks.isNotEmpty()) {
+                        documentDao.insertChunks(bundle.documentChunks)
+                    }
                 }
             }
         }
@@ -565,7 +677,32 @@ class OpenEDRepositoryImpl @Inject constructor(
             database.withTransaction {
                 documentDao.deleteChunksForDocument(documentId)
                 documentDao.deleteDocument(documentId)
+                syncTombstoneDao.insertTombstone(
+                    SyncTombstoneEntity(
+                        entityType = "DOCUMENT",
+                        entityId = documentId,
+                        deletedAt = System.currentTimeMillis()
+                    )
+                )
             }
+        }
+    }
+
+    override suspend fun getAllTombstones(): List<SyncTombstoneEntity> {
+        return withContext(Dispatchers.IO) {
+            syncTombstoneDao.getAllTombstones()
+        }
+    }
+
+    override suspend fun recordTombstone(entityType: String, entityId: String) {
+        withContext(Dispatchers.IO) {
+            syncTombstoneDao.insertTombstone(
+                SyncTombstoneEntity(
+                    entityType = entityType,
+                    entityId = entityId,
+                    deletedAt = System.currentTimeMillis()
+                )
+            )
         }
     }
 }
