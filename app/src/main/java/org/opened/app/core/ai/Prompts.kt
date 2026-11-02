@@ -129,6 +129,22 @@ PEDAGOGY LEVEL GUIDANCE (INTERMEDIATE):
 """
         }
 
+        val sizeSpec = AcademicDomainClassifier.determineCurriculumSize(topic, userLevel)
+        val sizingGuidance = if (sizeSpec.isNarrowTopic) {
+            """
+1. TARGETED & GRANULAR: Design a focused, highly relevant curriculum containing:
+   - Exactly ${sizeSpec.minModules} to ${sizeSpec.maxModules} Modules ordered logically.
+   - Exactly ${sizeSpec.minChaptersPerModule} to ${sizeSpec.maxChaptersPerModule} Chapters per Module (totaling ${sizeSpec.totalChaptersRange.first} to ${sizeSpec.totalChaptersRange.last} focused chapters).
+   - Never pad with unnecessary filler concepts.
+"""
+        } else {
+            """
+1. COMPREHENSIVE & GRANULAR: Design an extensive, comprehensive, granular curriculum containing:
+   - Exactly 6 to 8 Modules ordered chronologically from absolute fundamentals to practical projects.
+   - Exactly 4 to 6 Chapters per Module (totaling 24 to 40 bite-sized, focused chapters).
+"""
+        }
+
         return """
 You are openED's Master Curriculum Architect for ${domain.displayName}.
 The user wants to study: "$topic"
@@ -143,9 +159,7 @@ $domainProgressionGuidance
 $levelGuidance
 
 MANDATORY CURRICULUM ARCHITECTURE RULES:
-1. COMPREHENSIVE & GRANULAR: Design an extensive, comprehensive, granular curriculum containing:
-   - Exactly 6 to 8 Modules ordered chronologically from absolute fundamentals to practical projects.
-   - Exactly 4 to 6 Chapters per Module (totaling 24 to 40 bite-sized, focused chapters).
+$sizingGuidance
 2. SINGLE-CONCEPT CHAPTERS: Each chapter must cover ONE clear, digestible, focused topic rather than cramming an entire "Master Class" into one chapter.
 3. LOGICAL PROGRESSION: Follow the discipline curriculum architecture outlined above.
 
@@ -179,6 +193,21 @@ Respond ONLY with a valid JSON object matching this schema:
   ]
 }
 Do not wrap in markdown quotes or code fences. Return raw JSON only.
+""".trimIndent()
+    }
+
+    fun formatSourceEvidenceInstruction(): String {
+        return """
+SOURCE INTELLIGENCE & EVIDENCE GROUNDING:
+At the very end of your lesson, include a dedicated sources and evidence section:
+## 📚 Sources & Evidence Quality
+Provide 2 to 4 authentic, seminal academic or historical references, landmark textbooks, statutory codes, or seminal research papers that ground this lesson.
+For EACH source, annotate its empirical evidence quality tag:
+- Use `[Quality: Established Fact]` for empirically verified consensus facts, primary laws, or core equations.
+- Use `[Quality: Hypothesis]` for models, working scientific hypotheses, or active frontiers.
+- Use `[Quality: Interpretation]` for historiographical, economic, or philosophical schools of thought with competing views.
+- Format each item cleanly: `- [1] Author(s) (Year). Title. Publisher / Venue. [Quality: Established Fact] - Section / Chapter`
+Do NOT fabricate non-existent citations; ground in established canonical references.
 """.trimIndent()
     }
 
@@ -417,6 +446,7 @@ Your lesson MUST contain ALL 4 of the following structured Markdown sections in 
         domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val crossRefInstruction = formatWikiLinkingInstruction(otherChapterTitles)
+        val sourceInstruction = formatSourceEvidenceInstruction()
 
         if (domain != AcademicDomain.SOFTWARE_AND_CS) {
             val blueprint = buildDomainPedagogicalBlueprint(domain, "BEGINNER")
@@ -434,6 +464,8 @@ Key Concepts: ${keyConcepts.joinToString(", ")}
 $crossRefInstruction
 
 $blueprint
+
+$sourceInstruction
 
 Stream the full lesson content directly in Markdown.
 """.trimIndent()
@@ -493,6 +525,8 @@ PEDAGOGY PROFILE: BEGINNER (ZERO-ASSUMPTIONS & PRACTICAL MASTERY)
    - Provide 2 bite-sized, practical mini-exercises that the learner can solve right now.
    - Include step-by-step solutions or hints inside expandable/clear format to reinforce immediate mastery.
 
+$sourceInstruction
+
 Stream the full lesson content directly in Markdown.
 """.trimIndent()
     }
@@ -508,6 +542,7 @@ Stream the full lesson content directly in Markdown.
         domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val crossRefInstruction = formatWikiLinkingInstruction(otherChapterTitles)
+        val sourceInstruction = formatSourceEvidenceInstruction()
 
         if (domain != AcademicDomain.SOFTWARE_AND_CS) {
             val blueprint = buildDomainPedagogicalBlueprint(domain, "INTERMEDIATE")
@@ -525,6 +560,8 @@ Key Concepts: ${keyConcepts.joinToString(", ")}
 $crossRefInstruction
 
 $blueprint
+
+$sourceInstruction
 
 Stream the full lesson content directly in Markdown.
 """.trimIndent()
@@ -555,6 +592,8 @@ PEDAGOGY PROFILE: INTERMEDIATE (IDIOMATIC PATTERNS & ARCHITECTURE)
    > [!TIP] Production tip or idiomatic pattern
    > [!WARNING] Edge case or subtle bug
 
+$sourceInstruction
+
 Stream the full lesson content directly in Markdown.
 """.trimIndent()
     }
@@ -570,6 +609,7 @@ Stream the full lesson content directly in Markdown.
         domain: AcademicDomain = AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     ): String {
         val crossRefInstruction = formatWikiLinkingInstruction(otherChapterTitles)
+        val sourceInstruction = formatSourceEvidenceInstruction()
 
         if (domain != AcademicDomain.SOFTWARE_AND_CS) {
             val blueprint = buildDomainPedagogicalBlueprint(domain, "ADVANCED")
@@ -587,6 +627,8 @@ Key Concepts: ${keyConcepts.joinToString(", ")}
 $crossRefInstruction
 
 $blueprint
+
+$sourceInstruction
 
 Stream the full lesson content directly in Markdown.
 """.trimIndent()
@@ -616,6 +658,8 @@ PEDAGOGY PROFILE: ADVANCED (PRODUCTION ARCHITECTURE & RIGOR)
    > [!NOTE] Deep systems architectural detail
    > [!IMPORTANT] Invariant or mathematical theorem
    > [!WARNING] Latency spikes, memory leaks, or race conditions
+
+$sourceInstruction
 
 Stream the full lesson content directly in Markdown.
 """.trimIndent()

@@ -315,27 +315,44 @@ fun SettingsScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            if (uiState.hasApiKey) {
-                                OutlinedButton(
-                                    onClick = { viewModel.clearApiKey() },
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.error
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Clear Key")
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                            }
-
-                            Button(
-                                onClick = { viewModel.saveApiKey() },
-                                enabled = uiState.apiKey.isNotBlank(),
+                            OutlinedButton(
+                                onClick = { viewModel.testConnection() },
+                                enabled = !uiState.isTestingConnection,
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("Save Key Securely")
+                                if (uiState.isTestingConnection) {
+                                    CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Testing...", fontSize = 11.sp)
+                                } else {
+                                    Text("⚡ Test Connection", fontSize = 11.sp)
+                                }
+                            }
+
+                            Row {
+                                if (uiState.hasApiKey) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.clearApiKey() },
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = MaterialTheme.colorScheme.error
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Clear Key")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                Button(
+                                    onClick = { viewModel.saveApiKey() },
+                                    enabled = uiState.apiKey.isNotBlank(),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Save Key")
+                                }
                             }
                         }
                     }
@@ -387,10 +404,39 @@ fun SettingsScreen(
                         }
 
                         Text(
+                            text = "Model Selection Strategy:",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            org.opened.app.core.ai.provider.ModelSelectionMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = uiState.selectionMode == mode,
+                                    onClick = { viewModel.selectSelectionMode(mode) },
+                                    label = { Text(mode.displayName, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = uiState.selectionMode.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                        )
+
+                        Text(
                             text = "Selected for ${uiState.selectedProvider.displayName}. Tap a preset, sync live models from the endpoint, or enter a custom identifier.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 6.dp, bottom = 12.dp)
+                            modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                         )
 
                         // Model Radio List

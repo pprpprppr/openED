@@ -6,6 +6,7 @@ import org.opened.app.core.ai.AiProviderModels
 data class UserPreferences(
     val selectedProvider: String = AiProvider.GEMINI.id,
     val selectedModel: String = DEFAULT_MODEL,
+    val selectionMode: String = "auto",
     val customBaseUrl: String = DEFAULT_CUSTOM_BASE_URL,
     val customSystemInstructions: String = DEFAULT_SYSTEM_INSTRUCTIONS,
     val autoBackupEnabled: Boolean = true,

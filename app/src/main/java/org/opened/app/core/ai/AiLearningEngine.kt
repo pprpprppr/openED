@@ -92,11 +92,12 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
     suspend fun generateSyllabus(
         topic: String,
         userLevel: String,
-        answers: Map<String, List<String>>
+        answers: Map<String, List<String>>,
+        domainOverride: AcademicDomain? = null
     ): Result<SyllabusResponse> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
-            val domain = AcademicDomainClassifier.detectAcademicDomain(topic)
+            val domain = domainOverride ?: AcademicDomainClassifier.detectAcademicDomain(topic)
             val summaryBuilder = StringBuilder()
             summaryBuilder.append("User Self-Assessed Level: $userLevel\n")
             for ((q, ansList) in answers) {
@@ -108,7 +109,8 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
-                isJson = true
+                isJson = true,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.CURRICULUM_SYNTHESIS
             )
             val cleanedJson = cleanJsonOutput(rawOutput)
             val parsed = json.decodeFromString(SyllabusResponse.serializer(), cleanedJson)
@@ -181,7 +183,8 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
-                isJson = true
+                isJson = true,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.CURRICULUM_SYNTHESIS
             )
             val cleanedJson = cleanJsonOutput(rawOutput)
             val response = json.decodeFromString(ExpandCourseResponse.serializer(), cleanedJson)
@@ -220,7 +223,11 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
         }
     }
 
-    fun streamChapterContent(chapterId: String, userLevelOverride: String? = null): Flow<String> = flow {
+    fun streamChapterContent(
+        chapterId: String,
+        userLevelOverride: String? = null,
+        domainOverride: AcademicDomain? = null
+    ): Flow<String> = flow {
         val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found: $chapterId" }
         val pathWithModules = requireNotNull(repository.getStudyPathWithModules(chapter.pathId)) { "Path not found" }
         val currentModule = pathWithModules.modules.find { it.module.id == chapter.moduleId }?.module
@@ -239,7 +246,7 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
 
         repository.updateChapterStatus(chapterId, ChapterStatus.GENERATING)
 
-        val domain = AcademicDomainClassifier.detectAcademicDomain(
+        val domain = domainOverride ?: AcademicDomainClassifier.detectAcademicDomain(
             topic = pathWithModules.studyPath.topic,
             courseTitle = pathWithModules.studyPath.title,
             chapterTitle = chapter.title
@@ -263,14 +270,19 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
         try {
             multiAiClient.streamGenerateContent(
                 systemInstruction = effectiveSystemInstruction,
-                prompt = prompt
+                prompt = prompt,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.CHAPTER_LESSON
             ).collect { chunk ->
                 accumulatedText.append(chunk)
                 emit(chunk)
             }
 
-            val finalMarkdown = accumulatedText.toString().trim()
+            var finalMarkdown = accumulatedText.toString().trim()
             if (finalMarkdown.isNotEmpty()) {
+                if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+                    finalMarkdown = sanitizeNonCsCodeBlocks(finalMarkdown)
+                }
+                finalMarkdown = org.opened.app.core.source.EducationalDisclaimerManager.injectDisclaimerIfNeeded(finalMarkdown, domain)
                 repository.updateChapterContent(chapterId, finalMarkdown, ChapterStatus.COMPLETED)
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -285,17 +297,33 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
         }
     }
 
+    private fun sanitizeNonCsCodeBlocks(markdown: String): String {
+        val codeBlockRegex = "```(python|javascript|typescript|c|cpp|java|rust|go|csharp)[\\s\\S]*?```".toRegex(RegexOption.IGNORE_CASE)
+        if (!codeBlockRegex.containsMatchIn(markdown)) return markdown
+
+        return codeBlockRegex.replace(markdown) { matchResult ->
+            val inner = matchResult.value
+                .lines()
+                .drop(1)
+                .dropLast(1)
+                .joinToString("\n")
+                .trim()
+            "> [!NOTE] Conceptual Model\n> ${inner.replace("\n", "\n> ")}"
+        }
+    }
+
     suspend fun refineChapterContent(
         chapterId: String,
         selectedText: String,
         action: RefineAction,
         customInstruction: String? = null,
-        userLevelOverride: String? = null
+        userLevelOverride: String? = null,
+        domainOverride: AcademicDomain? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
             val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
-            val domain = AcademicDomainClassifier.detectAcademicDomain(
+            val domain = domainOverride ?: AcademicDomainClassifier.detectAcademicDomain(
                 topic = studyPath?.topic.orEmpty(),
                 courseTitle = studyPath?.title.orEmpty(),
                 chapterTitle = chapter.title
@@ -313,11 +341,16 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
                 domain = domain
             )
 
-            val replacement = multiAiClient.generateContent(
+            var replacement = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
-                isJson = false
+                isJson = false,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.REFINEMENT_QA
             ).trim()
+
+            if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+                replacement = sanitizeNonCsCodeBlocks(replacement)
+            }
 
             // Save previous version to history
             val reasonLabel = when (action) {
@@ -364,7 +397,8 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             val answer = multiAiClient.generateContent(
                 systemInstruction = prefs.customSystemInstructions,
                 prompt = prompt,
-                isJson = false
+                isJson = false,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.REFINEMENT_QA
             ).trim()
             repository.addChapterQa(chapterId, question, answer)
         }
@@ -414,7 +448,8 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             val raw = multiAiClient.generateContent(
                 systemInstruction = prefs.customSystemInstructions,
                 prompt = prompt,
-                isJson = true
+                isJson = true,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
             )
             val cleaned = cleanJsonOutput(raw)
             val response = json.decodeFromString(FlashcardGenerationResponse.serializer(), cleaned)
@@ -477,7 +512,8 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             val raw = multiAiClient.generateContent(
                 systemInstruction = prefs.customSystemInstructions,
                 prompt = prompt,
-                isJson = true
+                isJson = true,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
             )
             val cleaned = cleanJsonOutput(raw)
             json.decodeFromString(AdaptiveQuizResponse.serializer(), cleaned)
@@ -500,7 +536,8 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
             val raw = multiAiClient.generateContent(
                 systemInstruction = prefs.customSystemInstructions,
                 prompt = prompt,
-                isJson = true
+                isJson = true,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
             )
             val cleaned = cleanJsonOutput(raw)
             json.decodeFromString(FeynmanEvaluationResponse.serializer(), cleaned)

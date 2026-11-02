@@ -27,6 +27,7 @@ class UserPreferencesRepository @Inject constructor(
     private object PreferencesKeys {
         val SELECTED_PROVIDER = stringPreferencesKey("selected_provider")
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
+        val SELECTION_MODE = stringPreferencesKey("selection_mode")
         val CUSTOM_BASE_URL = stringPreferencesKey("custom_base_url")
         val SYSTEM_INSTRUCTIONS = stringPreferencesKey("custom_system_instructions")
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
@@ -47,6 +48,7 @@ class UserPreferencesRepository @Inject constructor(
             UserPreferences(
                 selectedProvider = preferences[PreferencesKeys.SELECTED_PROVIDER] ?: AiProvider.GEMINI.id,
                 selectedModel = preferences[PreferencesKeys.SELECTED_MODEL] ?: UserPreferences.DEFAULT_MODEL,
+                selectionMode = preferences[PreferencesKeys.SELECTION_MODE] ?: "auto",
                 customBaseUrl = preferences[PreferencesKeys.CUSTOM_BASE_URL] ?: UserPreferences.DEFAULT_CUSTOM_BASE_URL,
                 customSystemInstructions = preferences[PreferencesKeys.SYSTEM_INSTRUCTIONS] ?: UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS,
                 autoBackupEnabled = preferences[PreferencesKeys.AUTO_BACKUP_ENABLED] ?: true,
@@ -65,6 +67,12 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setSelectedModel(model: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SELECTED_MODEL] = model
+        }
+    }
+
+    suspend fun setSelectionMode(mode: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SELECTION_MODE] = mode
         }
     }
 

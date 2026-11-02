@@ -89,6 +89,8 @@ class SettingsViewModel @Inject constructor(
                     }
                     val presets = AiProviderModels.getModelsForProvider(provider)
 
+                    val selectionMode = org.opened.app.core.ai.provider.ModelSelectionMode.fromId(prefs.selectionMode)
+
                     _uiState.update {
                         it.copy(
                             selectedProvider = provider,
@@ -96,6 +98,7 @@ class SettingsViewModel @Inject constructor(
                             hasApiKey = hasKey,
                             customBaseUrl = apiKeyStorage.getCustomBaseUrl(),
                             selectedModel = currentModel,
+                            selectionMode = selectionMode,
                             availableModels = if (presets.isNotEmpty()) presets else it.availableModels,
                             systemInstructions = prefs.customSystemInstructions,
                             autoBackupEnabled = prefs.autoBackupEnabled,
@@ -261,6 +264,44 @@ class SettingsViewModel @Inject constructor(
                         )
                     }
                 }
+        }
+    }
+
+    fun selectSelectionMode(mode: org.opened.app.core.ai.provider.ModelSelectionMode) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                preferencesRepository.setSelectionMode(mode.id)
+                _uiState.update {
+                    it.copy(
+                        selectionMode = mode,
+                        statusMessage = "AI selection mode set to ${mode.displayName}"
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to set mode.") }
+            }
+        }
+    }
+
+    fun testConnection() {
+        val provider = _uiState.value.selectedProvider
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            _uiState.update { it.copy(isTestingConnection = true, connectionTestResult = null) }
+            val result = multiAiClient.testConnection(provider)
+            _uiState.update {
+                it.copy(
+                    isTestingConnection = false,
+                    connectionTestResult = if (result.isSuccess) {
+                        "Connected (${result.latencyMs}ms, ${result.availableModelsCount} models)"
+                    } else {
+                        "Failed: ${result.error ?: result.message}"
+                    },
+                    statusMessage = if (result.isSuccess) result.message else null,
+                    errorMessage = if (!result.isSuccess) result.message else null
+                )
+            }
         }
     }
 
