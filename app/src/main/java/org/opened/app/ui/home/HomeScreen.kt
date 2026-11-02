@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Style
@@ -91,6 +92,7 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showLabSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.checkApiKey()
@@ -139,6 +141,10 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    // Interactive Knowledge Lab
+                    IconButton(onClick = { showLabSheet = true }) {
+                        Icon(imageVector = Icons.Default.Science, contentDescription = "Interactive Laboratory")
+                    }
                     // Knowledge graph button
                     IconButton(onClick = onNavigateToGraph) {
                         Icon(imageVector = Icons.Default.BubbleChart, contentDescription = "Knowledge Graph")
@@ -325,6 +331,12 @@ fun HomeScreen(
                     )
                 }
             }
+        }
+
+        if (showLabSheet) {
+            org.opened.app.ui.laboratory.InteractiveLaboratorySheet(
+                onDismiss = { showLabSheet = false }
+            )
         }
     }
 }

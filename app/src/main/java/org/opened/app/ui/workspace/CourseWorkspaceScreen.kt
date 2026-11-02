@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -200,6 +201,15 @@ fun CourseWorkspaceScreen(
                                 )
                             }
 
+                            // Interactive Knowledge Lab toggle
+                            IconButton(onClick = { viewModel.openLabSheet() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Science,
+                                    contentDescription = "Interactive Knowledge Lab",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
                             // MoreVert overflow menu containing History, Socratic Q&A, Refresh
                             Box {
                                 IconButton(onClick = { showOverflowMenu = true }) {
@@ -209,6 +219,16 @@ fun CourseWorkspaceScreen(
                                     expanded = showOverflowMenu,
                                     onDismissRequest = { showOverflowMenu = false }
                                 ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Interactive Lab") },
+                                        leadingIcon = {
+                                            Icon(imageVector = Icons.Default.Science, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            viewModel.openLabSheet()
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Revision History") },
                                         leadingIcon = {
@@ -603,6 +623,19 @@ fun CourseWorkspaceScreen(
                 onRateCard = { card, rating -> viewModel.rateFlashcard(card, rating) },
                 onGenerateMore = { viewModel.generateFlashcards() },
                 onChapterClick = { title -> viewModel.navigateToChapterByTitle(title) }
+            )
+        }
+
+        // Interactive Knowledge Laboratory Sheet (Phase 7)
+        if (uiState.showLabSheet) {
+            val domain = AcademicDomainClassifier.detectAcademicDomain(
+                topic = uiState.pathWithModules?.studyPath?.topic.orEmpty(),
+                courseTitle = uiState.pathWithModules?.studyPath?.title.orEmpty(),
+                chapterTitle = currentChapter?.title.orEmpty()
+            )
+            org.opened.app.ui.laboratory.InteractiveLaboratorySheet(
+                initialDomain = domain,
+                onDismiss = { viewModel.closeLabSheet() }
             )
         }
     }

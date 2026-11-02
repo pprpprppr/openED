@@ -981,4 +981,31 @@ Return ONLY a valid JSON object:
 Do not wrap in markdown code fences. Return raw JSON only.
 """.trimIndent()
     }
+
+    fun remedialMicroLessonPrompt(
+        courseTitle: String,
+        chapterTitle: String,
+        conceptKey: String,
+        diagnosisReason: String,
+        mistakeContext: String,
+        userLevel: String
+    ): String {
+        return """
+You are an expert academic tutor conducting a targeted remedial micro-lesson for a learner in "$courseTitle".
+The learner is struggling with the specific concept: "$conceptKey".
+Diagnosis of Misconception: $diagnosisReason
+Recent Mistake Context:
+$mistakeContext
+
+LEARNER LEVEL: $userLevel
+
+REQUIREMENTS FOR THIS TARGETED REMEDIAL MICRO-LESSON:
+1. DO NOT simply repeat the full chapter or give a broad overview.
+2. Address the EXACT root misconception in a 2-to-3 minute, laser-focused micro-lesson (approx 250-400 words).
+3. Use a clear, intuitive analogy or step-by-step breakdown explaining why this misconception occurs and how to reason through it accurately.
+4. Provide ONE concrete, worked example illustrating the correct principle.
+5. End with ONE quick "Self-Check Question" with a clear solution to solidify understanding.
+6. Use clean GitHub-flavored markdown with bold concepts, callout blocks (> [!TIP]), and crisp formatting.
+""".trimIndent()
+    }
 }

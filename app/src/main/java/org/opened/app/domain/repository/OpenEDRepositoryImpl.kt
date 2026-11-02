@@ -5,10 +5,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import org.opened.app.core.database.OpenEDDatabase
+import org.opened.app.core.database.dao.AdaptiveLearningDao
 import org.opened.app.core.database.dao.ChapterDao
 import org.opened.app.core.database.dao.ChapterLinkDao
 import org.opened.app.core.database.dao.ChapterQaDao
 import org.opened.app.core.database.dao.ChapterRevisionDao
+import org.opened.app.core.database.dao.DocumentDao
 import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
 import org.opened.app.core.database.dao.ModuleDao
@@ -17,9 +19,14 @@ import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterLinkCrossRef
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.ChapterRevisionEntity
+import org.opened.app.core.database.entity.DocumentChunkEntity
+import org.opened.app.core.database.entity.DocumentEntity
 import org.opened.app.core.database.entity.FlashcardEntity
+import org.opened.app.core.database.entity.LearningObjectiveEntity
 import org.opened.app.core.database.entity.MasteryQuizEntity
+import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.ModuleEntity
+import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
 import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
@@ -42,7 +49,9 @@ class OpenEDRepositoryImpl @Inject constructor(
     private val linkDao: ChapterLinkDao,
     private val qaDao: ChapterQaDao,
     private val flashcardDao: FlashcardDao,
-    private val masteryQuizDao: MasteryQuizDao
+    private val masteryQuizDao: MasteryQuizDao,
+    private val adaptiveLearningDao: AdaptiveLearningDao,
+    private val documentDao: DocumentDao
 ) : OpenEDRepository {
 
     override fun getAllStudyPathsFlow(): Flow<List<StudyPathWithModules>> {
@@ -438,6 +447,124 @@ class OpenEDRepositoryImpl @Inject constructor(
                 if (bundle.masteryQuizzes.isNotEmpty()) {
                     masteryQuizDao.insertAll(bundle.masteryQuizzes)
                 }
+            }
+        }
+    }
+
+    // --- Adaptive Learning (Phase 4) ---
+    override fun getObjectivesForChapterFlow(chapterId: String): Flow<List<LearningObjectiveEntity>> {
+        return adaptiveLearningDao.getObjectivesForChapterFlow(chapterId)
+    }
+
+    override suspend fun saveObjectives(objectives: List<LearningObjectiveEntity>) {
+        withContext(Dispatchers.IO) {
+            adaptiveLearningDao.insertObjectives(objectives)
+        }
+    }
+
+    override suspend fun updateObjective(objective: LearningObjectiveEntity) {
+        withContext(Dispatchers.IO) {
+            adaptiveLearningDao.updateObjective(objective)
+        }
+    }
+
+    override fun getWeakObjectivesFlow(): Flow<List<LearningObjectiveEntity>> {
+        return adaptiveLearningDao.getWeakObjectivesFlow()
+    }
+
+    override suspend fun recordMistake(mistake: MistakeRecordEntity) {
+        withContext(Dispatchers.IO) {
+            val existing = adaptiveLearningDao.findMistakeByConcept(mistake.chapterId, mistake.conceptKey)
+            if (existing != null) {
+                adaptiveLearningDao.insertMistake(
+                    existing.copy(
+                        failureCount = existing.failureCount + 1,
+                        timestamp = System.currentTimeMillis(),
+                        userSelectedAnswer = mistake.userSelectedAnswer,
+                        questionPrompt = mistake.questionPrompt
+                    )
+                )
+            } else {
+                adaptiveLearningDao.insertMistake(mistake)
+            }
+        }
+    }
+
+    override suspend fun getMistakesForChapter(chapterId: String): List<MistakeRecordEntity> {
+        return withContext(Dispatchers.IO) {
+            adaptiveLearningDao.getMistakesForChapter(chapterId)
+        }
+    }
+
+    override fun getMistakesForPathFlow(pathId: String): Flow<List<MistakeRecordEntity>> {
+        return adaptiveLearningDao.getMistakesForPathFlow(pathId)
+    }
+
+    override suspend fun saveRemedialLesson(lesson: RemedialLessonEntity) {
+        withContext(Dispatchers.IO) {
+            adaptiveLearningDao.insertRemedialLesson(lesson)
+        }
+    }
+
+    override fun getRemedialLessonsForChapterFlow(chapterId: String): Flow<List<RemedialLessonEntity>> {
+        return adaptiveLearningDao.getRemedialLessonsForChapterFlow(chapterId)
+    }
+
+    override fun getPendingRemedialLessonsFlow(): Flow<List<RemedialLessonEntity>> {
+        return adaptiveLearningDao.getPendingRemedialLessonsFlow()
+    }
+
+    override suspend fun markRemedialLessonCompleted(lessonId: String) {
+        withContext(Dispatchers.IO) {
+            adaptiveLearningDao.markRemedialLessonCompleted(lessonId)
+        }
+    }
+
+    // --- Document Intelligence (Phase 6) ---
+    override fun getAllDocumentsFlow(): Flow<List<DocumentEntity>> {
+        return documentDao.getAllDocumentsFlow()
+    }
+
+    override suspend fun getDocumentById(id: String): DocumentEntity? {
+        return withContext(Dispatchers.IO) {
+            documentDao.getDocumentById(id)
+        }
+    }
+
+    override suspend fun saveDocumentWithChunks(doc: DocumentEntity, chunks: List<DocumentChunkEntity>) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                documentDao.insertDocument(doc)
+                if (chunks.isNotEmpty()) {
+                    documentDao.insertChunks(chunks)
+                }
+            }
+        }
+    }
+
+    override suspend fun getChunksForDocument(documentId: String): List<DocumentChunkEntity> {
+        return withContext(Dispatchers.IO) {
+            documentDao.getChunksForDocument(documentId)
+        }
+    }
+
+    override suspend fun getChunksForDocuments(documentIds: List<String>): List<DocumentChunkEntity> {
+        return withContext(Dispatchers.IO) {
+            documentDao.getChunksForDocuments(documentIds)
+        }
+    }
+
+    override suspend fun searchDocumentChunks(query: String, limit: Int): List<DocumentChunkEntity> {
+        return withContext(Dispatchers.IO) {
+            documentDao.searchChunksByText(query, limit)
+        }
+    }
+
+    override suspend fun deleteDocument(documentId: String) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                documentDao.deleteChunksForDocument(documentId)
+                documentDao.deleteDocument(documentId)
             }
         }
     }

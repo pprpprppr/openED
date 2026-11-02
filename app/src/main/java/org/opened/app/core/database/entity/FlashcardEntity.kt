@@ -44,5 +44,15 @@ data class FlashcardEntity(
     val repetitions: Int = 0,
     /** Epoch millis of next review */
     val nextReviewTimestamp: Long = System.currentTimeMillis(),
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    /** FSRS memory stability in days */
+    val stability: Float = 1.0f,
+    /** FSRS card difficulty (1.0 to 10.0) */
+    val difficulty: Float = 5.0f,
+    /** FSRS state: 0=New, 1=Learning, 2=Review, 3=Relearning */
+    val state: Int = 0,
+    /** Elapsed days since last review */
+    val elapsedDays: Int = 0,
+    /** Timestamp of last review */
+    val lastReviewTimestamp: Long = 0L
 )

@@ -475,23 +475,39 @@ CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general
     }
 
     /**
-     * SM-2 algorithm: updates flashcard scheduling based on quality rating.
+     * FSRS / SM-2 algorithm: updates flashcard scheduling based on quality rating.
      * @param quality 0=Again, 1=Hard, 2=Good, 3=Easy
      */
     suspend fun reviewFlashcard(card: FlashcardEntity, quality: Int): Result<FlashcardEntity> = withContext(Dispatchers.IO) {
         runCatching {
-            val schedule = org.opened.app.core.learning.FlashcardScheduler.calculateNextReview(
-                repetitions = card.repetitions,
-                intervalDays = card.intervalDays,
-                easeFactor = card.easeFactor,
-                quality = quality
+            val rating = when (quality) {
+                0 -> org.opened.app.core.learning.FsrsRating.AGAIN
+                1 -> org.opened.app.core.learning.FsrsRating.HARD
+                2 -> org.opened.app.core.learning.FsrsRating.GOOD
+                else -> org.opened.app.core.learning.FsrsRating.EASY
+            }
+            val elapsedDays = if (card.lastReviewTimestamp > 0L) {
+                ((System.currentTimeMillis() - card.lastReviewTimestamp) / (24L * 60L * 60L * 1000L)).toInt().coerceAtLeast(0)
+            } else {
+                card.elapsedDays
+            }
+
+            val fsrs = org.opened.app.core.learning.FlashcardScheduler.calculateFsrsNextReview(
+                card = card,
+                rating = rating,
+                elapsedDays = elapsedDays
             )
-            val nextReview = System.currentTimeMillis() + schedule.intervalDays * 24L * 60L * 60L * 1000L
+            val nextReview = System.currentTimeMillis() + fsrs.intervalDays * 24L * 60L * 60L * 1000L
             val updated = card.copy(
-                intervalDays = schedule.intervalDays,
-                easeFactor = schedule.easeFactor,
-                repetitions = schedule.repetitions,
-                nextReviewTimestamp = nextReview
+                intervalDays = fsrs.intervalDays,
+                easeFactor = card.easeFactor,
+                repetitions = fsrs.repetitions,
+                nextReviewTimestamp = nextReview,
+                stability = fsrs.stability,
+                difficulty = fsrs.difficulty,
+                state = fsrs.state.value,
+                elapsedDays = elapsedDays,
+                lastReviewTimestamp = System.currentTimeMillis()
             )
             repository.updateFlashcard(updated)
             updated

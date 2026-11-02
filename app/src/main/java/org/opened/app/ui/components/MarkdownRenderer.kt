@@ -140,7 +140,21 @@ fun RichMarkdownRenderer(
 
                     is MarkdownNode.Code -> {
                         Spacer(modifier = Modifier.height(10.dp))
-                        CodeBlockView(code = node.content, language = node.language)
+                        val cleanLang = node.language.trim().lowercase()
+                        if (cleanLang.startsWith("interactive-lab:") || cleanLang == "interactive-lab") {
+                            val labType = cleanLang.removePrefix("interactive-lab:").trim()
+                            when (labType) {
+                                "math" -> org.opened.app.ui.laboratory.InteractiveMathPlotCanvas()
+                                "physics" -> org.opened.app.ui.laboratory.InteractivePhysicsSimulationCanvas()
+                                "economics", "economy" -> org.opened.app.ui.laboratory.InteractiveEconomicsMarketCanvas()
+                                "biology", "bio" -> org.opened.app.ui.laboratory.InteractiveBiologicalPathwayCanvas()
+                                "timeline", "history" -> org.opened.app.ui.laboratory.InteractiveHistoricalTimelineCanvas()
+                                "argument", "logic" -> org.opened.app.ui.laboratory.InteractiveLogicalArgumentMapCanvas()
+                                else -> org.opened.app.ui.laboratory.InteractiveMathPlotCanvas()
+                            }
+                        } else {
+                            CodeBlockView(code = node.content, language = node.language)
+                        }
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 

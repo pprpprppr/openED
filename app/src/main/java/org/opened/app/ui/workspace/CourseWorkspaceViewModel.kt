@@ -309,6 +309,10 @@ class CourseWorkspaceViewModel @Inject constructor(
     fun openMasterySheet() = _uiState.update { it.copy(showMasterySheet = true) }
     fun closeMasterySheet() = _uiState.update { it.copy(showMasterySheet = false) }
 
+    // ---- Phase 7: Interactive Laboratory ----
+    fun openLabSheet() = _uiState.update { it.copy(showLabSheet = true) }
+    fun closeLabSheet() = _uiState.update { it.copy(showLabSheet = false) }
+
     // ---- Feature 4: TTS ----
 
     fun toggleTtsPlayer() {

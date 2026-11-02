@@ -16,6 +16,7 @@ import org.opened.app.core.ai.AdaptiveQuizResponse
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.FeynmanEvaluationResponse
 import org.opened.app.core.database.entity.MasteryQuizEntity
+import org.opened.app.core.learning.AdaptiveLearningEngine
 import org.opened.app.domain.repository.OpenEDRepository
 import java.util.UUID
 import javax.inject.Inject
@@ -28,6 +29,8 @@ data class MasteryUiState(
     val quizAnswers: Map<Int, Int> = emptyMap(), // questionIndex -> selectedOptionIndex
     val quizSubmitted: Boolean = false,
     val quizScore: Int = 0,
+    val identifiedWeaknesses: List<String> = emptyList(),
+    val remedialGenerated: Boolean = false,
     // --- Feynman Tab ---
     val feynmanText: String = "",
     val feynmanLoading: Boolean = false,
@@ -38,7 +41,8 @@ data class MasteryUiState(
 @HiltViewModel
 class MasteryViewModel @Inject constructor(
     private val aiEngine: AiLearningEngine,
-    private val repository: OpenEDRepository
+    private val repository: OpenEDRepository,
+    private val adaptiveLearningEngine: AdaptiveLearningEngine
 ) : ViewModel() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -102,6 +106,18 @@ class MasteryViewModel @Inject constructor(
                     score = score
                 )
                 repository.saveMasteryQuiz(entity)
+                val evaluation = adaptiveLearningEngine.recordQuizAttempt(
+                    chapterId = chapterId,
+                    quiz = quiz,
+                    answers = state.quizAnswers,
+                    durationSeconds = 60L
+                )
+                _uiState.update {
+                    it.copy(
+                        identifiedWeaknesses = evaluation.identifiedWeaknesses,
+                        remedialGenerated = evaluation.remedialGenerated
+                    )
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

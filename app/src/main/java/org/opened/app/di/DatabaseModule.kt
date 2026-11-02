@@ -8,10 +8,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import org.opened.app.core.database.OpenEDDatabase
+import org.opened.app.core.database.dao.AdaptiveLearningDao
 import org.opened.app.core.database.dao.ChapterDao
 import org.opened.app.core.database.dao.ChapterLinkDao
 import org.opened.app.core.database.dao.ChapterQaDao
 import org.opened.app.core.database.dao.ChapterRevisionDao
+import org.opened.app.core.database.dao.DocumentDao
 import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
 import org.opened.app.core.database.dao.ModuleDao
@@ -32,7 +34,7 @@ object DatabaseModule {
             OpenEDDatabase::class.java,
             OpenEDDatabase.DATABASE_NAME
         )
-            .addMigrations(OpenEDDatabase.MIGRATION_1_2)
+            .addMigrations(OpenEDDatabase.MIGRATION_1_2, OpenEDDatabase.MIGRATION_2_3)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -45,6 +47,8 @@ object DatabaseModule {
     @Provides fun provideChapterQaDao(database: OpenEDDatabase): ChapterQaDao = database.chapterQaDao()
     @Provides fun provideFlashcardDao(database: OpenEDDatabase): FlashcardDao = database.flashcardDao()
     @Provides fun provideMasteryQuizDao(database: OpenEDDatabase): MasteryQuizDao = database.masteryQuizDao()
+    @Provides fun provideAdaptiveLearningDao(database: OpenEDDatabase): AdaptiveLearningDao = database.adaptiveLearningDao()
+    @Provides fun provideDocumentDao(database: OpenEDDatabase): DocumentDao = database.documentDao()
 
     @Provides
     @Singleton

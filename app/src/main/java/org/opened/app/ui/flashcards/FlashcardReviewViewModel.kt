@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.database.entity.FlashcardEntity
+import org.opened.app.core.learning.AdaptiveLearningEngine
 import org.opened.app.domain.repository.OpenEDRepository
 import javax.inject.Inject
 
@@ -29,7 +30,8 @@ data class FlashcardReviewUiState(
 @HiltViewModel
 class FlashcardReviewViewModel @Inject constructor(
     private val repository: OpenEDRepository,
-    private val aiEngine: AiLearningEngine
+    private val aiEngine: AiLearningEngine,
+    private val adaptiveLearningEngine: AdaptiveLearningEngine
 ) : ViewModel() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -59,11 +61,12 @@ class FlashcardReviewViewModel @Inject constructor(
                         _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage) }
                     }
                     .collect { cards ->
+                        val interleaved = adaptiveLearningEngine.getInterleavedReviewQueue(cards)
                         _uiState.update {
                             it.copy(
-                                dueCards = cards,
+                                dueCards = interleaved,
                                 isLoading = false,
-                                isSessionComplete = cards.isEmpty() && it.totalReviewed > 0
+                                isSessionComplete = interleaved.isEmpty() && it.totalReviewed > 0
                             )
                         }
                     }

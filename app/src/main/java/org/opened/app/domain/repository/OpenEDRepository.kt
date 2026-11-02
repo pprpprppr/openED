@@ -4,9 +4,14 @@ import kotlinx.coroutines.flow.Flow
 import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.ChapterRevisionEntity
+import org.opened.app.core.database.entity.DocumentChunkEntity
+import org.opened.app.core.database.entity.DocumentEntity
 import org.opened.app.core.database.entity.FlashcardEntity
+import org.opened.app.core.database.entity.LearningObjectiveEntity
 import org.opened.app.core.database.entity.MasteryQuizEntity
+import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.ModuleEntity
+import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
 import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
@@ -59,6 +64,28 @@ interface OpenEDRepository {
     fun getMasteryQuizzesFlow(chapterId: String): Flow<List<MasteryQuizEntity>>
     suspend fun saveMasteryQuiz(quiz: MasteryQuizEntity)
     suspend fun getAllQuizzes(): List<MasteryQuizEntity>
+
+    // --- Adaptive Learning (Phase 4) ---
+    fun getObjectivesForChapterFlow(chapterId: String): Flow<List<LearningObjectiveEntity>>
+    suspend fun saveObjectives(objectives: List<LearningObjectiveEntity>)
+    suspend fun updateObjective(objective: LearningObjectiveEntity)
+    fun getWeakObjectivesFlow(): Flow<List<LearningObjectiveEntity>>
+    suspend fun recordMistake(mistake: MistakeRecordEntity)
+    suspend fun getMistakesForChapter(chapterId: String): List<MistakeRecordEntity>
+    fun getMistakesForPathFlow(pathId: String): Flow<List<MistakeRecordEntity>>
+    suspend fun saveRemedialLesson(lesson: RemedialLessonEntity)
+    fun getRemedialLessonsForChapterFlow(chapterId: String): Flow<List<RemedialLessonEntity>>
+    fun getPendingRemedialLessonsFlow(): Flow<List<RemedialLessonEntity>>
+    suspend fun markRemedialLessonCompleted(lessonId: String)
+
+    // --- Document Intelligence (Phase 6) ---
+    fun getAllDocumentsFlow(): Flow<List<DocumentEntity>>
+    suspend fun getDocumentById(id: String): DocumentEntity?
+    suspend fun saveDocumentWithChunks(doc: DocumentEntity, chunks: List<DocumentChunkEntity>)
+    suspend fun getChunksForDocument(documentId: String): List<DocumentChunkEntity>
+    suspend fun getChunksForDocuments(documentIds: List<String>): List<DocumentChunkEntity>
+    suspend fun searchDocumentChunks(query: String, limit: Int = 20): List<DocumentChunkEntity>
+    suspend fun deleteDocument(documentId: String)
 
     // --- Knowledge Graph ---
     suspend fun getAllChapterLinkNodes(): List<ChapterLinkNode>

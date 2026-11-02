@@ -29,5 +29,7 @@ data class CourseWorkspaceUiState(
     // Feature 4: TTS
     val showTtsPlayer: Boolean = false,
     // Course Expansion
-    val isExpandingCourse: Boolean = false
+    val isExpandingCourse: Boolean = false,
+    // Interactive Laboratory (Phase 7)
+    val showLabSheet: Boolean = false
 )
