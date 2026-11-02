@@ -5,10 +5,10 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple.svg)](https://kotlinlang.org/)
 [![Jetpack Compose](https://img.shields.io/badge/Compose-Material_3-brightgreen.svg)](https://developer.android.com/jetpack/compose)
 [![Room](https://img.shields.io/badge/Room-SQLite_2.6.1-orange.svg)](https://developer.android.com/training/data-storage/room)
-[![Gemini](https://img.shields.io/badge/AI-Google_Gemini_REST_API-4285F4.svg)](https://ai.google.dev/)
+[![Multi-AI](https://img.shields.io/badge/AI-Gemini%20%7C%20Claude%20%7C%20GPT%20%7C%20Custom-4285F4.svg)](https://ai.google.dev/)
 [![Google Drive](https://img.shields.io/badge/Sync-Google_Drive_v3-34A853.svg)](https://developers.google.com/drive)
 
-**openED** is a production-grade, open-source native Android application designed to transform any topic—from eBPF kernel programming to nutritional biochemistry—into an adaptive, interconnected self-study curriculum powered by Google's Gemini models (BYOK) and synchronized privately to Google Drive.
+**openED** is a production-grade, open-source native Android application designed to transform any topic—from eBPF kernel programming to nutritional biochemistry—into an adaptive, interconnected self-study curriculum powered by multiple AI providers (Google Gemini, Anthropic Claude, OpenAI GPT, or Custom/Local Ollama BYOK) and synchronized privately to Google Drive.
 
 ---
 
@@ -39,30 +39,38 @@
 - **Full Version Control:** Every mutation archives a snapshot to `ChapterRevisionEntity`, enabling complete rollback and revision auditing.
 - **Socratic Q&A Assistant:** Ask follow-up questions anchored to the active chapter; tap a single button to append the explanation as a GitHub-style callout block (`> [!NOTE]`) directly into the lesson content.
 
-### 5. 📊 Rich Markdown, Math & Code Rendering Engine
-- **Mathematical Typography:** Renders LaTeX formulas formatted cleanly for display math (`$$...$$`) and inline math (`$...$`).
-- **Code Syntax Highlighting:** Dark card presentation with language tags, line wrapping, and one-tap copy-to-clipboard functionality.
+### 5. 📊 True 2D Math, Diagrams & Benchmark Charts
+- **True 2D Mathematical Rendering:** Renders 2D Matrix Grids (`\begin{bmatrix}`, `\begin{pmatrix}`) with bracket borders, stacked fractions with center dividers, summations/integrals (`∑`, `∏`, `∫`) with upper/lower limits, and radical square roots.
+- **Unicode Sets & Accented Vectors:** Converts `\mathbb{R,N,Z,Q,C}` to Unicode (`ℝ`, `ℕ`, `ℤ`, `ℚ`, `ℂ`), `\hat{i}, \hat{j}, \vec{v}` to accented characters (`î`, `ĵ`, `v⃗`), and inline matrices to vector transpose notation (`[a, b]ᵀ`).
+- **Interactive Visual Architecture Diagrams:** Parses ` ```diagram ` / ` ```mermaid ` into pan/zoomable Compose Canvas node-and-arrow diagrams with rounded cards and directional arrowheads.
+- **2D Coordinate & Benchmark Plots:** Parses ` ```chart ` / ` ```plot ` into 2D Cartesian vector plots and performance benchmark comparison bars.
+- **Material 3 Markdown Tables:** Styled table cards with alternating row colors and horizontal scrolling.
+- **Code Syntax Highlighting:** Dark card presentation with language tags, horizontal scrolling, and one-tap copy-to-clipboard functionality.
 - **GitHub-Style Alerts:** Native rendering for callout alerts: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, and `[!CAUTION]`.
-- **Interactive Wiki-Links:** Clickable `[[Chapter Title]]` tokens that navigate immediately to target chapters or offer to generate them if pending.
 
 ### 6. 🔍 Offline Instant Full-Text Search
 - Instantaneous search across all study paths, modules, chapters, revision histories, and Socratic Q&A threads.
 - Direct jump from search results into the exact chapter and highlighted context.
 
-### 7. 🔒 Zero-Knowledge BYOK & Keystore Security
-- **Bring Your Own Key (BYOK):** No backend proxy or third-party servers; the app communicates directly with Google's Gemini API endpoints.
+### 7. 🔒 Multi-Provider BYOK & Keystore Security
+- **Multi-Provider AI Router:** Native support for 4 AI engines:
+  1. **Google Gemini** (`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.1-pro-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`)
+  2. **Anthropic Claude** (`claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5`)
+  3. **OpenAI GPT** (`gpt-4.1`, `gpt-4o`, `o3-mini`)
+  4. **Custom (OpenAI-Compatible):** Base URL, API Key, and Model Name (local Ollama, LM Studio, vLLM, DeepSeek, Groq).
 - **Android Keystore Encryption:** API keys are encrypted at rest with AES-256 GCM using `EncryptedSharedPreferences` backed by the Android Keystore Master Key (`opened_secure_vault`).
-- **Model Selector:** Support for selecting `gemini-3.5-flash`, `gemini-2.5-flash`, or custom Gemini models, plus customizable system instructions.
+- **Unified Streaming Client:** Direct SSE streaming (`alt=sse`, Anthropic events, OpenAI delta chunks) and structured JSON outputs across all providers.
 
 ### 8. ☁️ Google Drive Backup & Synchronization
 - **Portable ZIP Export Bundle:** Serializes the full Room database into a clean JSON bundle packaged in `opened_backup_v1.zip` (excluding private API keys).
 - **Background Sync via WorkManager:** Scheduled periodic backups and on-demand manual sync using Jetpack `WorkManager`.
 - **Conflict Resolution Engine:** Choose between **Merge Local** (preserves local edits and additions) and **Overwrite Local** (replaces local database with remote snapshot).
 
-### 9. 🧠 Spaced Repetition Flashcards (SuperMemo SM-2)
-- **AI Card Synthesis:** Extract 5–10 high-yield active recall flashcards from any chapter using Gemini Structured JSON schema.
+### 9. 🧠 Spaced Repetition Flashcards (SuperMemo SM-2 / FSRS)
+- **AI Card Synthesis:** Extract 5–10 high-yield active recall flashcards from any chapter using Structured JSON output.
 - **SM-2 Scheduling:** Local calculation of repetition counts, ease factor adjustments, and exponential interval progression (`FlashcardEntity`).
-- **Interactive 3D Review Deck:** Card flip animations with tactile rating controls (*Again*, *Hard*, *Good*, *Easy*) and a live Home badge indicating cards due today.
+- **In-Chapter Flashcard Deck:** Dedicated badge on the top-bar and bottom-bar `"Cards (N)"` button in `CourseWorkspaceScreen` that opens an interactive 3D flip card bottom sheet with rating buttons (*Again*, *Hard*, *Good*, *Easy*).
+- **Home Review Due Banner:** Prominent banner on the Home Screen indicating how many cards are due today, with one-tap jump to the review deck.
 
 ### 10. 🎯 Feynman Challenge & Adaptive Mastery Quizzes
 - **Scenario-Based Adaptive Quizzes:** 5 generated multiple-choice questions assessing deep comprehension with detailed explanations for every option.
@@ -93,7 +101,7 @@ flowchart TD
         Home["HomeLibraryScreen\nSearch, Due Badge & Grid"]
         Wizard["DiagnosticWizardSheet\nTopic & AI Interview Flow"]
         Workspace["CourseWorkspaceScreen\nSplit Tree, Reader & TTS Player"]
-        Settings["SettingsAndBackupScreen\nBYOK, Drive & Vault Export"]
+        Settings["SettingsScreen\nMulti-Provider BYOK, Live Model Sync, Drive & Exports"]
         Graph["KnowledgeGraphScreen\n2D Interactive Canvas"]
         Cards["FlashcardReviewScreen\n3D Flip & SM-2 Rating"]
         Mastery["MasteryBottomSheet\nAdaptive Quiz & Feynman"]

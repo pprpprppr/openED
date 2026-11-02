@@ -57,3 +57,4 @@ Users can select their preferred model at any time in **Settings > Model Selecti
 - **Endpoint:** `v1beta/models/{model}:generateContent`
 - **Actions:** Simplify, Add Code/Math Example, Fact-Check & Correct, or custom mutations.
 - **Auditing:** Every mutation is snapshot-recorded into `ChapterRevisionEntity`.
+- **Strict Single-Agent Execution:** NEVER spawn subagents or invoke the parallel Task tool. Always read and edit files sequentially in the main agent thread to conserve token quota.

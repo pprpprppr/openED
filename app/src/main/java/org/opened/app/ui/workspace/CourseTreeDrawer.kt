@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,20 +56,25 @@ fun CourseTreeDrawer(
     pathWithModules: StudyPathWithModules?,
     activeChapterId: String?,
     onChapterSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isExpandingCourse: Boolean = false,
+    onExpandCourse: () -> Unit = {}
 ) {
     if (pathWithModules == null) return
 
     val path = pathWithModules.studyPath
-    val expandedModules = remember {
+    val expandedModules = remember(path.id) {
         mutableStateMapOf<String, Boolean>().apply {
             pathWithModules.modules.forEach { put(it.module.id, true) }
         }
     }
+    val sortedModules = remember(pathWithModules) {
+        pathWithModules.sortedModules
+    }
 
     ModalDrawerSheet(
         modifier = modifier.width(320.dp),
-        drawerContainerColor = MaterialTheme.colorScheme.surface
+        drawerContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 1f)
     ) {
         Column(
             modifier = Modifier
@@ -145,7 +152,7 @@ fun CourseTreeDrawer(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(pathWithModules.sortedModules, key = { it.module.id }) { modWithChapters ->
+                items(sortedModules, key = { it.module.id }) { modWithChapters ->
                     val isExpanded = expandedModules[modWithChapters.module.id] ?: true
                     ModuleTreeItem(
                         moduleWithChapters = modWithChapters,
@@ -156,6 +163,42 @@ fun CourseTreeDrawer(
                         },
                         onChapterSelect = onChapterSelect
                     )
+                }
+
+                item {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = onExpandCourse,
+                        enabled = !isExpandingCourse,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        if (isExpandingCourse) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Generating 2 Modules...",
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "+ Generate 2 More Modules",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
@@ -171,7 +214,7 @@ private fun ModuleTreeItem(
     onChapterSelect: (String) -> Unit
 ) {
     val module = moduleWithChapters.module
-    val chapters = moduleWithChapters.sortedChapters
+    val chapters = remember(moduleWithChapters) { moduleWithChapters.sortedChapters }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // Module Row Header
@@ -241,10 +284,8 @@ private fun ChapterTreeItem(
     onClick: () -> Unit
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .clickable { onClick() },
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
         color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
         shape = RoundedCornerShape(8.dp)
     ) {

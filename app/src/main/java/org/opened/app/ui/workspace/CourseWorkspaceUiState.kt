@@ -1,5 +1,6 @@
 package org.opened.app.ui.workspace
 
+import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.model.ChapterWithDetails
 import org.opened.app.core.database.model.StudyPathWithModules
 
@@ -17,10 +18,16 @@ data class CourseWorkspaceUiState(
     // Feature 1: Flashcards
     val isGeneratingFlashcards: Boolean = false,
     val flashcardSnackMessage: String? = null,
+    val chapterFlashcards: List<FlashcardEntity> = emptyList(),
+    val showFlashcardDeck: Boolean = false,
+    // Socratic Q&A
+    val showSocraticQaSheet: Boolean = false,
     // Feature 2: Mastery / Feynman
     val showMasterySheet: Boolean = false,
     // Feature 3: Revision History
     val showRevisionSheet: Boolean = false,
     // Feature 4: TTS
-    val showTtsPlayer: Boolean = false
+    val showTtsPlayer: Boolean = false,
+    // Course Expansion
+    val isExpandingCourse: Boolean = false
 )

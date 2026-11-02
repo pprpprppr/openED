@@ -31,6 +31,11 @@ class GeminiApiClient @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val secureApiKeyStorage: SecureApiKeyStorage
 ) {
+    private val client: OkHttpClient = okHttpClient.newBuilder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -41,6 +46,24 @@ class GeminiApiClient @Inject constructor(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private val baseUrl = "https://generativelanguage.googleapis.com/v1beta/models"
 
+    private fun executeGenerateCall(targetModel: String, requestBodyJson: String, apiKey: String): okhttp3.Response {
+        val url = "$baseUrl/$targetModel:generateContent?key=$apiKey"
+        val httpRequest = Request.Builder()
+            .url(url)
+            .post(requestBodyJson.toRequestBody(jsonMediaType))
+            .build()
+        return client.newCall(httpRequest).execute()
+    }
+
+    private fun executeStreamCall(targetModel: String, requestBodyJson: String, apiKey: String): okhttp3.Response {
+        val url = "$baseUrl/$targetModel:streamGenerateContent?alt=sse&key=$apiKey"
+        val httpRequest = Request.Builder()
+            .url(url)
+            .post(requestBodyJson.toRequestBody(jsonMediaType))
+            .build()
+        return client.newCall(httpRequest).execute()
+    }
+
     suspend fun generateContent(
         model: String,
         request: GeminiGenerateRequest
@@ -48,24 +71,33 @@ class GeminiApiClient @Inject constructor(
         val apiKey = secureApiKeyStorage.getApiKey()
             ?: throw MissingApiKeyException()
 
-        val url = "$baseUrl/$model:generateContent?key=$apiKey"
-        val requestBodyJson = json.encodeToString(GeminiGenerateRequest.serializer(), request)
+        val effectiveRequest = if (request.generationConfig?.maxOutputTokens == null) {
+            val cfg = (request.generationConfig ?: GeminiGenerationConfig()).copy(maxOutputTokens = 8192)
+            request.copy(generationConfig = cfg)
+        } else {
+            request
+        }
+        val requestBodyJson = json.encodeToString(GeminiGenerateRequest.serializer(), effectiveRequest)
+        var currentModel = model
+        var response = executeGenerateCall(currentModel, requestBodyJson, apiKey)
 
-        val httpRequest = Request.Builder()
-            .url(url)
-            .post(requestBodyJson.toRequestBody(jsonMediaType))
-            .build()
+        // Automatically fall back to gemini-2.5-flash if selected model returns HTTP 404
+        if (response.code == 404 && currentModel != "gemini-2.5-flash") {
+            response.close()
+            currentModel = "gemini-2.5-flash"
+            response = executeGenerateCall(currentModel, requestBodyJson, apiKey)
+        }
 
-        okHttpClient.newCall(httpRequest).execute().use { response ->
-            val responseBody = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
+        response.use { resp ->
+            val responseBody = resp.body?.string().orEmpty()
+            if (!resp.isSuccessful) {
                 val errorMsg = try {
                     val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), responseBody)
                     parsed.error?.message ?: responseBody
                 } catch (e: Exception) {
                     responseBody
                 }
-                throw GeminiApiException(response.code, errorMsg)
+                throw GeminiApiException(resp.code, errorMsg)
             }
 
             val parsedResponse = json.decodeFromString(GeminiGenerateResponse.serializer(), responseBody)
@@ -87,15 +119,23 @@ class GeminiApiClient @Inject constructor(
         val apiKey = secureApiKeyStorage.getApiKey()
             ?: throw MissingApiKeyException()
 
-        val url = "$baseUrl/$model:streamGenerateContent?alt=sse&key=$apiKey"
-        val requestBodyJson = json.encodeToString(GeminiGenerateRequest.serializer(), request)
+        val effectiveRequest = if (request.generationConfig?.maxOutputTokens == null) {
+            val cfg = (request.generationConfig ?: GeminiGenerationConfig()).copy(maxOutputTokens = 8192)
+            request.copy(generationConfig = cfg)
+        } else {
+            request
+        }
+        val requestBodyJson = json.encodeToString(GeminiGenerateRequest.serializer(), effectiveRequest)
+        var currentModel = model
+        var response = executeStreamCall(currentModel, requestBodyJson, apiKey)
 
-        val httpRequest = Request.Builder()
-            .url(url)
-            .post(requestBodyJson.toRequestBody(jsonMediaType))
-            .build()
+        // Automatically fall back to gemini-2.5-flash if selected model returns HTTP 404
+        if (response.code == 404 && currentModel != "gemini-2.5-flash") {
+            response.close()
+            currentModel = "gemini-2.5-flash"
+            response = executeStreamCall(currentModel, requestBodyJson, apiKey)
+        }
 
-        val response = okHttpClient.newCall(httpRequest).execute()
         if (!response.isSuccessful) {
             val errorBody = response.body?.string().orEmpty()
             val errorMsg = try {
@@ -129,6 +169,8 @@ class GeminiApiClient @Inject constructor(
                             emit(chunkText)
                         }
                         true
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         false
                     }

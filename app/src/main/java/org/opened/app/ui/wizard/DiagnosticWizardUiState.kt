@@ -14,7 +14,7 @@ enum class WizardStep {
 data class DiagnosticWizardUiState(
     val currentStep: WizardStep = WizardStep.ENTER_TOPIC,
     val topic: String = "",
-    val userLevel: String = "INTERMEDIATE",
+    val userLevel: String = "BEGINNER",
     val questions: List<DiagnosticQuestion> = emptyList(),
     val selectedAnswers: Map<String, List<String>> = emptyMap(), // questionId -> list of selected options
     val customTextAnswers: Map<String, String> = emptyMap(), // questionId -> custom text

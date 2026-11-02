@@ -3,6 +3,8 @@ package org.opened.app.ui.wizard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,6 +17,16 @@ import javax.inject.Inject
 class DiagnosticWizardViewModel @Inject constructor(
     private val aiLearningEngine: AiLearningEngine
 ) : ViewModel() {
+
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        if (throwable is kotlinx.coroutines.CancellationException) return@CoroutineExceptionHandler
+        _uiState.update {
+            it.copy(
+                isBusy = false,
+                errorMessage = throwable.localizedMessage ?: "An unexpected error occurred in diagnostic wizard."
+            )
+        }
+    }
 
     private val _uiState = MutableStateFlow(DiagnosticWizardUiState())
     val uiState: StateFlow<DiagnosticWizardUiState> = _uiState.asStateFlow()
@@ -34,7 +46,7 @@ class DiagnosticWizardViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update {
                 it.copy(
                     currentStep = WizardStep.GENERATING_QUESTIONS,
@@ -43,27 +55,39 @@ class DiagnosticWizardViewModel @Inject constructor(
                 )
             }
 
-            val result = aiLearningEngine.generateDiagnosticQuestions(topic)
-            result.fold(
-                onSuccess = { questions ->
-                    _uiState.update {
-                        it.copy(
-                            questions = questions,
-                            currentStep = WizardStep.ANSWERING_QUESTIONS,
-                            isBusy = false
-                        )
+            try {
+                val result = aiLearningEngine.generateDiagnosticQuestions(topic)
+                result.fold(
+                    onSuccess = { questions ->
+                        _uiState.update {
+                            it.copy(
+                                questions = questions,
+                                currentStep = WizardStep.ANSWERING_QUESTIONS,
+                                isBusy = false
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                currentStep = WizardStep.ENTER_TOPIC,
+                                isBusy = false,
+                                errorMessage = error.localizedMessage ?: "Failed to generate diagnostic interview."
+                            )
+                        }
                     }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            currentStep = WizardStep.ENTER_TOPIC,
-                            isBusy = false,
-                            errorMessage = error.localizedMessage ?: "Failed to generate diagnostic interview."
-                        )
-                    }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        currentStep = WizardStep.ENTER_TOPIC,
+                        isBusy = false,
+                        errorMessage = e.localizedMessage ?: "Failed to generate diagnostic interview."
+                    )
                 }
-            )
+            }
         }
     }
 
@@ -91,7 +115,7 @@ class DiagnosticWizardViewModel @Inject constructor(
 
     fun generateSyllabus() {
         val state = _uiState.value
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update {
                 it.copy(
                     currentStep = WizardStep.GENERATING_SYLLABUS,
@@ -100,56 +124,73 @@ class DiagnosticWizardViewModel @Inject constructor(
                 )
             }
 
-            // Combine chip selections and custom text answers
-            val compiledAnswers = mutableMapOf<String, List<String>>()
-            state.questions.forEach { q ->
-                val selected = state.selectedAnswers[q.id].orEmpty().toMutableList()
-                val custom = state.customTextAnswers[q.id]?.trim().orEmpty()
-                if (custom.isNotBlank()) {
-                    selected.add("Self note: $custom")
+            try {
+                // Combine chip selections and custom text answers
+                val compiledAnswers = mutableMapOf<String, List<String>>()
+                state.questions.forEach { q ->
+                    val selected = state.selectedAnswers[q.id].orEmpty().toMutableList()
+                    val custom = state.customTextAnswers[q.id]?.trim().orEmpty()
+                    if (custom.isNotBlank()) {
+                        selected.add("Self note: $custom")
+                    }
+                    if (selected.isNotEmpty()) {
+                        compiledAnswers[q.question] = selected
+                    }
                 }
-                if (selected.isNotEmpty()) {
-                    compiledAnswers[q.question] = selected
+
+                val result = aiLearningEngine.generateSyllabus(
+                    topic = state.topic,
+                    userLevel = state.userLevel,
+                    answers = compiledAnswers
+                )
+
+                result.fold(
+                    onSuccess = { syllabus ->
+                        _uiState.update {
+                            it.copy(
+                                generatedSyllabus = syllabus,
+                                currentStep = WizardStep.REVIEW_SYLLABUS,
+                                isBusy = false
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                currentStep = WizardStep.ANSWERING_QUESTIONS,
+                                isBusy = false,
+                                errorMessage = error.localizedMessage ?: "Failed to generate syllabus."
+                            )
+                        }
+                    }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        currentStep = WizardStep.ANSWERING_QUESTIONS,
+                        isBusy = false,
+                        errorMessage = e.localizedMessage ?: "Failed to generate syllabus."
+                    )
                 }
             }
-
-            val result = aiLearningEngine.generateSyllabus(
-                topic = state.topic,
-                userLevel = state.userLevel,
-                answers = compiledAnswers
-            )
-
-            result.fold(
-                onSuccess = { syllabus ->
-                    _uiState.update {
-                        it.copy(
-                            generatedSyllabus = syllabus,
-                            currentStep = WizardStep.REVIEW_SYLLABUS,
-                            isBusy = false
-                        )
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            currentStep = WizardStep.ANSWERING_QUESTIONS,
-                            isBusy = false,
-                            errorMessage = error.localizedMessage ?: "Failed to generate syllabus."
-                        )
-                    }
-                }
-            )
         }
     }
 
     fun saveAndStartCourse(onSuccess: (String) -> Unit) {
-        val syllabus = _uiState.value.generatedSyllabus ?: return
-        viewModelScope.launch {
+        val baseSyllabus = _uiState.value.generatedSyllabus ?: return
+        val syllabus = baseSyllabus.copy(userLevel = _uiState.value.userLevel)
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isBusy = true, errorMessage = null) }
             try {
                 val pathId = aiLearningEngine.persistGeneratedSyllabus(syllabus)
                 _uiState.update { it.copy(isBusy = false, createdPathId = pathId) }
-                onSuccess(pathId)
+                kotlinx.coroutines.withContext(Dispatchers.Main) {
+                    onSuccess(pathId)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(

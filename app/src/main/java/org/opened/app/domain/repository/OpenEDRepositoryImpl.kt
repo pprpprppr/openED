@@ -74,6 +74,21 @@ class OpenEDRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun appendModulesWithChapters(
+        pathId: String,
+        modulesWithChapters: List<Pair<ModuleEntity, List<ChapterEntity>>>
+    ) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                for ((module, chapters) in modulesWithChapters) {
+                    moduleDao.insert(module)
+                    chapterDao.insertAll(chapters)
+                }
+            }
+            recalculatePathProgress(pathId)
+        }
+    }
+
     override suspend fun deleteStudyPath(pathId: String) {
         withContext(Dispatchers.IO) {
             studyPathDao.deleteById(pathId)

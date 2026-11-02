@@ -33,6 +33,7 @@ object DatabaseModule {
             OpenEDDatabase.DATABASE_NAME
         )
             .addMigrations(OpenEDDatabase.MIGRATION_1_2)
+            .fallbackToDestructiveMigration()
             .build()
     }
 

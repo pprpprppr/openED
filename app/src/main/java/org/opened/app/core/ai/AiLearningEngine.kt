@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -24,7 +23,7 @@ import javax.inject.Singleton
 
 @Singleton
 class AiLearningEngine @Inject constructor(
-    private val geminiApiClient: GeminiApiClient,
+    private val multiAiClient: MultiAiClient,
     private val repository: OpenEDRepository,
     private val preferencesRepository: UserPreferencesRepository
 ) {
@@ -34,25 +33,33 @@ class AiLearningEngine @Inject constructor(
         coerceInputValues = true
     }
 
+    private fun getEffectiveSystemInstruction(baseInstruction: String, userLevel: String): String {
+        val levelNormalized = userLevel.trim().lowercase()
+        val isBeginner = levelNormalized.contains("begin") || levelNormalized.contains("found") ||
+                levelNormalized.contains("intro") || levelNormalized.contains("novice") ||
+                (!levelNormalized.contains("intermed") && !levelNormalized.contains("adv") && !levelNormalized.contains("expert"))
+
+        return if (isBeginner) {
+            """
+CRITICAL PEDAGOGY RULE: The learner is a COMPLETE BEGINNER. Override any general instructions asking for mathematical rigor or deep internals. Use plain, everyday English, zero unexplained jargon, relatable analogies, and gradual step-by-step examples.
+
+$baseInstruction
+""".trimIndent()
+        } else {
+            baseInstruction
+        }
+    }
+
     suspend fun generateDiagnosticQuestions(topic: String): Result<List<DiagnosticQuestion>> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
             val prompt = Prompts.diagnosticInterviewPrompt(topic)
 
-            val request = GeminiGenerateRequest(
-                contents = listOf(
-                    GeminiContent(parts = listOf(GeminiPart(text = prompt)))
-                ),
-                systemInstruction = GeminiContent(
-                    parts = listOf(GeminiPart(text = prefs.customSystemInstructions))
-                ),
-                generationConfig = GeminiGenerationConfig(
-                    responseMimeType = "application/json",
-                    temperature = 0.4f
-                )
+            val rawOutput = multiAiClient.generateContent(
+                systemInstruction = prefs.customSystemInstructions,
+                prompt = prompt,
+                isJson = true
             )
-
-            val rawOutput = geminiApiClient.generateContent(prefs.selectedModel, request)
             val cleanedJson = cleanJsonOutput(rawOutput)
             val response = json.decodeFromString(DiagnosticQuestionsResponse.serializer(), cleanedJson)
             response.questions
@@ -72,23 +79,16 @@ class AiLearningEngine @Inject constructor(
                 summaryBuilder.append("- $q: ${ansList.joinToString(", ")}\n")
             }
 
-            val prompt = Prompts.syllabusGenerationPrompt(topic, summaryBuilder.toString())
-            val request = GeminiGenerateRequest(
-                contents = listOf(
-                    GeminiContent(parts = listOf(GeminiPart(text = prompt)))
-                ),
-                systemInstruction = GeminiContent(
-                    parts = listOf(GeminiPart(text = prefs.customSystemInstructions))
-                ),
-                generationConfig = GeminiGenerationConfig(
-                    responseMimeType = "application/json",
-                    temperature = 0.5f
-                )
+            val prompt = Prompts.syllabusGenerationPrompt(topic, userLevel, summaryBuilder.toString())
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, userLevel)
+            val rawOutput = multiAiClient.generateContent(
+                systemInstruction = effectiveSystemInstruction,
+                prompt = prompt,
+                isJson = true
             )
-
-            val rawOutput = geminiApiClient.generateContent(prefs.selectedModel, request)
             val cleanedJson = cleanJsonOutput(rawOutput)
-            json.decodeFromString(SyllabusResponse.serializer(), cleanedJson)
+            val parsed = json.decodeFromString(SyllabusResponse.serializer(), cleanedJson)
+            parsed.copy(userLevel = userLevel.ifBlank { parsed.userLevel })
         }
     }
 
@@ -98,7 +98,7 @@ class AiLearningEngine @Inject constructor(
             id = pathId,
             title = syllabus.title,
             topic = syllabus.topic,
-            userLevel = syllabus.userLevel,
+            userLevel = syllabus.userLevel.ifBlank { "BEGINNER" },
             learningGoalsJson = json.encodeToString(syllabus.prerequisites),
             progress = 0f
         )
@@ -134,7 +134,67 @@ class AiLearningEngine @Inject constructor(
         pathId
     }
 
-    fun streamChapterContent(chapterId: String): Flow<String> = flow {
+    suspend fun expandCourseSyllabus(pathId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val pathWithModules = requireNotNull(repository.getStudyPathWithModules(pathId)) { "Course not found: $pathId" }
+            val prefs = preferencesRepository.userPreferencesFlow.first()
+            val studyPath = pathWithModules.studyPath
+
+            val existingOutline = pathWithModules.sortedModules.map { modWithChapters ->
+                modWithChapters.module.title to modWithChapters.sortedChapters.map { it.title }
+            }
+
+            val prompt = Prompts.expandCoursePrompt(
+                courseTitle = studyPath.title,
+                topic = studyPath.topic,
+                userLevel = studyPath.userLevel,
+                existingModulesWithChapters = existingOutline
+            )
+
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, studyPath.userLevel)
+            val rawOutput = multiAiClient.generateContent(
+                systemInstruction = effectiveSystemInstruction,
+                prompt = prompt,
+                isJson = true
+            )
+            val cleanedJson = cleanJsonOutput(rawOutput)
+            val response = json.decodeFromString(ExpandCourseResponse.serializer(), cleanedJson)
+
+            val currentModuleCount = pathWithModules.modules.size
+            val newModulesWithChapters = mutableListOf<Pair<ModuleEntity, List<ChapterEntity>>>()
+
+            response.modules.take(2).forEachIndexed { index, modItem ->
+                val newOrderIndex = currentModuleCount + index
+                val moduleId = UUID.randomUUID().toString()
+                val moduleEntity = ModuleEntity(
+                    id = moduleId,
+                    pathId = pathId,
+                    title = modItem.title,
+                    orderIndex = newOrderIndex,
+                    summary = modItem.summary
+                )
+                val chapterEntities = modItem.chapters.mapIndexed { chIndex, chItem ->
+                    ChapterEntity(
+                        id = UUID.randomUUID().toString(),
+                        moduleId = moduleId,
+                        pathId = pathId,
+                        title = chItem.title,
+                        orderIndex = chIndex,
+                        markdownContent = "",
+                        summary = chItem.summary,
+                        status = ChapterStatus.PENDING
+                    )
+                }
+                newModulesWithChapters.add(Pair(moduleEntity, chapterEntities))
+            }
+
+            if (newModulesWithChapters.isNotEmpty()) {
+                repository.appendModulesWithChapters(pathId, newModulesWithChapters)
+            }
+        }
+    }
+
+    fun streamChapterContent(chapterId: String, userLevelOverride: String? = null): Flow<String> = flow {
         val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found: $chapterId" }
         val pathWithModules = requireNotNull(repository.getStudyPathWithModules(chapter.pathId)) { "Path not found" }
         val currentModule = pathWithModules.modules.find { it.module.id == chapter.moduleId }?.module
@@ -143,13 +203,23 @@ class AiLearningEngine @Inject constructor(
             .filter { it.id != chapterId }
             .map { it.title }
 
+        if (chapter.markdownContent.isNotBlank()) {
+            repository.addChapterRevision(
+                chapterId = chapterId,
+                previousMarkdown = chapter.markdownContent,
+                changeReason = "Pre-regeneration backup snapshot"
+            )
+        }
+
         repository.updateChapterStatus(chapterId, ChapterStatus.GENERATING)
 
+        val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: pathWithModules.studyPath.userLevel
         val prefs = preferencesRepository.userPreferencesFlow.first()
+        val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel)
         val prompt = Prompts.chapterContentPrompt(
             courseTitle = pathWithModules.studyPath.title,
             topic = pathWithModules.studyPath.topic,
-            userLevel = pathWithModules.studyPath.userLevel,
+            userLevel = effectiveUserLevel,
             moduleTitle = currentModule?.title ?: "Module",
             chapterTitle = chapter.title,
             chapterSummary = chapter.summary,
@@ -157,21 +227,12 @@ class AiLearningEngine @Inject constructor(
             otherChapterTitles = allOtherChapterTitles
         )
 
-        val request = GeminiGenerateRequest(
-            contents = listOf(
-                GeminiContent(parts = listOf(GeminiPart(text = prompt)))
-            ),
-            systemInstruction = GeminiContent(
-                parts = listOf(GeminiPart(text = prefs.customSystemInstructions))
-            ),
-            generationConfig = GeminiGenerationConfig(
-                temperature = 0.7f
-            )
-        )
-
         val accumulatedText = StringBuilder()
         try {
-            geminiApiClient.streamGenerateContent(prefs.selectedModel, request).collect { chunk ->
+            multiAiClient.streamGenerateContent(
+                systemInstruction = effectiveSystemInstruction,
+                prompt = prompt
+            ).collect { chunk ->
                 accumulatedText.append(chunk)
                 emit(chunk)
             }
@@ -180,40 +241,45 @@ class AiLearningEngine @Inject constructor(
             if (finalMarkdown.isNotEmpty()) {
                 repository.updateChapterContent(chapterId, finalMarkdown, ChapterStatus.COMPLETED)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
             throw e
+        } finally {
+            if (accumulatedText.toString().trim().isBlank()) {
+                repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
+            }
         }
-    }.flowOn(Dispatchers.IO)
+    }
 
     suspend fun refineChapterContent(
         chapterId: String,
         selectedText: String,
         action: RefineAction,
-        customInstruction: String? = null
+        customInstruction: String? = null,
+        userLevelOverride: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
+            val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
+            val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: (studyPath?.userLevel ?: "BEGINNER")
             val prefs = preferencesRepository.userPreferencesFlow.first()
+            val effectiveSystemInstruction = getEffectiveSystemInstruction(prefs.customSystemInstructions, effectiveUserLevel)
 
             val prompt = Prompts.inlineRefinePrompt(
                 chapterContext = chapter.markdownContent,
                 selectedText = selectedText,
                 action = action,
-                customInstruction = customInstruction
+                customInstruction = customInstruction,
+                userLevel = effectiveUserLevel
             )
 
-            val request = GeminiGenerateRequest(
-                contents = listOf(
-                    GeminiContent(parts = listOf(GeminiPart(text = prompt)))
-                ),
-                systemInstruction = GeminiContent(
-                    parts = listOf(GeminiPart(text = prefs.customSystemInstructions))
-                ),
-                generationConfig = GeminiGenerationConfig(temperature = 0.4f)
-            )
-
-            val replacement = geminiApiClient.generateContent(prefs.selectedModel, request).trim()
+            val replacement = multiAiClient.generateContent(
+                systemInstruction = effectiveSystemInstruction,
+                prompt = prompt,
+                isJson = false
+            ).trim()
 
             // Save previous version to history
             val reasonLabel = when (action) {
@@ -228,7 +294,7 @@ class AiLearningEngine @Inject constructor(
             val updatedContent = if (selectedText.isNotBlank() && chapter.markdownContent.contains(selectedText)) {
                 chapter.markdownContent.replace(selectedText, replacement)
             } else {
-                "${chapter.markdownContent}\n\n$replacement"
+                replacement
             }
 
             repository.updateChapterContent(chapterId, updatedContent, ChapterStatus.COMPLETED)
@@ -250,17 +316,11 @@ class AiLearningEngine @Inject constructor(
                 userQuestion = question
             )
 
-            val request = GeminiGenerateRequest(
-                contents = listOf(
-                    GeminiContent(parts = listOf(GeminiPart(text = prompt)))
-                ),
-                systemInstruction = GeminiContent(
-                    parts = listOf(GeminiPart(text = prefs.customSystemInstructions))
-                ),
-                generationConfig = GeminiGenerationConfig(temperature = 0.5f)
-            )
-
-            val answer = geminiApiClient.generateContent(prefs.selectedModel, request).trim()
+            val answer = multiAiClient.generateContent(
+                systemInstruction = prefs.customSystemInstructions,
+                prompt = prompt,
+                isJson = false
+            ).trim()
             repository.addChapterQa(chapterId, question, answer)
         }
     }
@@ -306,11 +366,11 @@ class AiLearningEngine @Inject constructor(
             val prefs = preferencesRepository.userPreferencesFlow.first()
 
             val prompt = Prompts.generateFlashcardsPrompt(chapter.title, chapter.markdownContent)
-            val request = GeminiGenerateRequest(
-                contents = listOf(GeminiContent(parts = listOf(GeminiPart(text = prompt)))),
-                generationConfig = GeminiGenerationConfig(responseMimeType = "application/json", temperature = 0.4f)
+            val raw = multiAiClient.generateContent(
+                systemInstruction = prefs.customSystemInstructions,
+                prompt = prompt,
+                isJson = true
             )
-            val raw = geminiApiClient.generateContent(prefs.selectedModel, request)
             val cleaned = cleanJsonOutput(raw)
             val response = json.decodeFromString(FlashcardGenerationResponse.serializer(), cleaned)
 
@@ -340,40 +400,21 @@ class AiLearningEngine @Inject constructor(
      */
     suspend fun reviewFlashcard(card: FlashcardEntity, quality: Int): Result<FlashcardEntity> = withContext(Dispatchers.IO) {
         runCatching {
-            val (newInterval, newEase, newReps) = sm2Step(
+            val schedule = org.opened.app.core.learning.FlashcardScheduler.calculateNextReview(
                 repetitions = card.repetitions,
                 intervalDays = card.intervalDays,
                 easeFactor = card.easeFactor,
                 quality = quality
             )
-            val nextReview = System.currentTimeMillis() + newInterval * 24L * 60L * 60L * 1000L
+            val nextReview = System.currentTimeMillis() + schedule.intervalDays * 24L * 60L * 60L * 1000L
             val updated = card.copy(
-                intervalDays = newInterval,
-                easeFactor = newEase,
-                repetitions = newReps,
+                intervalDays = schedule.intervalDays,
+                easeFactor = schedule.easeFactor,
+                repetitions = schedule.repetitions,
                 nextReviewTimestamp = nextReview
             )
             repository.updateFlashcard(updated)
             updated
-        }
-    }
-
-    private data class SM2Result(val interval: Int, val easeFactor: Float, val repetitions: Int)
-
-    private fun sm2Step(repetitions: Int, intervalDays: Int, easeFactor: Float, quality: Int): SM2Result {
-        // quality: 0=Again(<0.6), 1=Hard(0.6), 2=Good(0.8), 3=Easy(1.0) mapped to SM-2 q 0..5
-        val q = (quality * 1.67f).toInt().coerceIn(0, 5)
-        return if (q < 3) {
-            // Failed — reset
-            SM2Result(interval = 1, easeFactor = easeFactor, repetitions = 0)
-        } else {
-            val newEase = (easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))).toFloat().coerceAtLeast(1.3f)
-            val newInterval = when (repetitions) {
-                0 -> 1
-                1 -> 6
-                else -> (intervalDays * newEase).toInt().coerceAtLeast(1)
-            }
-            SM2Result(interval = newInterval, easeFactor = newEase, repetitions = repetitions + 1)
         }
     }
 
@@ -388,11 +429,11 @@ class AiLearningEngine @Inject constructor(
             val prefs = preferencesRepository.userPreferencesFlow.first()
 
             val prompt = Prompts.adaptiveQuizPrompt(chapter.title, chapter.markdownContent)
-            val request = GeminiGenerateRequest(
-                contents = listOf(GeminiContent(parts = listOf(GeminiPart(text = prompt)))),
-                generationConfig = GeminiGenerationConfig(responseMimeType = "application/json", temperature = 0.5f)
+            val raw = multiAiClient.generateContent(
+                systemInstruction = prefs.customSystemInstructions,
+                prompt = prompt,
+                isJson = true
             )
-            val raw = geminiApiClient.generateContent(prefs.selectedModel, request)
             val cleaned = cleanJsonOutput(raw)
             json.decodeFromString(AdaptiveQuizResponse.serializer(), cleaned)
         }
@@ -411,11 +452,11 @@ class AiLearningEngine @Inject constructor(
             val prefs = preferencesRepository.userPreferencesFlow.first()
 
             val prompt = Prompts.feynmanEvaluationPrompt(chapter.title, chapter.markdownContent, userExplanation)
-            val request = GeminiGenerateRequest(
-                contents = listOf(GeminiContent(parts = listOf(GeminiPart(text = prompt)))),
-                generationConfig = GeminiGenerationConfig(responseMimeType = "application/json", temperature = 0.4f)
+            val raw = multiAiClient.generateContent(
+                systemInstruction = prefs.customSystemInstructions,
+                prompt = prompt,
+                isJson = true
             )
-            val raw = geminiApiClient.generateContent(prefs.selectedModel, request)
             val cleaned = cleanJsonOutput(raw)
             json.decodeFromString(FeynmanEvaluationResponse.serializer(), cleaned)
         }

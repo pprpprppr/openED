@@ -138,13 +138,16 @@ fun RevisionHistoryBottomSheet(
                     }
                 }
             } else {
+                val sortedRevisions = remember(revisions) {
+                    revisions.sortedByDescending { it.timestamp }
+                }
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 500.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(revisions.sortedByDescending { it.timestamp }) { rev ->
+                    items(sortedRevisions, key = { it.id }) { rev ->
                         RevisionCard(
                             revision = rev,
                             onRestoreClick = { revisionToRestore = rev }

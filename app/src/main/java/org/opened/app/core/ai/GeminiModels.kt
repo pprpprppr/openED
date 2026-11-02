@@ -88,6 +88,11 @@ data class SyllabusResponse(
     val modules: List<SyllabusModuleItem>
 )
 
+@Serializable
+data class ExpandCourseResponse(
+    val modules: List<SyllabusModuleItem> = emptyList()
+)
+
 enum class RefineAction {
     SIMPLIFY,
     ADD_CODE_MATH,

@@ -52,7 +52,7 @@ fun InteractiveMarkdownText(
 
             annotatedString.getStringAnnotations(tag = TAG_URL_LINK, start = offset, end = offset)
                 .firstOrNull()?.let { annotation ->
-                    // Could open external URL
+                    // External link handling
                 }
         }
     )
@@ -69,16 +69,26 @@ fun buildInteractiveAnnotatedString(
         // 1. [[Wiki Links]]
         // 2. [Markdown Links](url)
         // 3. `inline code`
-        // 4. $inline math$
+        // 4. $inline math$ (handling nested braces)
         // 5. **bold**
         // 6. *italic*
         val tokenRegex = Regex("""(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)""")
         var lastIndex = 0
 
+        fun appendCleanedText(raw: String) {
+            // Never allow raw LaTeX leaks or stray braces in body text
+            val cleaned = if (raw.contains('\\') || (raw.contains('{') && raw.contains('}'))) {
+                LatexParser.cleanInlineLatex(raw)
+            } else {
+                raw
+            }
+            append(cleaned)
+        }
+
         for (match in tokenRegex.findAll(text)) {
             // Append plain text before match
             if (match.range.first > lastIndex) {
-                append(text.substring(lastIndex, match.range.first))
+                appendCleanedText(text.substring(lastIndex, match.range.first))
             }
 
             val fullMatch = match.value
@@ -134,11 +144,11 @@ fun buildInteractiveAnnotatedString(
                 // $inline math$
                 fullMatch.startsWith("$") && fullMatch.endsWith("$") && fullMatch.length > 2 -> {
                     val mathExpr = match.groupValues[9]
-                    val formatted = formatLatexForDisplay(mathExpr)
+                    val formatted = LatexParser.cleanInlineLatex(mathExpr)
                     pushStyle(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
-                            color = Color(0xFF6366F1),
+                            color = Color(0xFF818CF8),
                             fontWeight = FontWeight.Medium,
                             fontSize = 15.sp
                         )
@@ -169,7 +179,7 @@ fun buildInteractiveAnnotatedString(
 
         // Append remaining text
         if (lastIndex < text.length) {
-            append(text.substring(lastIndex))
+            appendCleanedText(text.substring(lastIndex))
         }
     }
 }

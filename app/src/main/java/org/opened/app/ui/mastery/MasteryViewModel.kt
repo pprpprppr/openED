@@ -3,6 +3,8 @@ package org.opened.app.ui.mastery
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +41,17 @@ class MasteryViewModel @Inject constructor(
     private val repository: OpenEDRepository
 ) : ViewModel() {
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        if (throwable is kotlinx.coroutines.CancellationException) return@CoroutineExceptionHandler
+        _uiState.update {
+            it.copy(
+                quizLoading = false,
+                feynmanLoading = false,
+                errorMessage = throwable.localizedMessage ?: "Failed to process mastery challenge."
+            )
+        }
+    }
+
     private val _uiState = MutableStateFlow(MasteryUiState())
     val uiState: StateFlow<MasteryUiState> = _uiState.asStateFlow()
 
@@ -47,15 +60,21 @@ class MasteryViewModel @Inject constructor(
     fun selectTab(index: Int) = _uiState.update { it.copy(selectedTabIndex = index) }
 
     fun generateQuiz(chapterId: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(quizLoading = true, errorMessage = null, quizResult = null, quizSubmitted = false, quizAnswers = emptyMap()) }
-            aiEngine.generateAdaptiveQuiz(chapterId)
-                .onSuccess { quiz ->
-                    _uiState.update { it.copy(quizLoading = false, quizResult = quiz) }
-                }
-                .onFailure { e ->
-                    _uiState.update { it.copy(quizLoading = false, errorMessage = e.message ?: "Failed to generate quiz") }
-                }
+            try {
+                aiEngine.generateAdaptiveQuiz(chapterId)
+                    .onSuccess { quiz ->
+                        _uiState.update { it.copy(quizLoading = false, quizResult = quiz) }
+                    }
+                    .onFailure { e ->
+                        _uiState.update { it.copy(quizLoading = false, errorMessage = e.message ?: "Failed to generate quiz") }
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(quizLoading = false, errorMessage = e.localizedMessage ?: "Failed to generate quiz") }
+            }
         }
     }
 
@@ -73,15 +92,21 @@ class MasteryViewModel @Inject constructor(
         val score = if (quiz.questions.isEmpty()) 0 else (correctCount * 100) / quiz.questions.size
         _uiState.update { it.copy(quizSubmitted = true, quizScore = score) }
 
-        viewModelScope.launch {
-            val entity = MasteryQuizEntity(
-                id = UUID.randomUUID().toString(),
-                chapterId = chapterId,
-                quizType = "QUIZ",
-                sessionDataJson = json.encodeToString(quiz),
-                score = score
-            )
-            repository.saveMasteryQuiz(entity)
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                val entity = MasteryQuizEntity(
+                    id = UUID.randomUUID().toString(),
+                    chapterId = chapterId,
+                    quizType = "QUIZ",
+                    sessionDataJson = json.encodeToString(quiz),
+                    score = score
+                )
+                repository.saveMasteryQuiz(entity)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to save quiz result.") }
+            }
         }
     }
 
@@ -90,25 +115,39 @@ class MasteryViewModel @Inject constructor(
     fun evaluateFeynman(chapterId: String) {
         val text = _uiState.value.feynmanText.trim()
         if (text.isBlank()) return
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(feynmanLoading = true, errorMessage = null, feynmanResult = null) }
-            aiEngine.evaluateFeynmanExplanation(chapterId, text)
-                .onSuccess { result ->
-                    _uiState.update { it.copy(feynmanLoading = false, feynmanResult = result) }
-                    val entity = MasteryQuizEntity(
-                        id = UUID.randomUUID().toString(),
-                        chapterId = chapterId,
-                        quizType = "FEYNMAN",
-                        sessionDataJson = json.encodeToString(result),
-                        score = result.score
-                    )
-                    repository.saveMasteryQuiz(entity)
-                }
-                .onFailure { e ->
-                    _uiState.update { it.copy(feynmanLoading = false, errorMessage = e.message ?: "Evaluation failed") }
-                }
+            try {
+                aiEngine.evaluateFeynmanExplanation(chapterId, text)
+                    .onSuccess { result ->
+                        _uiState.update { it.copy(feynmanLoading = false, feynmanResult = result) }
+                        val entity = MasteryQuizEntity(
+                            id = UUID.randomUUID().toString(),
+                            chapterId = chapterId,
+                            quizType = "FEYNMAN",
+                            sessionDataJson = json.encodeToString(result),
+                            score = result.score
+                        )
+                        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+                            try { repository.saveMasteryQuiz(entity) } catch (_: Exception) {}
+                        }
+                    }
+                    .onFailure { e ->
+                        _uiState.update { it.copy(feynmanLoading = false, errorMessage = e.message ?: "Failed to evaluate explanation") }
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(feynmanLoading = false, errorMessage = e.localizedMessage ?: "Failed to evaluate explanation") }
+            }
         }
     }
 
-    fun clearError() = _uiState.update { it.copy(errorMessage = null) }
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
 }

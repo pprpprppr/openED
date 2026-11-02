@@ -1,6 +1,9 @@
 package org.opened.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,11 +13,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material3.DividerDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -26,15 +32,50 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+
 sealed class MarkdownNode {
     data class Heading(val level: Int, val text: String) : MarkdownNode()
-    data class Code(val language: String, val content: String) : MarkdownNode()
-    data class Math(val expression: String) : MarkdownNode()
+    data class Code(val language: String, val content: String, val isComplete: Boolean = true) : MarkdownNode()
+    data class Math(val expression: String, val isComplete: Boolean = true) : MarkdownNode()
+    data class Diagram(val content: String, val isComplete: Boolean = true) : MarkdownNode()
+    data class Chart(val content: String, val isComplete: Boolean = true) : MarkdownNode()
+    data class Table(val headers: List<String>, val rows: List<List<String>>) : MarkdownNode()
     data class Callout(val type: CalloutType, val title: String?, val content: String) : MarkdownNode()
     data class Quote(val text: String) : MarkdownNode()
     data class ListItem(val ordered: Boolean, val number: Int, val text: String) : MarkdownNode()
     data class Paragraph(val text: String) : MarkdownNode()
     object Divider : MarkdownNode()
+}
+
+@Composable
+fun RenderingPlaceholderCard(
+    message: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), RoundedCornerShape(12.dp)),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }
 
 @Composable
@@ -44,7 +85,12 @@ fun RichMarkdownRenderer(
     modifier: Modifier = Modifier
 ) {
     val nodes = remember(markdown) {
-        parseMarkdown(markdown)
+        if (markdown.isBlank()) emptyList()
+        else runCatching { parseMarkdown(markdown) }.getOrElse { emptyList() }
+    }
+
+    if (nodes.isEmpty()) {
+        return
     }
 
     SelectionContainer(modifier = modifier) {
@@ -93,7 +139,29 @@ fun RichMarkdownRenderer(
 
                     is MarkdownNode.Math -> {
                         Spacer(modifier = Modifier.height(10.dp))
-                        MathBlockView(mathExpression = node.expression)
+                        MathBlockView(mathExpression = node.expression, isComplete = node.isComplete)
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    is MarkdownNode.Diagram -> {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        DiagramBlockView(diagramCode = node.content, isComplete = node.isComplete)
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    is MarkdownNode.Chart -> {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        ChartBlockView(chartCode = node.content, isComplete = node.isComplete)
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    is MarkdownNode.Table -> {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        TableBlockView(
+                            headers = node.headers,
+                            rows = node.rows,
+                            onChapterClick = onChapterClick
+                        )
                         Spacer(modifier = Modifier.height(10.dp))
                     }
 
@@ -192,7 +260,90 @@ fun RichMarkdownRenderer(
     }
 }
 
-private fun parseMarkdown(raw: String): List<MarkdownNode> {
+@Composable
+fun TableBlockView(
+    headers: List<String>,
+    rows: List<List<String>>,
+    onChapterClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (headers.isEmpty()) return
+    val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val headerBg = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+    val altRowBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(10.dp)),
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+        ) {
+            Column {
+                // Header Row
+                Row(
+                    modifier = Modifier
+                        .background(headerBg)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    headers.forEachIndexed { colIdx, header ->
+                        Box(
+                            modifier = Modifier
+                                .width(150.dp)
+                                .padding(horizontal = 6.dp)
+                        ) {
+                            Text(
+                                text = header,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = borderColor, thickness = 1.dp)
+
+                // Rows
+                rows.forEachIndexed { rowIdx, rowCols ->
+                    val bg = if (rowIdx % 2 == 1) altRowBg else Color.Transparent
+                    Row(
+                        modifier = Modifier
+                            .background(bg)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        headers.indices.forEach { colIdx ->
+                            val cellText = rowCols.getOrNull(colIdx) ?: ""
+                            Box(
+                                modifier = Modifier
+                                    .width(150.dp)
+                                    .padding(horizontal = 6.dp)
+                            ) {
+                                InteractiveMarkdownText(
+                                    text = cellText,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    }
+                    if (rowIdx < rows.size - 1) {
+                        HorizontalDivider(color = borderColor.copy(alpha = 0.5f), thickness = 0.5.dp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
     val nodes = mutableListOf<MarkdownNode>()
     val lines = raw.lines()
     var i = 0
@@ -213,17 +364,27 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> {
             continue
         }
 
-        // Code block
+        // Code, Diagram, or Chart block
         if (trimmed.startsWith("```")) {
             val language = trimmed.removePrefix("```").trim()
             val codeLines = mutableListOf<String>()
             i++
-            while (i < lines.size && !lines[i].trim().startsWith("```")) {
+            var closed = false
+            while (i < lines.size) {
+                if (lines[i].trim().startsWith("```")) {
+                    closed = true
+                    i++ // skip closing fence
+                    break
+                }
                 codeLines.add(lines[i])
                 i++
             }
-            if (i < lines.size) i++ // skip closing fence
-            nodes.add(MarkdownNode.Code(language = language, content = codeLines.joinToString("\n")))
+            val content = codeLines.joinToString("\n")
+            when (language.lowercase()) {
+                "mermaid", "diagram" -> nodes.add(MarkdownNode.Diagram(content, isComplete = closed))
+                "chart", "plot" -> nodes.add(MarkdownNode.Chart(content, isComplete = closed))
+                else -> nodes.add(MarkdownNode.Code(language = language, content = content, isComplete = closed))
+            }
             continue
         }
 
@@ -232,22 +393,47 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> {
             val mathLines = mutableListOf<String>()
             if (trimmed.endsWith("$$") && trimmed.length > 2) {
                 // single line math block
-                nodes.add(MarkdownNode.Math(trimmed.removePrefix("$$").removeSuffix("$$").trim()))
+                nodes.add(MarkdownNode.Math(trimmed.removePrefix("$$").removeSuffix("$$").trim(), isComplete = true))
                 i++
                 continue
             }
             mathLines.add(trimmed.removePrefix("$$"))
             i++
-            while (i < lines.size && !lines[i].trim().endsWith("$$")) {
+            var closed = false
+            while (i < lines.size) {
+                if (lines[i].trim().endsWith("$$")) {
+                    mathLines.add(lines[i].trim().removeSuffix("$$"))
+                    closed = true
+                    i++
+                    break
+                }
                 mathLines.add(lines[i])
                 i++
             }
-            if (i < lines.size) {
-                mathLines.add(lines[i].trim().removeSuffix("$$"))
-                i++
-            }
-            nodes.add(MarkdownNode.Math(mathLines.joinToString("\n").trim()))
+            nodes.add(MarkdownNode.Math(mathLines.joinToString("\n").trim(), isComplete = closed))
             continue
+        }
+
+        // Markdown Table: | Header 1 | Header 2 |
+        if (trimmed.startsWith("|") && trimmed.endsWith("|") && i + 1 < lines.size) {
+            val nextTrimmed = lines[i + 1].trim()
+            if (nextTrimmed.startsWith("|") && nextTrimmed.contains("---")) {
+                val headers = trimmed.split("|")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                i += 2 // skip header and delimiter
+
+                val rows = mutableListOf<List<String>>()
+                while (i < lines.size && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+                    val cells = lines[i].trim().split("|")
+                        .map { it.trim() }
+                        .filterIndexed { index, _ -> index > 0 && index <= headers.size }
+                    rows.add(cells)
+                    i++
+                }
+                nodes.add(MarkdownNode.Table(headers = headers, rows = rows))
+                continue
+            }
         }
 
         // Callout Alert: > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
@@ -324,6 +510,7 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> {
             !lines[i].trim().startsWith(">") &&
             !lines[i].trim().startsWith("- ") &&
             !lines[i].trim().startsWith("* ") &&
+            !(lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) &&
             !Regex("""^(\d+)\.\s+(.*)""").matches(lines[i].trim()) &&
             lines[i].trim() != "---"
         ) {
@@ -335,5 +522,5 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> {
         }
     }
 
-    return nodes
-}
+    nodes
+}.getOrElse { emptyList() }

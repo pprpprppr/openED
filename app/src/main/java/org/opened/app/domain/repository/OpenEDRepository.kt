@@ -23,6 +23,10 @@ interface OpenEDRepository {
         path: StudyPathEntity,
         modulesWithChapters: List<Pair<ModuleEntity, List<ChapterEntity>>>
     )
+    suspend fun appendModulesWithChapters(
+        pathId: String,
+        modulesWithChapters: List<Pair<ModuleEntity, List<ChapterEntity>>>
+    )
     suspend fun deleteStudyPath(pathId: String)
 
     fun getChapterWithDetailsFlow(chapterId: String): Flow<ChapterWithDetails?>

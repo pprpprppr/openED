@@ -40,6 +40,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -196,14 +199,53 @@ private fun EnterTopicContent(
             text = "Enter any field, skill, or discipline. openED's AI will conduct a quick diagnostic interview to customize your curriculum.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 18.dp)
+            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
         )
+
+        Text(
+            text = "DIFFICULTY LEVEL",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.5.sp
+        )
+        Spacer(modifier = Modifier.height(6.dp))
+
+        val levelOptions = listOf(
+            "BEGINNER" to "🌱 Beginner\n(From Scratch)",
+            "INTERMEDIATE" to "⚡ Intermediate\n(Practical)",
+            "ADVANCED" to "🔬 Advanced\n(Deep Dive)"
+        )
+
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            levelOptions.forEachIndexed { index, (lvl, label) ->
+                val selected = userLevel.equals(lvl, ignoreCase = true)
+                SegmentedButton(
+                    selected = selected,
+                    onClick = { onLevelChange(lvl) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = levelOptions.size),
+                    icon = { SegmentedButtonDefaults.Icon(active = selected) }
+                ) {
+                    Text(
+                        text = label,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 2
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = topic,
             onValueChange = onTopicChange,
             label = { Text("Topic or Subject") },
-            placeholder = { Text("e.g. eBPF Kernel Programming") },
+            placeholder = { Text("e.g. Python Programming, eBPF Kernel") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             isError = errorMessage != null
@@ -246,46 +288,6 @@ private fun EnterTopicContent(
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                     )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "YOUR BASELINE FAMILIARITY",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.5.sp
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("BEGINNER", "INTERMEDIATE", "ADVANCED").forEach { level ->
-                val selected = userLevel == level
-                Surface(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { onLevelChange(level) },
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = level,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
             }
         }

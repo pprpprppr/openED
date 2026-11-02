@@ -1,5 +1,6 @@
 package org.opened.app.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -54,7 +56,7 @@ fun InlineRefineBottomSheet(
     selectedSnippet: String,
     isRefining: Boolean,
     onDismiss: () -> Unit,
-    onApplyRefinement: (RefineAction, String?) -> Unit
+    onApplyRefinement: (String, RefineAction, String?) -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedAction by remember { mutableStateOf(RefineAction.SIMPLIFY) }
@@ -98,7 +100,65 @@ fun InlineRefineBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 1-Tap Depth Level Switcher
+            Text(
+                text = "DEPTH LEVEL SWITCHER (ONE-TAP CONVERSION)",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                DepthPresetCard(
+                    title = "🌱 Explain for Beginners (Step-by-Step + Examples)",
+                    description = "Clear real-world analogies, zero obscure compiler/C internals, 3-4 code walkthroughs, visual diagram & pitfalls table.",
+                    isEnabled = !isRefining,
+                    onClick = {
+                        onApplyRefinement(
+                            "",
+                            RefineAction.CUSTOM,
+                            "Rewrite this entire chapter from zero assumptions for a beginner. Strictly forbid obscure compiler/C-struct internals. Start with a clear everyday real-world analogy. Include a simple ```diagram flowchart, 3 to 4 progressive well-commented code walkthroughs with inputs and outputs, and a common pitfalls section with a markdown table. Only use LaTeX math if it is a pure math topic."
+                        )
+                    }
+                )
+
+                DepthPresetCard(
+                    title = "⚡ Practical & Hands-On (More Code & Real-World Use Cases)",
+                    description = "Idiomatic patterns, realistic architectures, practical trade-offs, and production debugging scenarios.",
+                    isEnabled = !isRefining,
+                    onClick = {
+                        onApplyRefinement(
+                            "",
+                            RefineAction.CUSTOM,
+                            "Rewrite this chapter with a practical, hands-on focus. Include idiomatic patterns, real-world architecture, multiple concrete code examples solving realistic problems, and common production debugging scenarios."
+                        )
+                    }
+                )
+
+                DepthPresetCard(
+                    title = "🔬 Deep Technical Dive",
+                    description = "Under-the-hood systems internals, memory layout, algorithmic complexity proofs, and advanced scaling.",
+                    isEnabled = !isRefining,
+                    onClick = {
+                        onApplyRefinement(
+                            "",
+                            RefineAction.CUSTOM,
+                            "Rewrite this chapter as a deep technical dive. Explore under-the-hood systems architecture, memory layout, algorithmic complexity proofs, and advanced edge-case performance optimizations."
+                        )
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // Passage to refine (editable snippet)
             Text(
@@ -180,6 +240,7 @@ fun InlineRefineBottomSheet(
             Button(
                 onClick = {
                     onApplyRefinement(
+                        snippetText,
                         selectedAction,
                         if (selectedAction == RefineAction.CUSTOM) customPrompt else null
                     )
@@ -236,6 +297,38 @@ private fun RefineChip(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DepthPresetCard(
+    title: String,
+    description: String,
+    isEnabled: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        enabled = isEnabled,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

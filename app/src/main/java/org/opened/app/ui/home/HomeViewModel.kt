@@ -3,11 +3,14 @@ package org.opened.app.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -21,6 +24,17 @@ class HomeViewModel @Inject constructor(
     private val apiKeyStorage: SecureApiKeyStorage
 ) : ViewModel() {
 
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        if (throwable is kotlinx.coroutines.CancellationException) return@CoroutineExceptionHandler
+        _uiState.update {
+            it.copy(
+                errorMessage = throwable.localizedMessage ?: "An unexpected error occurred.",
+                isLoading = false,
+                isSearching = false
+            )
+        }
+    }
+
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
@@ -33,23 +47,53 @@ class HomeViewModel @Inject constructor(
     }
 
     fun checkApiKey() {
-        val hasKey = apiKeyStorage.hasApiKey()
-        _uiState.update { it.copy(hasApiKey = hasKey) }
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                val hasKey = apiKeyStorage.hasApiKey()
+                _uiState.update { it.copy(hasApiKey = hasKey) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to verify API key.") }
+            }
+        }
     }
 
     private fun loadStudyPaths() {
-        viewModelScope.launch {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isLoading = true) }
-            repository.getAllStudyPathsFlow().collectLatest { paths ->
-                _uiState.update { it.copy(studyPaths = paths, isLoading = false) }
+            try {
+                repository.getAllStudyPathsFlow()
+                    .catch { e ->
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage ?: "Failed to load courses.") }
+                    }
+                    .collectLatest { paths ->
+                        _uiState.update { it.copy(studyPaths = paths, isLoading = false) }
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.localizedMessage ?: "Failed to load courses.") }
             }
         }
     }
 
     private fun observeDueFlashcardCount() {
-        viewModelScope.launch {
-            repository.getDueFlashcardCount().collectLatest { count ->
-                _uiState.update { it.copy(dueFlashcardCount = count) }
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                repository.getDueFlashcardCount()
+                    .catch { e ->
+                        if (e is kotlinx.coroutines.CancellationException) throw e
+                        _uiState.update { it.copy(errorMessage = e.localizedMessage) }
+                    }
+                    .collectLatest { count ->
+                        _uiState.update { it.copy(dueFlashcardCount = count) }
+                    }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage) }
             }
         }
     }
@@ -63,11 +107,17 @@ class HomeViewModel @Inject constructor(
             return
         }
 
-        searchJob = viewModelScope.launch {
-            _uiState.update { it.copy(isSearching = true) }
-            delay(250)
-            val results = repository.search(query.trim())
-            _uiState.update { it.copy(searchResults = results, isSearching = false) }
+        searchJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                _uiState.update { it.copy(isSearching = true) }
+                delay(250)
+                val results = repository.search(query.trim())
+                _uiState.update { it.copy(searchResults = results, isSearching = false) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isSearching = false, errorMessage = e.localizedMessage ?: "Search failed.") }
+            }
         }
     }
 
@@ -77,9 +127,18 @@ class HomeViewModel @Inject constructor(
     }
 
     fun deleteStudyPath(pathId: String) {
-        viewModelScope.launch {
-            repository.deleteStudyPath(pathId)
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                repository.deleteStudyPath(pathId)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to delete course.") }
+            }
         }
     }
-}
 
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+}

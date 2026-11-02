@@ -9,30 +9,38 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Style
-import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -47,14 +55,17 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,7 +81,9 @@ import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.ui.components.InlineRefineBottomSheet
 import org.opened.app.ui.components.OutgoingBacklinksSection
 import org.opened.app.ui.components.RichMarkdownRenderer
+import org.opened.app.ui.components.SocraticQaBottomSheet
 import org.opened.app.ui.components.SocraticQaSection
+import org.opened.app.ui.flashcards.FlashcardDeckBottomSheet
 import org.opened.app.ui.mastery.MasteryBottomSheet
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,6 +99,7 @@ fun CourseWorkspaceScreen(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(pathId, initialChapterId) {
         viewModel.initWorkspace(pathId, initialChapterId)
@@ -110,9 +124,13 @@ fun CourseWorkspaceScreen(
             CourseTreeDrawer(
                 pathWithModules = uiState.pathWithModules,
                 activeChapterId = uiState.activeChapterId,
+                isExpandingCourse = uiState.isExpandingCourse,
                 onChapterSelect = { chapterId ->
-                    viewModel.selectChapter(chapterId)
                     scope.launch { drawerState.close() }
+                    viewModel.selectChapter(chapterId)
+                },
+                onExpandCourse = {
+                    viewModel.expandCourseSyllabus()
                 }
             )
         }
@@ -121,6 +139,7 @@ fun CourseWorkspaceScreen(
         val currentChapter = chapterDetails?.chapter
 
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.background.copy(alpha = 1f),
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
@@ -150,138 +169,85 @@ fun CourseWorkspaceScreen(
                         }
                     },
                     actions = {
-                        if (currentChapter != null && currentChapter.status == ChapterStatus.COMPLETED && !uiState.isStreaming) {
-                            IconButton(
-                                onClick = { viewModel.generateFlashcards() },
-                                enabled = !uiState.isGeneratingFlashcards
+                        if (currentChapter != null && currentChapter.markdownContent.isNotBlank() && !uiState.isStreaming) {
+                            // Flashcards BadgedBox icon
+                            BadgedBox(
+                                badge = {
+                                    if (uiState.chapterFlashcards.isNotEmpty()) {
+                                        Badge { Text(uiState.chapterFlashcards.size.toString()) }
+                                    }
+                                }
                             ) {
-                                if (uiState.isGeneratingFlashcards) {
-                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(imageVector = Icons.Default.Style, contentDescription = "Generate Flashcards")
+                                IconButton(
+                                    onClick = { viewModel.onFlashcardsClicked() },
+                                    enabled = !uiState.isGeneratingFlashcards
+                                ) {
+                                    if (uiState.isGeneratingFlashcards) {
+                                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(imageVector = Icons.Default.Style, contentDescription = "Flashcards")
+                                    }
                                 }
                             }
+
+                            // TTS VolumeUp toggle
                             IconButton(onClick = { viewModel.toggleTtsPlayer() }) {
                                 Icon(
-                                    imageVector = Icons.Default.VolumeUp,
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                     contentDescription = "Commute Audio Reader",
                                     tint = if (uiState.showTtsPlayer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                            IconButton(onClick = { viewModel.openRevisionSheet() }) {
-                                Icon(imageVector = Icons.Default.History, contentDescription = "Revision History")
-                            }
-                            IconButton(onClick = { viewModel.openRefineSheet() }) {
-                                Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = "Refine Passage")
-                            }
-                            IconButton(onClick = { viewModel.generateChapterContent() }) {
-                                Icon(imageVector = Icons.Default.Refresh, contentDescription = "Regenerate Content")
-                            }
-                        }
-                        IconButton(onClick = onNavigateBack) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back to Library")
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background
-                    )
-                )
-            },
-            bottomBar = {
-                // Floating Contextual Action Bar & TTS Mini Player
-                if (currentChapter != null && currentChapter.status == ChapterStatus.COMPLETED && !uiState.isStreaming) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        AnimatedVisibility(visible = uiState.showTtsPlayer) {
-                            TtsMiniPlayer(
-                                ttsState = ttsState,
-                                onPlay = { viewModel.ttsPlay() },
-                                onPause = { viewModel.ttsPause() },
-                                onResume = { viewModel.ttsResume() },
-                                onStop = { viewModel.ttsStop() },
-                                onSetSpeed = { viewModel.ttsSetSpeed(it) },
-                                onDismiss = { viewModel.toggleTtsPlayer() }
-                            )
-                        }
 
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            shape = RoundedCornerShape(16.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-                            tonalElevation = 6.dp
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    FilledTonalButton(
-                                        onClick = { viewModel.openRefineSheet() },
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Refine", style = MaterialTheme.typography.labelMedium)
-                                    }
-
-                                    FilledTonalButton(
-                                        onClick = { viewModel.openMasterySheet() },
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Mastery", style = MaterialTheme.typography.labelMedium)
-                                    }
+                            // MoreVert overflow menu containing History, Socratic Q&A, Refresh
+                            Box {
+                                IconButton(onClick = { showOverflowMenu = true }) {
+                                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More options")
                                 }
-
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = MaterialTheme.colorScheme.surface,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable { viewModel.openRevisionSheet() }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.History,
-                                                contentDescription = "Revision History",
-                                                modifier = Modifier.size(14.dp),
-                                                tint = MaterialTheme.colorScheme.primary
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = "Revisions (${chapterDetails.revisions.size})",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
+                                DropdownMenu(
+                                    expanded = showOverflowMenu,
+                                    onDismissRequest = { showOverflowMenu = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Revision History") },
+                                        leadingIcon = {
+                                            Icon(imageVector = Icons.Default.History, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            viewModel.openRevisionSheet()
                                         }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Q&As: ${chapterDetails.qas.size}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Socratic Q&A") },
+                                        leadingIcon = {
+                                            Icon(imageVector = Icons.AutoMirrored.Filled.Chat, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            viewModel.openSocraticQaSheet()
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Refresh Content") },
+                                        leadingIcon = {
+                                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            viewModel.generateChapterContent()
+                                        }
                                     )
                                 }
                             }
                         }
-                    }
-                }
-            }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background.copy(alpha = 1f)
+                    )
+                )
+            },
+            bottomBar = {}
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -294,9 +260,12 @@ fun CourseWorkspaceScreen(
                         CircularProgressIndicator()
                     }
                 } else {
+                    val cleanMarkdown = remember(currentChapter.id, currentChapter.markdownContent, currentChapter.title) {
+                        stripLeadingH1(currentChapter.markdownContent, currentChapter.title)
+                    }
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 90.dp, top = 8.dp)
+                        contentPadding = PaddingValues(bottom = 140.dp, top = 8.dp)
                     ) {
                         // Chapter Title and Summary Header
                         item {
@@ -320,8 +289,8 @@ fun CourseWorkspaceScreen(
                             }
                         }
 
-                        // Case 1: Unwritten / Pending Chapter
-                        if (currentChapter.status == ChapterStatus.PENDING && !uiState.isStreaming) {
+                        // Case 1: Unwritten / Blank Content (regardless of status PENDING or GENERATING)
+                        if (currentChapter.markdownContent.isBlank() && !uiState.isStreaming) {
                             item {
                                 EmptyChapterCard(
                                     chapterTitle = currentChapter.title,
@@ -339,7 +308,7 @@ fun CourseWorkspaceScreen(
                                 val currentMarkdown = uiState.streamingContent.orEmpty()
                                 if (currentMarkdown.isNotBlank()) {
                                     RichMarkdownRenderer(
-                                        markdown = currentMarkdown,
+                                        markdown = stripLeadingH1(currentMarkdown, currentChapter.title),
                                         onChapterClick = { viewModel.navigateToChapterByTitle(it) }
                                     )
                                 } else {
@@ -353,11 +322,11 @@ fun CourseWorkspaceScreen(
                             }
                         }
 
-                        // Case 3: Completed Chapter Reader
-                        if (currentChapter.status == ChapterStatus.COMPLETED && !uiState.isStreaming) {
+                        // Case 3: Chapter Reader with Content
+                        if (currentChapter.markdownContent.isNotBlank() && !uiState.isStreaming) {
                             item {
                                 RichMarkdownRenderer(
-                                    markdown = currentChapter.markdownContent,
+                                    markdown = cleanMarkdown,
                                     onChapterClick = { targetTitle ->
                                         viewModel.navigateToChapterByTitle(targetTitle)
                                     }
@@ -471,17 +440,120 @@ fun CourseWorkspaceScreen(
                         }
                     }
                 }
+
+                // Floating bottom pill overlay — only shown when chapter has content and not streaming
+                if (currentChapter != null && currentChapter.markdownContent.isNotBlank() && !uiState.isStreaming) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // TTS mini-player sits above the pill
+                        AnimatedVisibility(visible = uiState.showTtsPlayer) {
+                            TtsMiniPlayer(
+                                ttsState = ttsState,
+                                onPlay = { viewModel.ttsPlay() },
+                                onPause = { viewModel.ttsPause() },
+                                onResume = { viewModel.ttsResume() },
+                                onStop = { viewModel.ttsStop() },
+                                onSetSpeed = { viewModel.ttsSetSpeed(it) },
+                                onDismiss = { viewModel.toggleTtsPlayer() }
+                            )
+                        }
+
+                        // Floating pill action bar
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            tonalElevation = 6.dp,
+                            shadowElevation = 8.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Refine
+                                TextButton(onClick = { viewModel.openRefineSheet() }) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Refine",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+
+                                // Mastery
+                                TextButton(onClick = { viewModel.openMasterySheet() }) {
+                                    Icon(
+                                        Icons.Default.School,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Mastery",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+
+                                // Cards (with badge count when > 0)
+                                TextButton(onClick = { viewModel.onFlashcardsClicked() }) {
+                                    Icon(
+                                        Icons.Default.Style,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (uiState.chapterFlashcards.isNotEmpty()) "Cards (${uiState.chapterFlashcards.size})" else "Cards",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+
+                                // Q&A
+                                TextButton(onClick = { viewModel.openSocraticQaSheet() }) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.Chat,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Q&A",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // Inline Refine Bottom Sheet Dialog
         if (uiState.showRefineSheet) {
             InlineRefineBottomSheet(
-                selectedSnippet = uiState.refineSnippet,
+                selectedSnippet = uiState.refineSnippet.orEmpty(),
                 isRefining = uiState.isRefining,
                 onDismiss = { viewModel.closeRefineSheet() },
-                onApplyRefinement = { action, customPrompt ->
-                    viewModel.applyRefinement(action, customPrompt)
+                onApplyRefinement = { snippet, action, customPrompt ->
+                    viewModel.applyRefinement(action, customPrompt, snippet)
                 }
             )
         }
@@ -502,7 +574,54 @@ fun CourseWorkspaceScreen(
                 onDismiss = { viewModel.closeRevisionSheet() }
             )
         }
+
+        // Socratic Q&A Bottom Sheet Dialog
+        if (uiState.showSocraticQaSheet && chapterDetails != null) {
+            SocraticQaBottomSheet(
+                qas = chapterDetails.qas,
+                isAskingQuestion = uiState.isAskingQuestion,
+                onAskQuestion = { viewModel.askSocraticQuestion(it) },
+                onAppendToChapter = { qa -> viewModel.appendQaToChapter(qa) },
+                onChapterClick = { title -> viewModel.navigateToChapterByTitle(title) },
+                onDismiss = { viewModel.closeSocraticQaSheet() }
+            )
+        }
+
+        // Chapter Flashcard Deck Bottom Sheet
+        if (uiState.showFlashcardDeck) {
+            FlashcardDeckBottomSheet(
+                cards = uiState.chapterFlashcards,
+                isGenerating = uiState.isGeneratingFlashcards,
+                onDismiss = { viewModel.closeFlashcardDeck() },
+                onRateCard = { card, rating -> viewModel.rateFlashcard(card, rating) },
+                onGenerateMore = { viewModel.generateFlashcards() },
+                onChapterClick = { title -> viewModel.navigateToChapterByTitle(title) }
+            )
+        }
     }
+}
+
+/**
+ * Strips a leading H1 heading from markdown content when it matches the chapter title,
+ * preventing duplicate headings since the title is already rendered by the UI header.
+ */
+private fun stripLeadingH1(markdown: String, chapterTitle: String): String {
+    val lines = markdown.trimStart().lines()
+    if (lines.isEmpty()) return markdown
+    val firstLine = lines.first().trim()
+    // Match # Title or # Chapter N: Title patterns
+    if (firstLine.startsWith("#") && !firstLine.startsWith("##")) {
+        val headingText = firstLine.removePrefix("#").trim()
+        // Strip if heading text matches chapter title (case-insensitive, ignoring "Chapter N: " prefix)
+        val normalizedHeading = headingText.replace(Regex("^Chapter\\s+\\d+[:\\.\\-]?\\s*", RegexOption.IGNORE_CASE), "").trim()
+        val normalizedTitle = chapterTitle.replace(Regex("^Chapter\\s+\\d+[:\\.\\-]?\\s*", RegexOption.IGNORE_CASE), "").trim()
+        if (normalizedHeading.equals(normalizedTitle, ignoreCase = true) ||
+            headingText.equals(chapterTitle, ignoreCase = true) ||
+            headingText.startsWith("Chapter", ignoreCase = true)) {
+            return lines.drop(1).joinToString("\n").trimStart()
+        }
+    }
+    return markdown
 }
 
 @Composable

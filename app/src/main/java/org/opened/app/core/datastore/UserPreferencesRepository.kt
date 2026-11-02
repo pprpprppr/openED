@@ -13,6 +13,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import org.opened.app.core.ai.AiProvider
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,7 +25,9 @@ class UserPreferencesRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private object PreferencesKeys {
+        val SELECTED_PROVIDER = stringPreferencesKey("selected_provider")
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
+        val CUSTOM_BASE_URL = stringPreferencesKey("custom_base_url")
         val SYSTEM_INSTRUCTIONS = stringPreferencesKey("custom_system_instructions")
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
         val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
@@ -42,7 +45,9 @@ class UserPreferencesRepository @Inject constructor(
         }
         .map { preferences ->
             UserPreferences(
+                selectedProvider = preferences[PreferencesKeys.SELECTED_PROVIDER] ?: AiProvider.GEMINI.id,
                 selectedModel = preferences[PreferencesKeys.SELECTED_MODEL] ?: UserPreferences.DEFAULT_MODEL,
+                customBaseUrl = preferences[PreferencesKeys.CUSTOM_BASE_URL] ?: UserPreferences.DEFAULT_CUSTOM_BASE_URL,
                 customSystemInstructions = preferences[PreferencesKeys.SYSTEM_INSTRUCTIONS] ?: UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS,
                 autoBackupEnabled = preferences[PreferencesKeys.AUTO_BACKUP_ENABLED] ?: true,
                 lastBackupTimestamp = preferences[PreferencesKeys.LAST_BACKUP_TIMESTAMP] ?: 0L,
@@ -51,9 +56,21 @@ class UserPreferencesRepository @Inject constructor(
             )
         }
 
+    suspend fun setSelectedProvider(provider: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SELECTED_PROVIDER] = provider
+        }
+    }
+
     suspend fun setSelectedModel(model: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SELECTED_MODEL] = model
+        }
+    }
+
+    suspend fun setCustomBaseUrl(url: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CUSTOM_BASE_URL] = url
         }
     }
 

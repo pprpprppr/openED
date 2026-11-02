@@ -1,10 +1,13 @@
 package org.opened.app.ui.settings
 
 import android.app.Activity
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,6 +28,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Visibility
@@ -35,6 +40,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,8 +50,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -70,20 +81,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.android.gms.auth.api.signin.GoogleSignIn
+import org.opened.app.core.ai.AiProvider
+import org.opened.app.core.ai.AiProviderModels
 import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.drive.SyncConflictResolution
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SettingsAndBackupScreen(
-    onNavigateBack: () -> Unit,
-    viewModel: SettingsViewModel = hiltViewModel()
-) {
-    SettingsScreen(onNavigateBack = onNavigateBack, viewModel = viewModel)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,6 +101,30 @@ fun SettingsScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var selectedConflictResolution by remember { mutableStateOf(SyncConflictResolution.MERGE_LOCAL) }
+    var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.let { outputStream ->
+                    viewModel.backupToStream(outputStream)
+                }
+            } catch (e: Exception) {
+                // handled in ViewModel
+            }
+        }
+    }
+
+    val openBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            pendingRestoreUri = uri
+            showRestoreDialog = true
+        }
+    }
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -153,10 +181,11 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Gemini BYOK API Key Section
+            // 1. Multi-Provider AI Engine & BYOK Key Section
             item {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -172,24 +201,102 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Gemini API Key (BYOK)",
+                                text = "AI Provider & BYOK Architecture",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
                         Text(
-                            text = "Your API key is encrypted and stored locally in Android Keystore. It is never transmitted to any third-party server, only directly to Google's Gemini endpoint.",
+                            text = "Select your preferred AI engine. API keys and active models are stored strictly on-device in Android Keystore with AES-256 GCM encryption.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                         )
 
+                        // Multi-Provider Segmented Switcher
+                        SingleChoiceSegmentedButtonRow(
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            AiProvider.entries.forEachIndexed { index, provider ->
+                                SegmentedButton(
+                                    selected = uiState.selectedProvider == provider,
+                                    onClick = { viewModel.selectProvider(provider) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = AiProvider.entries.size),
+                                    icon = { SegmentedButtonDefaults.Icon(active = uiState.selectedProvider == provider) }
+                                ) {
+                                    Text(
+                                        text = when (provider) {
+                                            AiProvider.GEMINI -> "Gemini"
+                                            AiProvider.CLAUDE -> "Claude"
+                                            AiProvider.OPENAI -> "OpenAI"
+                                            AiProvider.CUSTOM -> "Custom"
+                                        },
+                                        maxLines = 1,
+                                        fontSize = 12.sp,
+                                        fontWeight = if (uiState.selectedProvider == provider) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Endpoint URI label
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = "Endpoint: ${uiState.selectedProvider.defaultBaseUrl}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Custom Base URL input if Custom provider selected
+                        if (uiState.selectedProvider == AiProvider.CUSTOM) {
+                            OutlinedTextField(
+                                value = uiState.customBaseUrl,
+                                onValueChange = { viewModel.setCustomBaseUrlInput(it) },
+                                label = { Text("Custom API Base URL") },
+                                placeholder = { Text("http://localhost:11434/v1 or https://openrouter.ai/api/v1") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                FilledTonalButton(
+                                    onClick = { viewModel.saveCustomBaseUrl() },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Save Base URL")
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                        }
+
+                        // API Key Input
+                        val keyPlaceholder = when (uiState.selectedProvider) {
+                            AiProvider.GEMINI -> "AIzaSy..."
+                            AiProvider.CLAUDE -> "sk-ant-..."
+                            AiProvider.OPENAI -> "sk-..."
+                            AiProvider.CUSTOM -> "Optional for local Ollama / LM Studio"
+                        }
+
                         OutlinedTextField(
                             value = uiState.apiKey,
                             onValueChange = { viewModel.setApiKeyInput(it) },
-                            label = { Text("Gemini API Key") },
-                            placeholder = { Text("AIzaSy...") },
+                            label = { Text("${uiState.selectedProvider.displayName} API Key") },
+                            placeholder = { Text(keyPlaceholder) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -235,71 +342,126 @@ fun SettingsScreen(
                 }
             }
 
-            // 2. Model Selection
+            // 2. Model Selection Card
             item {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.SmartToy,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Active Gemini Model",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.SmartToy,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Active Model",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            FilledTonalButton(
+                                onClick = { viewModel.syncLiveModels() },
+                                enabled = !uiState.isSyncingModels,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                if (uiState.isSyncingModels) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Syncing...", fontSize = 11.sp)
+                                } else {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🔄 Sync API Models", fontSize = 11.sp)
+                                }
+                            }
                         }
 
                         Text(
-                            text = "Choose the model used for diagnostic interviewing, curriculum planning, and streaming chapter lessons.",
+                            text = "Selected for ${uiState.selectedProvider.displayName}. Tap a preset, sync live models from the endpoint, or enter a custom identifier.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                            modifier = Modifier.padding(top = 6.dp, bottom = 12.dp)
                         )
 
-                        UserPreferences.SUPPORTED_MODELS.forEach { model ->
-                            val isSelected = uiState.selectedModel == model
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { viewModel.selectModel(model) }
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick = { viewModel.selectModel(model) }
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Column {
-                                    Text(
-                                        text = model,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        // Model Radio List
+                        if (uiState.availableModels.isNotEmpty()) {
+                            uiState.availableModels.forEach { model ->
+                                val isSelected = uiState.selectedModel == model
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { viewModel.selectModel(model) }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { viewModel.selectModel(model) }
                                     )
-                                    val desc = when (model) {
-                                        "gemini-3.5-flash" -> "Default: Next-gen speed, reasoning & instruction following"
-                                        "gemini-2.5-flash" -> "High throughput, low latency learning engine"
-                                        "gemini-1.5-pro" -> "Maximum depth, mathematical rigor & large context"
-                                        "gemini-1.5-flash" -> "Lightweight and ultra-responsive"
-                                        else -> ""
-                                    }
-                                    if (desc.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column {
                                         Text(
-                                            text = desc,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            text = model,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                         )
+                                        val desc = AiProviderModels.getModelDescription(model)
+                                        if (desc.isNotEmpty()) {
+                                            Text(
+                                                text = desc,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Custom Model Input Field
+                        Text(
+                            text = "Manual Model Override",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = uiState.customModelInput,
+                                onValueChange = { viewModel.setCustomModelInput(it) },
+                                label = { Text("Or Enter Custom Model ID") },
+                                placeholder = { Text("e.g. gemini-3.8-flash, gpt-4.1, llama-3.3-70b") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { viewModel.applyCustomModel() },
+                                enabled = uiState.customModelInput.isNotBlank(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Set")
                             }
                         }
                     }
@@ -332,8 +494,36 @@ fun SettingsScreen(
                             text = "Customize the pedagogical persona, technical depth, and tone of your AI mentor.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                         )
+
+                        val personaPresets = listOf(
+                            "🌱 Adaptive (Default)" to UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS,
+                            "🚀 Beginner Hands-On" to "You are openED, an empathetic and exceptionally clear programming tutor. Teach from zero assumptions with friendly, everyday analogies. Avoid cryptic internals, focus on step-by-step practical code, highlight common pitfalls with 'Wrong vs Right' examples, and build learner confidence through actionable practice.",
+                            "📐 Feynman Math & ML" to "You are openED, a world-class theoretical physicist and machine learning researcher. Use the Feynman technique: start with an unforgettable intuitive metaphor, then build rigorous first-principles mathematical formulations ($$...$$), step-by-step derivations, loss landscapes, and conceptual proofs.",
+                            "⚙️ Production Engineer" to "You are openED, a principal systems architect and staff engineer. Focus relentlessly on production realism, clean architectural patterns, idiomatic performance, concurrency, failure modes, cache efficiency, zero-overhead idioms, and real-world profiling and debugging."
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            personaPresets.forEach { (title, personaText) ->
+                                SuggestionChip(
+                                    onClick = { viewModel.applySystemInstructionPreset(personaText) },
+                                    label = {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
                             value = uiState.systemInstructions,
@@ -521,6 +711,49 @@ fun SettingsScreen(
                                 Text("Restore...")
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Direct File & Storage Backup (No OAuth Setup Required)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Save or restore your backup archive directly to your device storage, SD card, or Google Drive folder using Android's system document picker.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { createBackupLauncher.launch("opened_backup_v1.zip") },
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Save Archive (.zip)", maxLines = 1)
+                            }
+
+                            OutlinedButton(
+                                onClick = { openBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Restore Archive", maxLines = 1)
+                            }
+                        }
                     }
                 }
             }
@@ -628,7 +861,7 @@ fun SettingsScreen(
             }
 
             item {
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(96.dp))
             }
         }
     }
@@ -636,7 +869,10 @@ fun SettingsScreen(
     // Restore Conflict Resolution Dialog
     if (showRestoreDialog) {
         AlertDialog(
-            onDismissRequest = { showRestoreDialog = false },
+            onDismissRequest = {
+                showRestoreDialog = false
+                pendingRestoreUri = null
+            },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -651,7 +887,7 @@ fun SettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = "Choose how to apply the Google Drive backup to your local library:",
+                        text = "Choose how to apply the backup archive to your local library:",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -708,7 +944,7 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                             Text(
-                                text = "Wipes local data completely and replaces it with the exact state from Google Drive.",
+                                text = "Wipes local data completely and replaces it with the exact state from backup.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -720,14 +956,29 @@ fun SettingsScreen(
                 Button(
                     onClick = {
                         showRestoreDialog = false
-                        viewModel.restoreFromGoogleDrive(selectedConflictResolution)
+                        val fileUri = pendingRestoreUri
+                        if (fileUri != null) {
+                            pendingRestoreUri = null
+                            try {
+                                context.contentResolver.openInputStream(fileUri)?.let { inputStream ->
+                                    viewModel.restoreFromStream(inputStream, selectedConflictResolution)
+                                }
+                            } catch (e: Exception) {
+                                // handled in ViewModel
+                            }
+                        } else {
+                            viewModel.restoreFromGoogleDrive(selectedConflictResolution)
+                        }
                     }
                 ) {
                     Text("Proceed with Restore")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showRestoreDialog = false }) {
+                TextButton(onClick = {
+                    showRestoreDialog = false
+                    pendingRestoreUri = null
+                }) {
                     Text("Cancel")
                 }
             }
