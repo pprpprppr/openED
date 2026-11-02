@@ -13,8 +13,11 @@ import org.opened.app.core.database.entity.StudyPathEntity
 import org.opened.app.core.database.entity.SyncTombstoneEntity
 import org.opened.app.core.database.model.ChapterStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.opened.app.ui.settings.SettingsUiState
 
 class BackupBundleSerializationTest {
 
@@ -162,5 +165,14 @@ class BackupBundleSerializationTest {
         assertEquals(0, decoded.learningObjectives.size)
         assertNotNull(decoded.tombstones)
         assertEquals(0, decoded.tombstones.size)
+    }
+
+    @Test
+    fun testSettingsUiStateDriveAuthorizationAlias() {
+        val unauthorizedState = SettingsUiState(isAuthorizedWithDrive = false)
+        assertFalse(unauthorizedState.isDriveAuthorized)
+
+        val authorizedState = SettingsUiState(isAuthorizedWithDrive = true)
+        assertTrue(authorizedState.isDriveAuthorized)
     }
 }

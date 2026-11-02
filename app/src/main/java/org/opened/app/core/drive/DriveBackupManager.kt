@@ -97,7 +97,7 @@ class DriveBackupManager @Inject constructor(
     suspend fun uploadBackupToDrive(): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val drive = getDriveService()
-                ?: throw IllegalStateException("Google Drive account not authorized. Please sign in via Settings.")
+                ?: throw IllegalStateException("Google Drive account not authorized. Please connect in Settings or use 'Backup Now' for direct file export.")
 
             val zipBytes = createBackupZipBytes()
             val mediaContent = ByteArrayContent("application/zip", zipBytes)
@@ -156,7 +156,7 @@ class DriveBackupManager @Inject constructor(
     suspend fun restoreBackupFromDrive(resolution: SyncConflictResolution): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val drive = getDriveService()
-                ?: throw IllegalStateException("Google Drive account not authorized. Please sign in via Settings.")
+                ?: throw IllegalStateException("Google Drive account not authorized. Please connect in Settings or use 'Backup Now' for direct file export.")
 
             val files = drive.files().list()
                 .setQ("(name = '$backupFileName' or name = '$legacyBackupFileName') and trashed = false")

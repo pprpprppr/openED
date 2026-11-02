@@ -36,4 +36,6 @@ data class SettingsUiState(
     val isBusy: Boolean = false,
     val statusMessage: String? = null,
     val errorMessage: String? = null
-)
+) {
+    val isDriveAuthorized: Boolean get() = isAuthorizedWithDrive
+}

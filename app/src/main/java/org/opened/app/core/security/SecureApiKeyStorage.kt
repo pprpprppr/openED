@@ -86,8 +86,16 @@ class SecureApiKeyStorage internal constructor(
         return try {
             val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
             if (keyStore.containsAlias(KEY_ALIAS)) {
-                val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
-                entry?.secretKey ?: generateKeystoreKey()
+                try {
+                    val entry = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+                    entry?.secretKey ?: generateKeystoreKey()
+                } catch (_: Exception) {
+                    // Recover from key corruption, hardware change, or permanently invalidated key
+                    try {
+                        keyStore.deleteEntry(KEY_ALIAS)
+                    } catch (_: Throwable) {}
+                    generateKeystoreKey()
+                }
             } else {
                 generateKeystoreKey()
             }
@@ -202,15 +210,25 @@ class SecureApiKeyStorage internal constructor(
                     migrateLegacyCredentials(p)
                 }
 
-                // Populate in-memory cache with decrypted credentials
+                // Populate in-memory cache with decrypted credentials; detect and recover from key-loss
                 try {
+                    val staleCorruptedKeys = mutableListOf<String>()
                     p.all.forEach { (key, value) ->
                         if (value is String) {
                             val decrypted = decrypt(value)
                             if (decrypted != null) {
                                 memoryCache[key] = decrypted
+                            } else if (value.isNotBlank()) {
+                                // Value cannot be decrypted. Key was likely lost, regenerated,
+                                // or restored onto a new device without the Keystore private key.
+                                staleCorruptedKeys.add(key)
                             }
                         }
+                    }
+                    if (staleCorruptedKeys.isNotEmpty()) {
+                        val editor = p.edit()
+                        staleCorruptedKeys.forEach { editor.remove(it) }
+                        editor.apply()
                     }
                 } catch (_: Exception) {}
 
@@ -224,6 +242,28 @@ class SecureApiKeyStorage internal constructor(
                 p
             }
         }
+    }
+
+    /**
+     * Explicit recovery method called when a master key loss is detected or on manual vault reset.
+     * Deletes any corrupted Keystore alias, clears memory cache and stored ciphertexts,
+     * and generates a fresh hardware-backed key.
+     */
+    fun resetVaultOnKeyLoss() {
+        try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            if (keyStore.containsAlias(KEY_ALIAS)) {
+                keyStore.deleteEntry(KEY_ALIAS)
+            }
+        } catch (_: Throwable) {}
+        softwareFallbackKey = null
+        memoryCache.clear()
+        _activeApiKey.value = null
+        _activeModel.value = AiProvider.GEMINI.defaultModel
+        try {
+            loadPrefs().edit().clear().apply()
+        } catch (_: Throwable) {}
+        getOrCreateSecretKey()
     }
 
     private fun migrateLegacyCredentials(newPrefs: SharedPreferences) {

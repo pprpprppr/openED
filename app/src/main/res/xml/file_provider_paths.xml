@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Dedicated export directories for user-initiated sharing only -->
-    <!-- Prohibits root-path, external storage, and broad root access -->
-    <cache-path name="exports_cache" path="exports/" />
-    <files-path name="exports_files" path="exports/" />
+    <!-- Dedicated export directory for user-initiated sharing only -->
+    <!-- Prohibits root-path, broad '.', and external storage -->
+    <files-path name="exports" path="exports/" />
 </paths>

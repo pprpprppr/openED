@@ -19,8 +19,18 @@ openED is engineered with a **zero-trust, local-first** threat model:
 - Knowledge base exports (`opened_backup_v1.zip` or `opened_sync_bundle.zip`) explicitly strip all API credentials and sensitive tokens.
 
 ### 3. FileProvider Sandboxing
-- `app/src/main/res/xml/file_provider_paths.xml` is strictly confined to dedicated internal subdirectories (`exports/` and `documents/`).
-- External root paths (`<root-path>`) and dangerous broad path shares are strictly forbidden.
+- `app/src/main/res/xml/file_provider_paths.xml` is strictly confined to a dedicated internal subfolder: `<files-path name="exports" path="exports/" />`.
+- External root paths (`<root-path>`), external storage (`<external-path>`), and dangerous broad path shares (`path="."`) are strictly forbidden and guarded with automated security tests.
+- All FileProvider intents are dispatched with read-only temporary permissions (`FLAG_GRANT_READ_URI_PERMISSION`).
+
+### 4. Android Backup & Encryption Architecture
+- Encrypted preferences are isolated from cloud and device-to-device transfers via `data_extraction_rules.xml` and `backup_rules.xml` to prevent Keystore key-loss decryption deadlocks upon restore.
+- Backup bundles (`opened_backup_v1.zip`) are completely decoupled from hardware Keystore keys, ensuring cross-device portability without exposing or risking API credentials.
+- Automatic key-loss handling resets corrupted ciphertexts without crashing if an unrecoverable hardware state is detected.
+
+### 5. Android 16 (API 36) Security Compliance
+- Built with `compileSdk = 36` and `targetSdk = 36` in full compliance with Google Play requirements.
+- Implements predictive back gestures, edge-to-edge layouts, and strict runtime permission boundaries.
 
 ### 4. Untrusted Document Ingestion Isolation
 - Imported user documents (PDF, EPUB, Markdown, Plain Text) are treated strictly as passive, untrusted data.

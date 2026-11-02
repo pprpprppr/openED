@@ -20,7 +20,7 @@ class ExportManager @Inject constructor(
 ) {
 
     private fun getExportDirectory(): File {
-        val exportDir = File(context.cacheDir, "exports")
+        val exportDir = File(context.filesDir, "exports")
         if (!exportDir.exists()) {
             exportDir.mkdirs()
         }

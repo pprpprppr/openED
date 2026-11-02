@@ -2,8 +2,11 @@
 <full-backup-content>
     <!-- Exclude all hardware-backed keystore vaults and credentials from auto-backup -->
     <exclude domain="sharedpref" path="opened_keystore_vault.xml" />
+    <exclude domain="sharedpref" path="opened_keystore_vault" />
     <exclude domain="sharedpref" path="opened_secure_vault.xml" />
+    <exclude domain="sharedpref" path="opened_secure_vault" />
     <exclude domain="sharedpref" path="opened_secure_vault_fallback.xml" />
+    <exclude domain="sharedpref" path="opened_secure_vault_fallback" />
     <!-- Exclude temporary exports and sync bundles -->
     <exclude domain="file" path="exports" />
 </full-backup-content>

@@ -96,6 +96,24 @@ class SecureApiKeyStorageTest {
         assertNull(storage.decrypt(Base64.getEncoder().encodeToString(byteArrayOf(0x01, 0x02))))
     }
 
+    @Test
+    fun testKeyLossHandlingAndResetVault() {
+        storage.saveApiKey("AIzaSy-validTestKey123")
+        assertTrue(storage.hasApiKey())
+        assertEquals("AIzaSy-validTestKey123", storage.getApiKey())
+
+        // Explicit key-loss recovery reset
+        storage.resetVaultOnKeyLoss()
+
+        assertFalse("Vault should be cleared after key loss reset", storage.hasApiKey())
+        assertNull("API key should be null after reset", storage.getApiKey())
+
+        // Fresh key saving should succeed after reset
+        storage.saveApiKey("AIzaSy-newPostResetKey456")
+        assertTrue(storage.hasApiKey())
+        assertEquals("AIzaSy-newPostResetKey456", storage.getApiKey())
+    }
+
     private fun createInMemorySharedPreferences(): android.content.SharedPreferences {
         val map = mutableMapOf<String, Any?>()
         val editorHandler = java.lang.reflect.InvocationHandler { proxy, method, args ->

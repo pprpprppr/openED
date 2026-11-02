@@ -385,20 +385,31 @@ class SettingsViewModel @Inject constructor(
     fun getSignInIntent(): android.content.Intent = authManager.signInClient.signInIntent
 
     fun onGoogleSignInResult(account: GoogleSignInAccount?) {
+        if (account == null) {
+            onGoogleSignInError(-1, "No Google account selected")
+            return
+        }
         viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             try {
                 authManager.handleSignInResult(account)
                 checkKeyAndAuth()
-                if (account != null) {
-                    _uiState.update {
-                        it.copy(statusMessage = "Connected to Google Drive as ${account.email}")
-                    }
+                _uiState.update {
+                    it.copy(statusMessage = "Connected to Google Drive as ${account.email}")
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Sign in failed.") }
             }
+        }
+    }
+
+    fun onGoogleSignInError(statusCode: Int, message: String?) {
+        _uiState.update {
+            it.copy(
+                isBusy = false,
+                statusMessage = "Direct Google Drive file backup via 'Backup Now' is ready to use! (Background OAuth auto-sync requires registering your build's SHA-1 fingerprint in Google Cloud Console)."
+            )
         }
     }
 
@@ -507,9 +518,12 @@ class SettingsViewModel @Inject constructor(
             try {
                 val zipBytes = driveBackupManager.createBackupZipBytes()
                 outputStream.use { it.write(zipBytes) }
+                val now = System.currentTimeMillis()
+                preferencesRepository.setLastBackupTimestamp(now)
                 _uiState.update {
                     it.copy(
                         isBusy = false,
+                        lastBackupTimestamp = now,
                         statusMessage = "Backup successfully saved to selected storage!"
                     )
                 }

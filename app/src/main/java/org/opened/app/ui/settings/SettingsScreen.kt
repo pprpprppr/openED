@@ -10,6 +10,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -138,14 +141,18 @@ fun SettingsScreen(
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-            try {
-                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+            viewModel.onGoogleSignInResult(account)
+        } catch (e: com.google.android.gms.common.api.ApiException) {
+            viewModel.onGoogleSignInError(e.statusCode, e.message)
+        } catch (e: Exception) {
+            val account = GoogleSignIn.getLastSignedInAccount(context)
+            if (account != null) {
                 viewModel.onGoogleSignInResult(account)
-            } catch (e: Exception) {
-                val account = GoogleSignIn.getLastSignedInAccount(context)
-                viewModel.onGoogleSignInResult(account)
+            } else {
+                viewModel.onGoogleSignInError(-1, e.message)
             }
         }
     }
@@ -242,6 +249,8 @@ fun SettingsScreen(
                                             AiProvider.CUSTOM -> "Custom"
                                         },
                                         maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis,
                                         fontSize = 12.sp,
                                         fontWeight = if (uiState.selectedProvider == provider) FontWeight.Bold else FontWeight.Normal
                                     )
@@ -320,48 +329,73 @@ fun SettingsScreen(
                             shape = RoundedCornerShape(10.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
+                        // Row 1: Clear Key and Save Key
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedButton(
-                                onClick = { viewModel.testConnection() },
-                                enabled = !uiState.isTestingConnection,
-                                shape = RoundedCornerShape(8.dp)
+                                onClick = { viewModel.clearApiKey() },
+                                enabled = uiState.hasApiKey || uiState.apiKey.isNotBlank(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                if (uiState.isTestingConnection) {
-                                    CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Testing...", fontSize = 11.sp)
-                                } else {
-                                    Text("⚡ Test Connection", fontSize = 11.sp)
-                                }
+                                Text(
+                                    text = "Clear Key",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
 
-                            Row {
-                                if (uiState.hasApiKey) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.clearApiKey() },
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            contentColor = MaterialTheme.colorScheme.error
-                                        ),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text("Clear Key")
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
+                            Button(
+                                onClick = { viewModel.saveApiKey() },
+                                enabled = uiState.apiKey.isNotBlank(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(
+                                    text = "Save Key",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
 
-                                Button(
-                                    onClick = { viewModel.saveApiKey() },
-                                    enabled = uiState.apiKey.isNotBlank(),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text("Save Key")
-                                }
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Row 2: Full-width Test Connection
+                        OutlinedButton(
+                            onClick = { viewModel.testConnection() },
+                            enabled = !uiState.isTestingConnection,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            if (uiState.isTestingConnection) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Testing Connection...",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            } else {
+                                Text(
+                                    text = "⚡ Test Connection",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
                     }
@@ -419,17 +453,25 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             org.opened.app.core.ai.provider.ModelSelectionMode.entries.forEach { mode ->
                                 FilterChip(
                                     selected = uiState.selectionMode == mode,
                                     onClick = { viewModel.selectSelectionMode(mode) },
-                                    label = { Text(mode.displayName, fontSize = 11.sp) }
+                                    label = {
+                                        Text(
+                                            text = mode.displayName,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 )
                             }
                         }
@@ -789,17 +831,38 @@ fun SettingsScreen(
                             FilterChip(
                                 selected = uiState.syncProviderId == "LOCAL",
                                 onClick = { viewModel.setSyncProviderId("LOCAL") },
-                                label = { Text("Local Archive") }
+                                label = {
+                                    Text(
+                                        text = "Local Archive",
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             )
                             FilterChip(
                                 selected = uiState.syncProviderId == "GOOGLE_DRIVE",
                                 onClick = { viewModel.setSyncProviderId("GOOGLE_DRIVE") },
-                                label = { Text("Google Drive") }
+                                label = {
+                                    Text(
+                                        text = "Google Drive",
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             )
                             FilterChip(
                                 selected = uiState.syncProviderId == "WEBDAV",
                                 onClick = { viewModel.setSyncProviderId("WEBDAV") },
-                                label = { Text("WebDAV") }
+                                label = {
+                                    Text(
+                                        text = "WebDAV",
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             )
                         }
 
@@ -826,7 +889,13 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Button(
-                            onClick = { viewModel.syncWithActiveProvider() },
+                            onClick = {
+                                if (uiState.syncProviderId == "LOCAL" || (uiState.syncProviderId == "GOOGLE_DRIVE" && !uiState.isDriveAuthorized)) {
+                                    createBackupLauncher.launch("opened_backup_v1.zip")
+                                } else {
+                                    viewModel.syncWithActiveProvider()
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             enabled = !uiState.isBusy,
                             shape = RoundedCornerShape(10.dp)
@@ -855,20 +924,99 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Google Drive Backup & Restore",
+                                text = "Google Drive & Local Backup",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
                         Text(
-                            text = "Sync your complete knowledge studio (courses, chapters, cross-refs, edits, and Q&A history) into your private Google Drive as 'opened_backup_v1.zip'. Raw API keys are never included in the backup bundle.",
+                            text = "Backup your complete knowledge studio (courses, chapters, cross-refs, edits, and Q&A history) into your private Google Drive or local storage as 'opened_backup_v1.zip'. Raw API keys are never included in the backup bundle.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                         )
 
-                        // Google Account Status
+                        // Manual Action Buttons (Zero-OAuth Blocking)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (uiState.isDriveAuthorized) {
+                                        viewModel.backupToGoogleDrive()
+                                    } else {
+                                        createBackupLauncher.launch("opened_backup_v1.zip")
+                                    }
+                                },
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier.weight(1f).height(46.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (uiState.isBusy) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text(
+                                        text = "☁️ Backup Now (Google Drive / File)",
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    if (uiState.isDriveAuthorized) {
+                                        pendingRestoreUri = null
+                                        showRestoreDialog = true
+                                    } else {
+                                        openBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+                                    }
+                                },
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier.weight(1f).height(46.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(
+                                    text = "📥 Restore Backup (.zip)",
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        // Last Synced Timestamp
+                        if (uiState.lastBackupTimestamp > 0L) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            val sdf = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
+                            Text(
+                                text = "Last Backup: ${sdf.format(Date(uiState.lastBackupTimestamp))}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Background Auto-Sync (Optional)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Sign in with Google to enable background automated daily backups to your Drive.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Google Account Status / Sign In
                         if (uiState.googleAccountEmail != null) {
                             Row(
                                 modifier = Modifier
@@ -896,43 +1044,23 @@ fun SettingsScreen(
                                 }
                             }
                         } else {
-                            Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                                Text(
-                                    text = "Connect a Google Account to enable automated Drive backups.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Button(
+                                onClick = {
+                                    googleSignInLauncher.launch(viewModel.getSignInIntent())
+                                },
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudSync,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Button(
-                                    onClick = {
-                                        googleSignInLauncher.launch(viewModel.getSignInIntent())
-                                    },
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudSync,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Connect Google Account")
-                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Connect Google Account")
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Last Synced Timestamp
-                        if (uiState.lastBackupTimestamp > 0L) {
-                            val sdf = remember { SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault()) }
-                            Text(
-                                text = "Last Synced: ${sdf.format(Date(uiState.lastBackupTimestamp))}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                        }
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Automated Backup Toggle
                         Row(
@@ -956,85 +1084,6 @@ fun SettingsScreen(
                                 checked = uiState.autoBackupEnabled,
                                 onCheckedChange = { viewModel.toggleAutoBackup(it) }
                             )
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        // Manual Action Buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            FilledTonalButton(
-                                onClick = { viewModel.backupToGoogleDrive() },
-                                enabled = !uiState.isBusy,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                if (uiState.isBusy) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Backup Now")
-                                }
-                            }
-
-                            FilledTonalButton(
-                                onClick = { showRestoreDialog = true },
-                                enabled = !uiState.isBusy,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Restore...")
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                        Spacer(modifier = Modifier.height(14.dp))
-
-                        Text(
-                            text = "Direct File & Storage Backup (No OAuth Setup Required)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Save or restore your backup archive directly to your device storage, SD card, or Google Drive folder using Android's system document picker.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { createBackupLauncher.launch("opened_backup_v1.zip") },
-                                enabled = !uiState.isBusy,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Save Archive (.zip)", maxLines = 1)
-                            }
-
-                            OutlinedButton(
-                                onClick = { openBackupLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) },
-                                enabled = !uiState.isBusy,
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Restore Archive", maxLines = 1)
-                            }
                         }
                     }
                 }
