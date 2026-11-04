@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import org.opened.app.core.ai.AdaptiveQuizResponse
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.FeynmanEvaluationResponse
+import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.learning.AdaptiveLearningEngine
 import org.opened.app.domain.repository.OpenEDRepository
@@ -51,7 +52,7 @@ class MasteryViewModel @Inject constructor(
             it.copy(
                 quizLoading = false,
                 feynmanLoading = false,
-                errorMessage = throwable.localizedMessage ?: "Failed to process mastery challenge."
+                errorMessage = formatUserFriendlyAiError(throwable)
             )
         }
     }
@@ -72,12 +73,12 @@ class MasteryViewModel @Inject constructor(
                         _uiState.update { it.copy(quizLoading = false, quizResult = quiz) }
                     }
                     .onFailure { e ->
-                        _uiState.update { it.copy(quizLoading = false, errorMessage = e.message ?: "Failed to generate quiz") }
+                        _uiState.update { it.copy(quizLoading = false, errorMessage = formatUserFriendlyAiError(e.message ?: "Failed to generate quiz")) }
                     }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(quizLoading = false, errorMessage = e.localizedMessage ?: "Failed to generate quiz") }
+                _uiState.update { it.copy(quizLoading = false, errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate quiz")) }
             }
         }
     }
@@ -149,12 +150,12 @@ class MasteryViewModel @Inject constructor(
                         }
                     }
                     .onFailure { e ->
-                        _uiState.update { it.copy(feynmanLoading = false, errorMessage = e.message ?: "Failed to evaluate explanation") }
+                        _uiState.update { it.copy(feynmanLoading = false, errorMessage = formatUserFriendlyAiError(e.message ?: "Failed to evaluate explanation")) }
                     }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(feynmanLoading = false, errorMessage = e.localizedMessage ?: "Failed to evaluate explanation") }
+                _uiState.update { it.copy(feynmanLoading = false, errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to evaluate explanation")) }
             }
         }
     }

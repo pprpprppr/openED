@@ -114,6 +114,82 @@ class SecureApiKeyStorageTest {
         assertEquals("AIzaSy-newPostResetKey456", storage.getApiKey())
     }
 
+    @Test
+    fun testSanitizeCustomBaseUrl() {
+        // Remote http should be upgraded to https
+        assertEquals(
+            "https://openrouter.ai/api/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://openrouter.ai/api/v1")
+        )
+        assertEquals(
+            "https://openrouter.ai/api/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://openrouter.ai/api/v1/")
+        )
+        assertEquals(
+            "https://api.groq.com/openai/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://api.groq.com/openai/v1")
+        )
+
+        // Localhost and local IPs must remain http
+        assertEquals(
+            "http://localhost:11434/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://localhost:11434/v1")
+        )
+        assertEquals(
+            "http://127.0.0.1:11434/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://127.0.0.1:11434/v1")
+        )
+        assertEquals(
+            "http://10.0.2.2:11434/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://10.0.2.2:11434/v1")
+        )
+        assertEquals(
+            "http://192.168.1.50:11434/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://192.168.1.50:11434/v1")
+        )
+        assertEquals(
+            "http://10.0.0.5:11434/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("http://10.0.0.5:11434/v1")
+        )
+
+        // Missing scheme should be auto-prefixed
+        assertEquals(
+            "https://openrouter.ai/api/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("openrouter.ai/api/v1")
+        )
+        assertEquals(
+            "http://localhost:11434/v1",
+            SecureApiKeyStorage.sanitizeCustomBaseUrl("localhost:11434/v1")
+        )
+    }
+
+    @Test
+    fun testIsDeprecatedGeminiModel() {
+        assertTrue(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-2.5-flash"))
+        assertTrue(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-2.5-pro"))
+        assertTrue(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-2.0-flash"))
+        assertTrue(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-1.5-pro"))
+        assertTrue(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-1.5-flash"))
+        assertTrue(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-3.5-flash"))
+
+        assertFalse(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-3.8-flash"))
+        assertFalse(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-3.6-flash"))
+        assertFalse(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-3.5-flash-lite"))
+        assertFalse(SecureApiKeyStorage.isDeprecatedGeminiModel("gemini-3.1-pro-preview"))
+    }
+
+    @Test
+    fun testDeprecatedGeminiModelAutoMigrationTo38Flash() {
+        val s = SecureApiKeyStorage(context = null) { createInMemorySharedPreferences() }
+
+        // Save deprecated model
+        s.saveModelForProvider(org.opened.app.core.ai.AiProvider.GEMINI, "gemini-2.5-flash")
+
+        // Retrieval must automatically migrate to gemini-3.8-flash
+        val model = s.getModelForProvider(org.opened.app.core.ai.AiProvider.GEMINI)
+        assertEquals("gemini-3.8-flash", model)
+    }
+
     private fun createInMemorySharedPreferences(): android.content.SharedPreferences {
         val map = mutableMapOf<String, Any?>()
         val editorHandler = java.lang.reflect.InvocationHandler { proxy, method, args ->

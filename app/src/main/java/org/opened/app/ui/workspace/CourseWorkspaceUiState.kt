@@ -16,6 +16,7 @@ data class CourseWorkspaceUiState(
     val isAskingQuestion: Boolean = false,
     val showRefineSheet: Boolean = false,
     val refineSnippet: String = "",
+    val activeProviderName: String = "AI",
     val errorMessage: String? = null,
     // Feature 1: Flashcards
     val isGeneratingFlashcards: Boolean = false,

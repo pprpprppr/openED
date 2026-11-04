@@ -45,6 +45,7 @@ class UserPreferencesRepository @Inject constructor(
         val SYNC_PROVIDER_ID = stringPreferencesKey("sync_provider_id")
         val WEBDAV_SERVER_URL = stringPreferencesKey("webdav_server_url")
         val WEBDAV_USERNAME = stringPreferencesKey("webdav_username")
+        val LINKED_BACKUP_URI = stringPreferencesKey("linked_backup_uri")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data
@@ -72,7 +73,8 @@ class UserPreferencesRepository @Inject constructor(
                 reducedMotionEnabled = preferences[PreferencesKeys.REDUCED_MOTION_ENABLED] ?: false,
                 syncProviderId = preferences[PreferencesKeys.SYNC_PROVIDER_ID] ?: UserPreferences.DEFAULT_SYNC_PROVIDER,
                 webDavServerUrl = preferences[PreferencesKeys.WEBDAV_SERVER_URL] ?: "",
-                webDavUsername = preferences[PreferencesKeys.WEBDAV_USERNAME] ?: ""
+                webDavUsername = preferences[PreferencesKeys.WEBDAV_USERNAME] ?: "",
+                linkedBackupUri = preferences[PreferencesKeys.LINKED_BACKUP_URI]
             )
         }
 
@@ -172,6 +174,16 @@ class UserPreferencesRepository @Inject constructor(
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.WEBDAV_SERVER_URL] = url
             preferences[PreferencesKeys.WEBDAV_USERNAME] = username
+        }
+    }
+
+    suspend fun setLinkedBackupUri(uri: String?) {
+        context.dataStore.edit { preferences ->
+            if (uri != null) {
+                preferences[PreferencesKeys.LINKED_BACKUP_URI] = uri
+            } else {
+                preferences.remove(PreferencesKeys.LINKED_BACKUP_URI)
+            }
         }
     }
 }

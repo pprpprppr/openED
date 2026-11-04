@@ -78,28 +78,42 @@ class GeminiApiClient @Inject constructor(
             request
         }
         val requestBodyJson = json.encodeToString(GeminiGenerateRequest.serializer(), effectiveRequest)
-        var currentModel = model
-        var response = executeGenerateCall(currentModel, requestBodyJson, apiKey)
 
-        // Automatically fall back to gemini-2.5-flash if selected model returns HTTP 404
-        if (response.code == 404 && currentModel != "gemini-2.5-flash") {
-            response.close()
-            currentModel = "gemini-2.5-flash"
-            response = executeGenerateCall(currentModel, requestBodyJson, apiKey)
-        }
+        val fallbackChain = buildFallbackChain(model)
+        var response: okhttp3.Response? = null
+        var lastErrorMsg: String? = null
+        var lastStatusCode = 0
 
-        response.use { resp ->
-            val responseBody = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful) {
-                val errorMsg = try {
-                    val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), responseBody)
-                    parsed.error?.message ?: responseBody
-                } catch (e: Exception) {
-                    responseBody
-                }
-                throw GeminiApiException(resp.code, errorMsg)
+        for (targetModel in fallbackChain) {
+            val currentResponse = executeGenerateCall(targetModel, requestBodyJson, apiKey)
+            if (currentResponse.isSuccessful) {
+                response = currentResponse
+                break
             }
 
+            lastStatusCode = currentResponse.code
+            val errorBody = currentResponse.body?.string().orEmpty()
+            lastErrorMsg = try {
+                val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), errorBody)
+                parsed.error?.message ?: errorBody
+            } catch (e: Exception) {
+                errorBody
+            }
+            currentResponse.close()
+
+            // Automatically fall back along active Gemini 3 chain only on 404 or 429
+            if (lastStatusCode != 404 && lastStatusCode != 429) {
+                throw GeminiApiException(lastStatusCode, lastErrorMsg)
+            }
+        }
+
+        val finalResponse = response ?: throw GeminiApiException(
+            lastStatusCode.takeIf { it != 0 } ?: 429,
+            lastErrorMsg ?: "Request failed for model $model"
+        )
+
+        finalResponse.use { resp ->
+            val responseBody = resp.body?.string().orEmpty()
             val parsedResponse = json.decodeFromString(GeminiGenerateResponse.serializer(), responseBody)
             val text = parsedResponse.candidates
                 ?.firstOrNull()
@@ -126,29 +140,41 @@ class GeminiApiClient @Inject constructor(
             request
         }
         val requestBodyJson = json.encodeToString(GeminiGenerateRequest.serializer(), effectiveRequest)
-        var currentModel = model
-        var response = executeStreamCall(currentModel, requestBodyJson, apiKey)
 
-        // Automatically fall back to gemini-2.5-flash if selected model returns HTTP 404
-        if (response.code == 404 && currentModel != "gemini-2.5-flash") {
-            response.close()
-            currentModel = "gemini-2.5-flash"
-            response = executeStreamCall(currentModel, requestBodyJson, apiKey)
-        }
+        val fallbackChain = buildFallbackChain(model)
+        var response: okhttp3.Response? = null
+        var lastErrorMsg: String? = null
+        var lastStatusCode = 0
 
-        if (!response.isSuccessful) {
-            val errorBody = response.body?.string().orEmpty()
-            val errorMsg = try {
+        for (targetModel in fallbackChain) {
+            val currentResponse = executeStreamCall(targetModel, requestBodyJson, apiKey)
+            if (currentResponse.isSuccessful) {
+                response = currentResponse
+                break
+            }
+
+            lastStatusCode = currentResponse.code
+            val errorBody = currentResponse.body?.string().orEmpty()
+            lastErrorMsg = try {
                 val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), errorBody)
                 parsed.error?.message ?: errorBody
             } catch (e: Exception) {
                 errorBody
             }
-            response.close()
-            throw GeminiApiException(response.code, errorMsg)
+            currentResponse.close()
+
+            // Automatically fall back along active Gemini 3 chain only on 404 or 429
+            if (lastStatusCode != 404 && lastStatusCode != 429) {
+                throw GeminiApiException(lastStatusCode, lastErrorMsg)
+            }
         }
 
-        val body = response.body ?: throw IOException("Empty response body from Gemini streaming endpoint")
+        val finalResponse = response ?: throw GeminiApiException(
+            lastStatusCode.takeIf { it != 0 } ?: 429,
+            lastErrorMsg ?: "Streaming request failed for model $model"
+        )
+
+        val body = finalResponse.body ?: throw IOException("Empty response body from Gemini streaming endpoint")
         body.byteStream().use { inputStream ->
             BufferedReader(InputStreamReader(inputStream, Charsets.UTF_8)).use { reader ->
                 var line: String?
@@ -210,5 +236,24 @@ class GeminiApiClient @Inject constructor(
                 }
             }
         }
+        finalResponse.close()
     }.flowOn(Dispatchers.IO)
+
+    companion object {
+        val GEMINI_FALLBACK_CHAIN = listOf(
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash-lite"
+        )
+
+        fun buildFallbackChain(initialModel: String): List<String> {
+            val chain = mutableListOf(initialModel)
+            for (fallback in GEMINI_FALLBACK_CHAIN) {
+                if (fallback != initialModel && !chain.contains(fallback)) {
+                    chain.add(fallback)
+                }
+            }
+            return chain
+        }
+    }
 }

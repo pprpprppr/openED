@@ -60,7 +60,13 @@ object BackoffRetry {
      * or ServerUnavailableException if HTTP 503.
      */
     fun checkRateLimitOrUnavailable(response: Response, errorBody: String) {
-        if (response.code == 429) {
+        val lower = errorBody.lowercase()
+        val isQuotaExceeded = response.code == 429 ||
+                lower.contains("resource_exhausted") ||
+                lower.contains("quota exceeded") ||
+                lower.contains("limit: 0")
+
+        if (isQuotaExceeded) {
             val retryAfterHeader = response.header("Retry-After")?.toLongOrNull()
             throw RateLimitException(
                 message = "Rate limit reached (HTTP 429): $errorBody",

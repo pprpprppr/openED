@@ -30,27 +30,27 @@ class AiProviderRegistryTest {
             tokenUsageTracker = tracker
         )
 
-        // QUALITY mode -> Pro model
+        // QUALITY mode -> gemini-3.8-flash
         val qualityModel = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.QUALITY, "")
-        assertEquals("gemini-3.1-pro-preview", qualityModel)
+        assertEquals("gemini-3.8-flash", qualityModel)
 
-        // BALANCED mode -> Flash model
+        // BALANCED mode -> gemini-3.8-flash
         val balancedModel = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.BALANCED, "")
         assertEquals("gemini-3.8-flash", balancedModel)
 
-        // ECONOMY mode -> Flash-Lite model
+        // ECONOMY mode -> gemini-3.5-flash-lite
         val economyModel = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.ECONOMY, "")
         assertEquals("gemini-3.5-flash-lite", economyModel)
 
-        // AUTO mode: Curriculum -> Quality, Lesson -> Balanced, Quiz -> Economy
+        // AUTO mode: defaults to gemini-3.8-flash
         val autoCurriculum = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.AUTO, "", AiTaskType.CURRICULUM_SYNTHESIS)
-        assertEquals("gemini-3.1-pro-preview", autoCurriculum)
+        assertEquals("gemini-3.8-flash", autoCurriculum)
 
         val autoLesson = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.AUTO, "", AiTaskType.CHAPTER_LESSON)
         assertEquals("gemini-3.8-flash", autoLesson)
 
         val autoQuiz = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.AUTO, "", AiTaskType.FLASHCARDS_QUIZ)
-        assertEquals("gemini-3.5-flash-lite", autoQuiz)
+        assertEquals("gemini-3.8-flash", autoQuiz)
 
         // MANUAL mode -> uses user's explicit model
         val manual = registry.resolveModel(AiProvider.GEMINI, ModelSelectionMode.MANUAL, "custom-gemini-test")

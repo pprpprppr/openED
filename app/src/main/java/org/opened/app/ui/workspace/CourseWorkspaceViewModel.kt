@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
+import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.RefineAction
+import org.opened.app.core.ai.formatUserFriendlyAiError
+import org.opened.app.core.datastore.UserPreferencesRepository
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.model.ChapterStatus
@@ -33,6 +36,7 @@ class CourseWorkspaceViewModel @Inject constructor(
     private val repository: OpenEDRepository,
     private val aiLearningEngine: AiLearningEngine,
     private val ttsManager: TtsManager,
+    private val preferencesRepository: UserPreferencesRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -40,7 +44,7 @@ class CourseWorkspaceViewModel @Inject constructor(
         if (throwable is kotlinx.coroutines.CancellationException) return@CoroutineExceptionHandler
         _uiState.update {
             it.copy(
-                errorMessage = throwable.localizedMessage ?: "An unexpected error occurred in workspace.",
+                errorMessage = formatUserFriendlyAiError(throwable.localizedMessage ?: "An unexpected error occurred in workspace."),
                 isStreaming = false,
                 isGeneratingFlashcards = false,
                 isRefining = false,
@@ -61,10 +65,20 @@ class CourseWorkspaceViewModel @Inject constructor(
     private var currentPathId: String = ""
 
     init {
+        observeActiveProvider()
         val pathId = savedStateHandle.get<String>("pathId")
         val chapterId = savedStateHandle.get<String>("chapterId")
         if (pathId != null) {
             initWorkspace(pathId, chapterId)
+        }
+    }
+
+    private fun observeActiveProvider() {
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesRepository.userPreferencesFlow.collectLatest { prefs ->
+                val provider = AiProvider.fromId(prefs.selectedProvider)
+                _uiState.update { it.copy(activeProviderName = provider.displayName) }
+            }
         }
     }
 
@@ -208,7 +222,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isStreaming = false,
-                                errorMessage = e.localizedMessage ?: "Failed to generate chapter content."
+                                errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate chapter content.")
                             )
                         }
                     }
@@ -234,7 +248,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isStreaming = false,
-                        errorMessage = e.localizedMessage ?: "Failed to generate chapter content."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate chapter content.")
                     )
                 }
             } finally {
@@ -277,14 +291,14 @@ class CourseWorkspaceViewModel @Inject constructor(
                     }
                     .onFailure { e ->
                         _uiState.update {
-                            it.copy(isGeneratingFlashcards = false, errorMessage = e.localizedMessage ?: "Flashcard generation failed.")
+                            it.copy(isGeneratingFlashcards = false, errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Flashcard generation failed."))
                         }
                     }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isGeneratingFlashcards = false, errorMessage = e.localizedMessage ?: "Flashcard generation failed.")
+                    it.copy(isGeneratingFlashcards = false, errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Flashcard generation failed."))
                 }
             }
         }
@@ -410,7 +424,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                     onSuccess = { _uiState.update { it.copy(isRefining = false, showRefineSheet = false, refineSnippet = "") } },
                     onFailure = { error ->
                         _uiState.update {
-                            it.copy(isRefining = false, errorMessage = error.localizedMessage ?: "Refinement failed.")
+                            it.copy(isRefining = false, errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Refinement failed."))
                         }
                     }
                 )
@@ -418,7 +432,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isRefining = false, errorMessage = e.localizedMessage ?: "Refinement failed.")
+                    it.copy(isRefining = false, errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Refinement failed."))
                 }
             }
         }
@@ -445,7 +459,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isExpandingCourse = false,
-                                errorMessage = error.localizedMessage ?: "Failed to expand course syllabus."
+                                errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Failed to expand course syllabus.")
                             )
                         }
                     }
@@ -456,7 +470,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isExpandingCourse = false,
-                        errorMessage = e.localizedMessage ?: "Failed to expand course syllabus."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to expand course syllabus.")
                     )
                 }
             }
@@ -476,7 +490,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                     onSuccess = { _uiState.update { it.copy(isAskingQuestion = false) } },
                     onFailure = { error ->
                         _uiState.update {
-                            it.copy(isAskingQuestion = false, errorMessage = error.localizedMessage ?: "Failed to answer question.")
+                            it.copy(isAskingQuestion = false, errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Failed to answer question."))
                         }
                     }
                 )
@@ -484,7 +498,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
-                    it.copy(isAskingQuestion = false, errorMessage = e.localizedMessage ?: "Failed to answer question.")
+                    it.copy(isAskingQuestion = false, errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to answer question."))
                 }
             }
         }

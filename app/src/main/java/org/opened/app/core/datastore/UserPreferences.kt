@@ -21,7 +21,8 @@ data class UserPreferences(
     // Phase 9: Multi-Device Sync Provider
     val syncProviderId: String = DEFAULT_SYNC_PROVIDER,
     val webDavServerUrl: String = "",
-    val webDavUsername: String = ""
+    val webDavUsername: String = "",
+    val linkedBackupUri: String? = null
 ) {
     companion object {
         const val DEFAULT_MODEL = "gemini-3.8-flash"

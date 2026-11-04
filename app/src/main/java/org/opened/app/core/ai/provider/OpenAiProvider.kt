@@ -79,6 +79,8 @@ class OpenAiProvider @Inject constructor(
                     .url("https://api.openai.com/v1/chat/completions")
                     .header("Authorization", "Bearer $apiKey")
                     .header("content-type", "application/json")
+                    .header("HTTP-Referer", "https://github.com/openED")
+                    .header("X-Title", "openED")
                     .post(requestPayload.toString().toRequestBody(jsonMediaType))
                     .build()
 
@@ -151,6 +153,8 @@ class OpenAiProvider @Inject constructor(
             .url("https://api.openai.com/v1/chat/completions")
             .header("Authorization", "Bearer $apiKey")
             .header("content-type", "application/json")
+            .header("HTTP-Referer", "https://github.com/openED")
+            .header("X-Title", "openED")
             .post(requestPayload.toString().toRequestBody(jsonMediaType))
             .build()
 

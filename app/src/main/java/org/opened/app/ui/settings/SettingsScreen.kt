@@ -4,32 +4,39 @@ import android.app.Activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Contrast
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
@@ -114,15 +121,21 @@ fun SettingsScreen(
     var showRestoreDialog by remember { mutableStateOf(false) }
     var selectedConflictResolution by remember { mutableStateOf(SyncConflictResolution.MERGE_LOCAL) }
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+    var modelFilterQuery by remember { mutableStateOf("") }
 
     val createBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                context.contentResolver.openOutputStream(uri)?.let { outputStream ->
-                    viewModel.backupToStream(outputStream)
-                }
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {}
+                viewModel.setLinkedBackupUri(uri.toString())
+                viewModel.backupToLinkedUri(uri.toString())
             } catch (e: Exception) {
                 // handled in ViewModel
             }
@@ -133,6 +146,13 @@ fun SettingsScreen(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            } catch (_: Exception) {}
+            viewModel.setLinkedBackupUri(uri.toString())
             pendingRestoreUri = uri
             showRestoreDialog = true
         }
@@ -261,13 +281,18 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         // Endpoint URI label
+                        val currentEndpoint = if (uiState.selectedProvider == AiProvider.CUSTOM) {
+                            uiState.customBaseUrl.ifBlank { uiState.selectedProvider.defaultBaseUrl }
+                        } else {
+                            uiState.selectedProvider.defaultBaseUrl
+                        }
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                         ) {
                             Text(
-                                text = "Endpoint: ${uiState.selectedProvider.defaultBaseUrl}",
+                                text = "Endpoint: $currentEndpoint",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -278,6 +303,42 @@ fun SettingsScreen(
 
                         // Custom Base URL input if Custom provider selected
                         if (uiState.selectedProvider == AiProvider.CUSTOM) {
+                            Text(
+                                text = "Quick Endpoints:",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            @OptIn(ExperimentalLayoutApi::class)
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val presets = listOf(
+                                    "🌐 OpenRouter (https://openrouter.ai/api/v1)" to "https://openrouter.ai/api/v1",
+                                    "⚡ Groq (https://api.groq.com/openai/v1)" to "https://api.groq.com/openai/v1",
+                                    "💻 Local Ollama (http://localhost:11434/v1)" to "http://localhost:11434/v1"
+                                )
+                                presets.forEach { (label, url) ->
+                                    val isSelected = uiState.customBaseUrl == url
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { viewModel.selectCustomPreset(url) },
+                                        label = {
+                                            Text(
+                                                text = label,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+
                             OutlinedTextField(
                                 value = uiState.customBaseUrl,
                                 onValueChange = { viewModel.setCustomBaseUrlInput(it) },
@@ -490,37 +551,92 @@ fun SettingsScreen(
                             modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                         )
 
-                        // Model Radio List
-                        if (uiState.availableModels.isNotEmpty()) {
-                            uiState.availableModels.forEach { model ->
-                                val isSelected = uiState.selectedModel == model
-                                Row(
+                        // Model Search Filter & Scrollable Container
+                        OutlinedTextField(
+                            value = modelFilterQuery,
+                            onValueChange = { modelFilterQuery = it },
+                            placeholder = { Text("🔍 Filter models (e.g. free, flash, deepseek, claude)...", fontSize = 12.sp) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val filteredModels = remember(uiState.availableModels, modelFilterQuery) {
+                            if (modelFilterQuery.isBlank()) {
+                                uiState.availableModels
+                            } else {
+                                val query = modelFilterQuery.trim()
+                                uiState.availableModels.filter { model ->
+                                    model.contains(query, ignoreCase = true) ||
+                                    AiProviderModels.getModelDescription(model).contains(query, ignoreCase = true)
+                                }
+                            }
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 180.dp, max = 280.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                        ) {
+                            if (filteredModels.isEmpty()) {
+                                Box(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { viewModel.selectModel(model) }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .fillMaxSize()
+                                        .padding(16.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    RadioButton(
-                                        selected = isSelected,
-                                        onClick = { viewModel.selectModel(model) }
+                                    Text(
+                                        text = if (modelFilterQuery.isNotBlank()) "No models matching \"$modelFilterQuery\"" else "No models available. Tap '🔄 Sync API Models' above.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text(
-                                            text = model,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                        val desc = AiProviderModels.getModelDescription(model)
-                                        if (desc.isNotEmpty()) {
-                                            Text(
-                                                text = desc,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            } else {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    items(filteredModels, key = { it }) { model ->
+                                        val isSelected = uiState.selectedModel == model
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable { viewModel.selectModel(model) }
+                                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            RadioButton(
+                                                selected = isSelected,
+                                                onClick = { viewModel.selectModel(model) }
                                             )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = model,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    softWrap = false,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                val desc = AiProviderModels.getModelDescription(model)
+                                                if (desc.isNotEmpty()) {
+                                                    Text(
+                                                        text = desc,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -890,7 +1006,9 @@ fun SettingsScreen(
 
                         Button(
                             onClick = {
-                                if (uiState.syncProviderId == "LOCAL" || (uiState.syncProviderId == "GOOGLE_DRIVE" && !uiState.isDriveAuthorized)) {
+                                if (uiState.hasLinkedBackupFile) {
+                                    viewModel.backupToLinkedUri(uiState.linkedBackupUri!!)
+                                } else if (uiState.syncProviderId == "LOCAL" || (uiState.syncProviderId == "GOOGLE_DRIVE" && !uiState.isDriveAuthorized)) {
                                     createBackupLauncher.launch("opened_backup_v1.zip")
                                 } else {
                                     viewModel.syncWithActiveProvider()
@@ -944,7 +1062,9 @@ fun SettingsScreen(
                         ) {
                             Button(
                                 onClick = {
-                                    if (uiState.isDriveAuthorized) {
+                                    if (uiState.hasLinkedBackupFile) {
+                                        viewModel.backupToLinkedUri(uiState.linkedBackupUri!!)
+                                    } else if (uiState.isDriveAuthorized) {
                                         viewModel.backupToGoogleDrive()
                                     } else {
                                         createBackupLauncher.launch("opened_backup_v1.zip")
@@ -952,16 +1072,16 @@ fun SettingsScreen(
                                 },
                                 enabled = !uiState.isBusy,
                                 modifier = Modifier.weight(1f).height(46.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 if (uiState.isBusy) {
                                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                                 } else {
                                     Text(
-                                        text = "☁️ Backup Now (Google Drive / File)",
+                                        text = "☁️ Backup",
                                         maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -977,14 +1097,60 @@ fun SettingsScreen(
                                 },
                                 enabled = !uiState.isBusy,
                                 modifier = Modifier.weight(1f).height(46.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(
-                                    text = "📥 Restore Backup (.zip)",
+                                    text = "📥 Restore",
                                     maxLines = 1,
-                                    softWrap = false,
-                                    overflow = TextOverflow.Ellipsis
+                                    softWrap = false
                                 )
+                            }
+                        }
+
+                        // Persistent Linked File Status Badge
+                        if (uiState.hasLinkedBackupFile) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "✅ Linked to Google Drive / Storage Backup File",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { createBackupLauncher.launch("opened_backup_v1.zip") },
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "Change Sync File Location",
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                }
                             }
                         }
 
@@ -1044,19 +1210,43 @@ fun SettingsScreen(
                                 }
                             }
                         } else {
-                            Button(
-                                onClick = {
-                                    googleSignInLauncher.launch(viewModel.getSignInIntent())
-                                },
-                                shape = RoundedCornerShape(8.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudSync,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Connect Google Account")
+                                Button(
+                                    onClick = {
+                                        createBackupLauncher.launch("opened_backup_v1.zip")
+                                    },
+                                    modifier = Modifier.weight(1f).height(42.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Link,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🔗 Link Drive File", maxLines = 1, softWrap = false, fontSize = 12.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        googleSignInLauncher.launch(viewModel.getSignInIntent())
+                                    },
+                                    modifier = Modifier.weight(1f).height(42.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudSync,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Connect Google", maxLines = 1, softWrap = false, fontSize = 12.sp)
+                                }
                             }
                         }
 

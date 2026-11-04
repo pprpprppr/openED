@@ -55,7 +55,16 @@ class AiCapabilityRegistry(
         taskType: AiTaskType = AiTaskType.GENERAL
     ): String {
         if (mode == ModelSelectionMode.MANUAL) {
-            return userSelectedModel.ifBlank { provider.defaultModel }
+            val candidate = userSelectedModel.ifBlank { provider.defaultModel }
+            if (provider == AiProvider.GEMINI && org.opened.app.core.security.SecureApiKeyStorage.isDeprecatedGeminiModel(candidate)) {
+                return "gemini-3.8-flash"
+            }
+            return candidate
+        }
+
+        // Prevent Free-Tier limit: 0 failures: default Gemini AUTO and BALANCED to gemini-3.8-flash
+        if (provider == AiProvider.GEMINI && (mode == ModelSelectionMode.AUTO || mode == ModelSelectionMode.BALANCED)) {
+            return "gemini-3.8-flash"
         }
 
         val effectiveTier = when (mode) {
@@ -80,7 +89,7 @@ class AiCapabilityRegistry(
     private fun getModelForTier(provider: AiProvider, tier: ModelTier, fallbackModel: String): String {
         return when (provider) {
             AiProvider.GEMINI -> when (tier) {
-                ModelTier.QUALITY -> "gemini-3.1-pro-preview"
+                ModelTier.QUALITY -> "gemini-3.8-flash"
                 ModelTier.BALANCED -> "gemini-3.8-flash"
                 ModelTier.ECONOMY -> "gemini-3.5-flash-lite"
             }

@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.AiProviderModels
 import org.opened.app.core.ai.MultiAiClient
+import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.datastore.UserPreferencesRepository
 import org.opened.app.core.drive.DriveBackupManager
@@ -87,8 +88,19 @@ class SettingsViewModel @Inject constructor(
                     val provider = AiProvider.fromId(prefs.selectedProvider)
                     val currentKey = apiKeyStorage.getApiKeyForProvider(provider).orEmpty()
                     val hasKey = apiKeyStorage.hasApiKeyForProvider(provider)
-                    val currentModel = apiKeyStorage.getModelForProvider(provider).ifBlank {
+                    val rawModel = apiKeyStorage.getModelForProvider(provider).ifBlank {
                         prefs.selectedModel.ifBlank { provider.defaultModel }
+                    }
+                    val currentModel = if (provider == AiProvider.GEMINI && SecureApiKeyStorage.isDeprecatedGeminiModel(rawModel)) {
+                        val migrated = "gemini-3.8-flash"
+                        apiKeyStorage.saveModelForProvider(AiProvider.GEMINI, migrated)
+                        preferencesRepository.setSelectedModel(migrated)
+                        migrated
+                    } else {
+                        rawModel
+                    }
+                    if (provider == AiProvider.GEMINI && SecureApiKeyStorage.isDeprecatedGeminiModel(prefs.selectedModel)) {
+                        preferencesRepository.setSelectedModel("gemini-3.8-flash")
                     }
                     val presets = AiProviderModels.getModelsForProvider(provider)
 
@@ -113,7 +125,8 @@ class SettingsViewModel @Inject constructor(
                             reducedMotionEnabled = prefs.reducedMotionEnabled,
                             syncProviderId = prefs.syncProviderId,
                             webDavServerUrl = prefs.webDavServerUrl,
-                            webDavUsername = prefs.webDavUsername
+                            webDavUsername = prefs.webDavUsername,
+                            linkedBackupUri = prefs.linkedBackupUri
                         )
                     }
                 }
@@ -194,21 +207,37 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun selectCustomPreset(presetUrl: String) {
+        val sanitized = SecureApiKeyStorage.sanitizeCustomBaseUrl(presetUrl)
+        _uiState.update { it.copy(customBaseUrl = sanitized) }
+        apiKeyStorage.saveCustomBaseUrl(sanitized)
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setCustomBaseUrl(sanitized)
+            _uiState.update { it.copy(statusMessage = "Custom API endpoint set to $sanitized") }
+        }
+    }
+
     fun setCustomBaseUrlInput(url: String) {
         _uiState.update { it.copy(customBaseUrl = url) }
     }
 
     fun saveCustomBaseUrl() {
-        val url = _uiState.value.customBaseUrl.trim()
+        val raw = _uiState.value.customBaseUrl.trim()
+        val sanitized = SecureApiKeyStorage.sanitizeCustomBaseUrl(raw)
         viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             try {
-                preferencesRepository.setCustomBaseUrl(url)
-                apiKeyStorage.saveCustomBaseUrl(url)
-                _uiState.update { it.copy(statusMessage = "Custom API endpoint saved.") }
+                preferencesRepository.setCustomBaseUrl(sanitized)
+                apiKeyStorage.saveCustomBaseUrl(sanitized)
+                _uiState.update {
+                    it.copy(
+                        customBaseUrl = sanitized,
+                        statusMessage = "Custom API endpoint saved."
+                    )
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to save endpoint.") }
+                _uiState.update { it.copy(errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to save endpoint.")) }
             }
         }
     }
@@ -222,13 +251,19 @@ class SettingsViewModel @Inject constructor(
             try {
                 preferencesRepository.setSelectedModel(cleanModel)
                 apiKeyStorage.saveModelForProvider(provider, cleanModel)
+                preferencesRepository.setSelectionMode(org.opened.app.core.ai.provider.ModelSelectionMode.MANUAL.id)
                 _uiState.update {
                     val updatedModels = if (cleanModel !in it.availableModels) {
                         listOf(cleanModel) + it.availableModels
                     } else {
                         it.availableModels
                     }
-                    it.copy(selectedModel = cleanModel, availableModels = updatedModels)
+                    it.copy(
+                        selectedModel = cleanModel,
+                        availableModels = updatedModels,
+                        selectionMode = org.opened.app.core.ai.provider.ModelSelectionMode.MANUAL,
+                        statusMessage = "Active model set to '$cleanModel' (Manual mode)"
+                    )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -256,13 +291,18 @@ class SettingsViewModel @Inject constructor(
             _uiState.update { it.copy(isSyncingModels = true, errorMessage = null) }
             multiAiClient.fetchLiveModels(provider)
                 .onSuccess { liveModels ->
+                    val filteredLiveModels = if (provider == AiProvider.GEMINI) {
+                        liveModels.filterNot { SecureApiKeyStorage.isDeprecatedGeminiModel(it) }
+                    } else {
+                        liveModels
+                    }
                     val presets = AiProviderModels.getModelsForProvider(provider)
-                    val combined = (liveModels + presets).distinct().filter { it.isNotBlank() }
+                    val combined = (filteredLiveModels + presets).distinct().filter { it.isNotBlank() }
                     _uiState.update {
                         it.copy(
                             isSyncingModels = false,
                             availableModels = combined,
-                            statusMessage = "Synced ${liveModels.size} live models from ${provider.displayName} API!"
+                            statusMessage = "Synced ${filteredLiveModels.size} live models from ${provider.displayName} API!"
                         )
                     }
                 }
@@ -270,7 +310,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isSyncingModels = false,
-                            errorMessage = error.localizedMessage ?: "Failed to sync models from API."
+                            errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Failed to sync models from API.")
                         )
                     }
                 }
@@ -278,19 +318,34 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun selectSelectionMode(mode: org.opened.app.core.ai.provider.ModelSelectionMode) {
+        val provider = _uiState.value.selectedProvider
         viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             try {
                 preferencesRepository.setSelectionMode(mode.id)
+                var updatedModel = _uiState.value.selectedModel
+                if (provider == AiProvider.GEMINI) {
+                    val targetModel = when (mode) {
+                        org.opened.app.core.ai.provider.ModelSelectionMode.AUTO,
+                        org.opened.app.core.ai.provider.ModelSelectionMode.BALANCED -> "gemini-3.8-flash"
+                        org.opened.app.core.ai.provider.ModelSelectionMode.QUALITY -> "gemini-3.8-flash"
+                        org.opened.app.core.ai.provider.ModelSelectionMode.ECONOMY -> "gemini-3.5-flash-lite"
+                        org.opened.app.core.ai.provider.ModelSelectionMode.MANUAL -> updatedModel
+                    }
+                    updatedModel = targetModel
+                    preferencesRepository.setSelectedModel(targetModel)
+                    apiKeyStorage.saveModelForProvider(provider, targetModel)
+                }
                 _uiState.update {
                     it.copy(
                         selectionMode = mode,
+                        selectedModel = updatedModel,
                         statusMessage = "AI selection mode set to ${mode.displayName}"
                     )
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to set mode.") }
+                _uiState.update { it.copy(errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to set mode.")) }
             }
         }
     }
@@ -309,7 +364,7 @@ class SettingsViewModel @Inject constructor(
                         "Failed: ${result.error ?: result.message}"
                     },
                     statusMessage = if (result.isSuccess) result.message else null,
-                    errorMessage = if (!result.isSuccess) result.message else null
+                    errorMessage = if (!result.isSuccess) formatUserFriendlyAiError(result.error ?: result.message) else null
                 )
             }
         }
@@ -453,7 +508,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isBusy = false,
-                            errorMessage = result.reason
+                            errorMessage = formatUserFriendlyAiError(result.reason)
                         )
                     }
                 }
@@ -478,7 +533,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isBusy = false,
-                            errorMessage = error.localizedMessage ?: "Backup failed."
+                            errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Backup failed.")
                         )
                     }
                 }
@@ -504,11 +559,57 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isBusy = false,
-                            errorMessage = error.localizedMessage ?: "Restore failed."
+                            errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Restore failed.")
                         )
                     }
                 }
             )
+        }
+    }
+
+    fun setLinkedBackupUri(uriString: String?) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setLinkedBackupUri(uriString)
+            _uiState.update { it.copy(linkedBackupUri = uriString) }
+        }
+    }
+
+    fun backupToLinkedUri(uriString: String) {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            _uiState.update { it.copy(isBusy = true, errorMessage = null, statusMessage = null) }
+            try {
+                val uri = android.net.Uri.parse(uriString)
+                val result = driveBackupManager.backupToUri(uri)
+                result.fold(
+                    onSuccess = {
+                        val now = System.currentTimeMillis()
+                        _uiState.update {
+                            it.copy(
+                                isBusy = false,
+                                lastBackupTimestamp = now,
+                                statusMessage = "Backup successfully saved to linked Google Drive / storage file!"
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isBusy = false,
+                                errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Failed to write to linked backup file.")
+                            )
+                        }
+                    }
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isBusy = false,
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to write to linked backup file.")
+                    )
+                }
+            }
         }
     }
 
@@ -533,7 +634,7 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isBusy = false,
-                        errorMessage = e.localizedMessage ?: "Failed to save backup to storage."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to save backup to storage.")
                     )
                 }
             }
@@ -559,7 +660,7 @@ class SettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isBusy = false,
-                        errorMessage = e.localizedMessage ?: "Failed to restore backup from selected file."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to restore backup from selected file.")
                     )
                 }
             }

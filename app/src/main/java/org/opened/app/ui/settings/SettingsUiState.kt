@@ -33,9 +33,11 @@ data class SettingsUiState(
     val syncProviderId: String = UserPreferences.DEFAULT_SYNC_PROVIDER,
     val webDavServerUrl: String = "",
     val webDavUsername: String = "",
+    val linkedBackupUri: String? = null,
     val isBusy: Boolean = false,
     val statusMessage: String? = null,
     val errorMessage: String? = null
 ) {
     val isDriveAuthorized: Boolean get() = isAuthorizedWithDrive
+    val hasLinkedBackupFile: Boolean get() = !linkedBackupUri.isNullOrBlank()
 }

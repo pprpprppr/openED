@@ -17,9 +17,10 @@ openED stores the user's Gemini API Key strictly on-device using the **Android K
 
 | Model | ID | Purpose in openED |
 | :--- | :--- | :--- |
-| **Gemini 3.5 Flash** (Default) | `gemini-3.5-flash` | Fast, high-throughput syllabus generation and live streaming |
-| **Gemini 2.5 Flash** | `gemini-2.5-flash` | Lightweight, efficient reasoning for inline refinement & Socratic Q&A |
-| **Gemini 2.5 Pro** | `gemini-2.5-pro` | Complex STEM, mathematical proofs, and deep conceptual structuring |
+| **Gemini 3.8 Flash** (Default) | `gemini-3.8-flash` | Flagship speed, high-throughput syllabus generation & reasoning |
+| **Gemini 3.6 Flash** | `gemini-3.6-flash` | Balanced multimodal & everyday course generation |
+| **Gemini 3.5 Flash Lite** | `gemini-3.5-flash-lite` | Ultra-fast, lightweight & Free-Tier friendly Q&A |
+| **Gemini 3.1 Pro Preview** | `gemini-3.1-pro-preview` | Complex STEM, mathematical proofs, and deep conceptual structuring |
 
 Users can select their preferred model at any time in **Settings > Model Selection**.
 

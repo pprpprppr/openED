@@ -43,10 +43,10 @@ object AiProviderModels {
     val GEMINI_MODELS = listOf(
         "gemini-3.8-flash",
         "gemini-3.6-flash",
-        "gemini-3.1-pro-preview",
         "gemini-3.5-flash-lite",
-        "gemini-2.5-pro",
-        "gemini-2.5-flash"
+        "gemini-3.1-flash-lite",
+        "gemini-3.1-pro-preview",
+        "gemini-3-flash-preview"
     )
 
     val CLAUDE_MODELS = listOf(
@@ -72,12 +72,12 @@ object AiProviderModels {
 
     fun getModelDescription(model: String): String {
         return when (model) {
-            "gemini-3.8-flash" -> "Latest flagship Flash — high-speed reasoning & agentic workflows"
-            "gemini-3.6-flash" -> "Balanced multimodal & fast course generation"
-            "gemini-3.1-pro-preview" -> "Deep reasoning, complex math & architecture"
-            "gemini-3.5-flash-lite" -> "Ultra-fast, low-cost high-throughput generation"
-            "gemini-2.5-pro" -> "Maximum context & mathematical rigor"
-            "gemini-2.5-flash" -> "Fast low-latency engine"
+            "gemini-3.8-flash" -> "New Stable (Default): Flagship speed, reasoning & complex workflows"
+            "gemini-3.6-flash" -> "Stable: Balanced multimodal & everyday course generation"
+            "gemini-3.5-flash-lite" -> "Stable: Ultra-fast, high-throughput & Free-Tier friendly"
+            "gemini-3.1-flash-lite" -> "Stable: Lightweight low-latency generation"
+            "gemini-3.1-pro-preview" -> "Preview: Deep academic reasoning & advanced math"
+            "gemini-3-flash-preview" -> "Preview: Next-gen Flash preview"
             "claude-sonnet-4-6" -> "State-of-the-art coding, analysis, and nuanced reasoning"
             "claude-opus-4-6" -> "Deep academic synthesis and advanced math derivations"
             "claude-haiku-4-5" -> "Ultra-fast response streaming and lightweight Q&A"

@@ -75,6 +75,10 @@ class SecureApiKeyStorage internal constructor(
     fun warmUp() {
         scope.launch {
             loadPrefs()
+            val currentGeminiModel = getModelForProvider(AiProvider.GEMINI)
+            if (isDeprecatedGeminiModel(currentGeminiModel)) {
+                saveModelForProvider(AiProvider.GEMINI, "gemini-3.8-flash")
+            }
         }
     }
 
@@ -380,11 +384,23 @@ class SecureApiKeyStorage internal constructor(
     fun getModelForProvider(provider: AiProvider): String {
         val prefKey = getPrefKeyForModel(provider)
         val cached = memoryCache[prefKey]
-        if (!cached.isNullOrBlank()) return cached
+        if (!cached.isNullOrBlank()) {
+            if (provider == AiProvider.GEMINI && isDeprecatedGeminiModel(cached)) {
+                val migrated = "gemini-3.8-flash"
+                saveModelForProvider(provider, migrated)
+                return migrated
+            }
+            return cached
+        }
         val encryptedVal = loadPrefs().getString(prefKey, null)
         if (!encryptedVal.isNullOrBlank()) {
             val decrypted = decrypt(encryptedVal)
             if (!decrypted.isNullOrBlank()) {
+                if (provider == AiProvider.GEMINI && isDeprecatedGeminiModel(decrypted)) {
+                    val migrated = "gemini-3.8-flash"
+                    saveModelForProvider(provider, migrated)
+                    return migrated
+                }
                 memoryCache[prefKey] = decrypted
                 return decrypted
             }
@@ -398,7 +414,11 @@ class SecureApiKeyStorage internal constructor(
 
     fun saveModelForProvider(provider: AiProvider, model: String) {
         val prefKey = getPrefKeyForModel(provider)
-        val cleanModel = model.trim()
+        val cleanModel = if (provider == AiProvider.GEMINI && isDeprecatedGeminiModel(model)) {
+            "gemini-3.8-flash"
+        } else {
+            model.trim()
+        }
         memoryCache[prefKey] = cleanModel
 
         if (provider == AiProvider.GEMINI) {
@@ -417,20 +437,21 @@ class SecureApiKeyStorage internal constructor(
 
     fun getCustomBaseUrl(): String {
         val cached = memoryCache[KEY_CUSTOM_BASE_URL]
-        if (!cached.isNullOrBlank()) return cached
+        if (!cached.isNullOrBlank()) return sanitizeCustomBaseUrl(cached)
         val encryptedVal = loadPrefs().getString(KEY_CUSTOM_BASE_URL, null)
         if (!encryptedVal.isNullOrBlank()) {
             val decrypted = decrypt(encryptedVal)
             if (!decrypted.isNullOrBlank()) {
-                memoryCache[KEY_CUSTOM_BASE_URL] = decrypted
-                return decrypted
+                val sanitized = sanitizeCustomBaseUrl(decrypted)
+                memoryCache[KEY_CUSTOM_BASE_URL] = sanitized
+                return sanitized
             }
         }
         return "http://localhost:11434/v1"
     }
 
     fun saveCustomBaseUrl(url: String) {
-        val cleanUrl = url.trim()
+        val cleanUrl = sanitizeCustomBaseUrl(url)
         memoryCache[KEY_CUSTOM_BASE_URL] = cleanUrl
         scope.launch(Dispatchers.IO) {
             val encrypted = encrypt(cleanUrl)
@@ -492,5 +513,46 @@ class SecureApiKeyStorage internal constructor(
         private const val KEY_CLAUDE_MODEL = "claude_active_model"
         private const val KEY_OPENAI_MODEL = "openai_active_model"
         private const val KEY_CUSTOM_MODEL = "custom_active_model"
+
+        /**
+         * Trims whitespace and trailing slashes, auto-upgrades unencrypted remote `http://` endpoints
+         * to `https://` (while preserving local development endpoints like localhost, 127.0.0.1, 10.0.2.2,
+         * 192.168.*, 10.*).
+         */
+        fun sanitizeCustomBaseUrl(rawUrl: String): String {
+            var trimmed = rawUrl.trim().trimEnd('/')
+            if (trimmed.isEmpty()) return trimmed
+
+            if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
+                val host = trimmed.substringBefore('/').substringBefore(':')
+                val isLocal = host.equals("localhost", ignoreCase = true) ||
+                        host == "127.0.0.1" ||
+                        host == "10.0.2.2" ||
+                        host.startsWith("192.168.") ||
+                        host.startsWith("10.")
+                trimmed = (if (isLocal) "http://" else "https://") + trimmed
+            } else if (trimmed.startsWith("http://", ignoreCase = true)) {
+                val withoutScheme = trimmed.substring(7)
+                val host = withoutScheme.substringBefore('/').substringBefore(':')
+                val isLocal = host.equals("localhost", ignoreCase = true) ||
+                        host == "127.0.0.1" ||
+                        host == "10.0.2.2" ||
+                        host.startsWith("192.168.") ||
+                        host.startsWith("10.")
+                if (!isLocal) {
+                    trimmed = "https://" + withoutScheme
+                }
+            }
+            return trimmed
+        }
+
+        /**
+         * Checks if a Gemini model string refers to a deprecated 1.5, 2.0, or 2.5 model or legacy 3.5-flash.
+         */
+        fun isDeprecatedGeminiModel(model: String?): Boolean {
+            if (model.isNullOrBlank()) return false
+            val m = model.trim().lowercase()
+            return m.contains("2.5") || m.contains("2.0") || m.contains("1.5") || m == "gemini-3.5-flash"
+        }
     }
 }

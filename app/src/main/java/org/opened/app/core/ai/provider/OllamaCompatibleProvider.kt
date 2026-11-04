@@ -41,7 +41,7 @@ class OllamaCompatibleProvider @Inject constructor(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private fun getBaseUrl(): String {
-        return secureApiKeyStorage.getCustomBaseUrl().trimEnd('/')
+        return SecureApiKeyStorage.sanitizeCustomBaseUrl(secureApiKeyStorage.getCustomBaseUrl())
     }
 
     override suspend fun generateContent(
@@ -83,6 +83,8 @@ class OllamaCompatibleProvider @Inject constructor(
         val requestBuilder = Request.Builder()
             .url(url)
             .header("content-type", "application/json")
+            .header("HTTP-Referer", "https://github.com/openED")
+            .header("X-Title", "openED")
             .post(requestPayload.toString().toRequestBody(jsonMediaType))
 
         if (apiKey.isNotBlank()) {
@@ -156,6 +158,8 @@ class OllamaCompatibleProvider @Inject constructor(
         val requestBuilder = Request.Builder()
             .url(url)
             .header("content-type", "application/json")
+            .header("HTTP-Referer", "https://github.com/openED")
+            .header("X-Title", "openED")
             .post(requestPayload.toString().toRequestBody(jsonMediaType))
 
         if (apiKey.isNotBlank()) {
@@ -187,7 +191,11 @@ class OllamaCompatibleProvider @Inject constructor(
 
         try {
             val url = "$baseUrl/models"
-            val reqBuilder = Request.Builder().url(url).get()
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .header("HTTP-Referer", "https://github.com/openED")
+                .header("X-Title", "openED")
+                .get()
             if (apiKey.isNotBlank()) {
                 reqBuilder.header("Authorization", "Bearer $apiKey")
             }
@@ -228,7 +236,11 @@ class OllamaCompatibleProvider @Inject constructor(
             val apiKey = secureApiKeyStorage.getApiKeyForProvider(AiProvider.CUSTOM).orEmpty()
             val url = "$baseUrl/models"
 
-            val reqBuilder = Request.Builder().url(url).get()
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .header("HTTP-Referer", "https://github.com/openED")
+                .header("X-Title", "openED")
+                .get()
             if (apiKey.isNotBlank()) {
                 reqBuilder.header("Authorization", "Bearer $apiKey")
             }

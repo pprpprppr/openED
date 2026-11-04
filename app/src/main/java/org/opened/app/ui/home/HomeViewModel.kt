@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.security.SecureApiKeyStorage
 import org.opened.app.domain.repository.OpenEDRepository
 import javax.inject.Inject
@@ -28,7 +29,7 @@ class HomeViewModel @Inject constructor(
         if (throwable is kotlinx.coroutines.CancellationException) return@CoroutineExceptionHandler
         _uiState.update {
             it.copy(
-                errorMessage = throwable.localizedMessage ?: "An unexpected error occurred.",
+                errorMessage = formatUserFriendlyAiError(throwable),
                 isLoading = false,
                 isSearching = false
             )

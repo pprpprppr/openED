@@ -94,6 +94,28 @@ class DriveBackupManager @Inject constructor(
         preferencesRepository.setLastBackupTimestamp(System.currentTimeMillis())
     }
 
+    suspend fun backupToUri(uri: android.net.Uri): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val zipBytes = createBackupZipBytes()
+            val outputStream = context.contentResolver.openOutputStream(uri, "wt")
+                ?: throw java.io.IOException("Cannot open output stream for URI: $uri")
+            outputStream.use { out ->
+                out.write(zipBytes)
+                out.flush()
+            }
+            preferencesRepository.setLastBackupTimestamp(System.currentTimeMillis())
+        }
+    }
+
+    suspend fun restoreFromUri(uri: android.net.Uri, resolution: SyncConflictResolution): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: throw java.io.IOException("Cannot open input stream for URI: $uri")
+            val zipBytes = inputStream.use { it.readBytes() }
+            restoreFromZipBytes(zipBytes, resolution)
+        }
+    }
+
     suspend fun uploadBackupToDrive(): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val drive = getDriveService()

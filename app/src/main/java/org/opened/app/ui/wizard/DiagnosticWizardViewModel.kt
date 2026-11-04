@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
+import org.opened.app.core.ai.formatUserFriendlyAiError
 import javax.inject.Inject
 
 @HiltViewModel
@@ -23,7 +24,7 @@ class DiagnosticWizardViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isBusy = false,
-                errorMessage = throwable.localizedMessage ?: "An unexpected error occurred in diagnostic wizard."
+                errorMessage = formatUserFriendlyAiError(throwable)
             )
         }
     }
@@ -72,7 +73,7 @@ class DiagnosticWizardViewModel @Inject constructor(
                             it.copy(
                                 currentStep = WizardStep.ENTER_TOPIC,
                                 isBusy = false,
-                                errorMessage = error.localizedMessage ?: "Failed to generate diagnostic interview."
+                                errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Failed to generate diagnostic interview.")
                             )
                         }
                     }
@@ -84,7 +85,7 @@ class DiagnosticWizardViewModel @Inject constructor(
                     it.copy(
                         currentStep = WizardStep.ENTER_TOPIC,
                         isBusy = false,
-                        errorMessage = e.localizedMessage ?: "Failed to generate diagnostic interview."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate diagnostic interview.")
                     )
                 }
             }
@@ -159,7 +160,7 @@ class DiagnosticWizardViewModel @Inject constructor(
                             it.copy(
                                 currentStep = WizardStep.ANSWERING_QUESTIONS,
                                 isBusy = false,
-                                errorMessage = error.localizedMessage ?: "Failed to generate syllabus."
+                                errorMessage = formatUserFriendlyAiError(error.localizedMessage ?: "Failed to generate syllabus.")
                             )
                         }
                     }
@@ -171,7 +172,7 @@ class DiagnosticWizardViewModel @Inject constructor(
                     it.copy(
                         currentStep = WizardStep.ANSWERING_QUESTIONS,
                         isBusy = false,
-                        errorMessage = e.localizedMessage ?: "Failed to generate syllabus."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate syllabus.")
                     )
                 }
             }
@@ -195,7 +196,7 @@ class DiagnosticWizardViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isBusy = false,
-                        errorMessage = e.localizedMessage ?: "Failed to save course."
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to save course.")
                     )
                 }
             }

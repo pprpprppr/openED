@@ -54,7 +54,7 @@
 
 ### 7. 🔒 Multi-Provider BYOK & Keystore Security
 - **Multi-Provider AI Router:** Native support for 4 AI engines:
-  1. **Google Gemini** (`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.1-pro-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`)
+  1. **Google Gemini** (`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview`)
   2. **Anthropic Claude** (`claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5`)
   3. **OpenAI GPT** (`gpt-4.1`, `gpt-4o`, `o3-mini`)
   4. **Custom (OpenAI-Compatible):** Base URL, API Key, and Model Name (local Ollama, LM Studio, vLLM, DeepSeek, Groq).
@@ -259,7 +259,7 @@ erDiagram
 2. Open **openED** on your device or emulator.
 3. Open **Settings** from the top app bar.
 4. Input your Gemini API key and tap **Save Key Securely**.
-5. Select your default model (defaulting to `gemini-3.5-flash` or `gemini-2.5-flash`).
+5. Select your default model (defaulting to `gemini-3.8-flash`).
 
 ### 3. Google Drive Cloud Sync Configuration
 1. Navigate to the [Google Cloud Console](https://console.cloud.google.com/).

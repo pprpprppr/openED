@@ -315,6 +315,7 @@ fun CourseWorkspaceScreen(
                             item {
                                 EmptyChapterCard(
                                     chapterTitle = currentChapter.title,
+                                    providerName = uiState.activeProviderName,
                                     onGenerate = { viewModel.generateChapterContent() }
                                 )
                             }
@@ -323,7 +324,7 @@ fun CourseWorkspaceScreen(
                         // Case 2: Actively Streaming Content
                         if (uiState.isStreaming) {
                             item {
-                                StreamingHeaderBanner()
+                                StreamingHeaderBanner(providerName = uiState.activeProviderName)
                             }
                             item {
                                 val currentMarkdown = uiState.streamingContent.orEmpty()
@@ -667,6 +668,7 @@ private fun stripLeadingH1(markdown: String, chapterTitle: String): String {
 @Composable
 private fun EmptyChapterCard(
     chapterTitle: String,
+    providerName: String,
     onGenerate: () -> Unit
 ) {
     ElevatedCard(
@@ -722,14 +724,14 @@ private fun EmptyChapterCard(
             ) {
                 Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Generate Lesson with Gemini")
+                Text("Generate Lesson with $providerName")
             }
         }
     }
 }
 
 @Composable
-private fun StreamingHeaderBanner() {
+private fun StreamingHeaderBanner(providerName: String) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -748,7 +750,7 @@ private fun StreamingHeaderBanner() {
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
-                text = "Streaming live lesson content from Gemini...",
+                text = "Streaming live lesson content from $providerName...",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer

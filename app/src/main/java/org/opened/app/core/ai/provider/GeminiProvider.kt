@@ -167,7 +167,10 @@ class GeminiProvider @Inject constructor(
                         it.jsonPrimitive.content
                     }.orEmpty()
                     if (methods.contains("generateContent")) {
-                        obj["name"]?.jsonPrimitive?.content?.removePrefix("models/")
+                        val name = obj["name"]?.jsonPrimitive?.content?.removePrefix("models/").orEmpty()
+                        if (name.isNotBlank() && !SecureApiKeyStorage.isDeprecatedGeminiModel(name)) {
+                            name
+                        } else null
                     } else null
                 }
             }
@@ -176,7 +179,7 @@ class GeminiProvider @Inject constructor(
 
     override fun getCapabilities(model: String): ModelCapability {
         return when (model) {
-            "gemini-3.1-pro-preview", "gemini-2.5-pro" -> ModelCapability(
+            "gemini-3.1-pro-preview" -> ModelCapability(
                 modelId = model,
                 displayName = model,
                 supportsJson = true,
@@ -188,7 +191,7 @@ class GeminiProvider @Inject constructor(
                 outputCostPerMillion = 5.00,
                 tier = ModelTier.QUALITY
             )
-            "gemini-3.5-flash-lite", "gemini-2.5-flash" -> ModelCapability(
+            "gemini-3.5-flash-lite", "gemini-3.1-flash-lite" -> ModelCapability(
                 modelId = model,
                 displayName = model,
                 supportsJson = true,
