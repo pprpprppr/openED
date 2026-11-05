@@ -209,13 +209,13 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Gemini API Key Required",
+                                text = "${uiState.activeProviderName} API Key Required",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                             Text(
-                                text = "Tap here to configure your personal Gemini API key in Settings.",
+                                text = "Tap here to configure your personal ${uiState.activeProviderName} API key in Settings.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )

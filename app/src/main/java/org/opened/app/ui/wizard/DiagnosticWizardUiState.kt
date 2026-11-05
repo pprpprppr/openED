@@ -23,5 +23,6 @@ data class DiagnosticWizardUiState(
     val generatedSyllabus: SyllabusResponse? = null,
     val createdPathId: String? = null,
     val isBusy: Boolean = false,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val activeProviderName: String = "AI"
 )

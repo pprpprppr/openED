@@ -10,9 +10,11 @@ import java.io.InputStreamReader
 
 object SseEventParser {
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         coerceInputValues = true
     }
 

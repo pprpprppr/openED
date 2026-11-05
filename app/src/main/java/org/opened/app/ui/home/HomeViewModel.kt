@@ -12,9 +12,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.formatUserFriendlyAiError
+import org.opened.app.core.datastore.UserPreferencesRepository
 import org.opened.app.core.security.SecureApiKeyStorage
 import org.opened.app.domain.repository.OpenEDRepository
 import javax.inject.Inject
@@ -22,7 +25,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: OpenEDRepository,
-    private val apiKeyStorage: SecureApiKeyStorage
+    private val apiKeyStorage: SecureApiKeyStorage,
+    private val preferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -50,12 +54,14 @@ class HomeViewModel @Inject constructor(
     fun checkApiKey() {
         viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             try {
-                val hasKey = apiKeyStorage.hasApiKey()
-                _uiState.update { it.copy(hasApiKey = hasKey) }
+                val prefs = preferencesRepository.userPreferencesFlow.first()
+                val provider = AiProvider.fromId(prefs.selectedProvider)
+                val hasKey = apiKeyStorage.hasApiKeyForProvider(provider)
+                _uiState.update { it.copy(hasApiKey = hasKey, activeProviderName = provider.displayName) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _uiState.update { it.copy(errorMessage = e.localizedMessage ?: "Failed to verify API key.") }
+                _uiState.update { it.copy(errorMessage = formatUserFriendlyAiError(e)) }
             }
         }
     }

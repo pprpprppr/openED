@@ -131,4 +131,69 @@ class LatexParserTest {
         assertTrue("Should contain log", cleaned.contains("log"))
         assertEquals("2^(⌊log₂ N⌋)", cleaned)
     }
+
+    @Test
+    fun testOperatornameRankConvertedCleanly() {
+        val input = "\\operatorname{rank}(A) + \\operatorname{diag}(B)"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertFalse("Should not contain operatornamerank", cleaned.contains("operatornamerank"))
+        assertFalse("Should not contain operatornamediag", cleaned.contains("operatornamediag"))
+        assertTrue("Should contain rank", cleaned.contains("rank"))
+        assertTrue("Should contain diag", cleaned.contains("diag"))
+    }
+
+    @Test
+    fun testMathsfTransposeConverted() {
+        val input = "V^\\mathsf{T} = V^{\\mathsf{T}}"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertFalse("Should not contain mathsfT", cleaned.contains("mathsfT"))
+        assertTrue("Should contain ᵀ", cleaned.contains("ᵀ"))
+        assertEquals("Vᵀ = Vᵀ", cleaned)
+    }
+
+    @Test
+    fun testBoxedExpressionStripped() {
+        val input = "\\boxed{A}"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertFalse("Should not contain boxedA", cleaned.contains("boxedA"))
+        assertEquals("A", cleaned)
+    }
+
+    @Test
+    fun testChemicalRadicalBulletConverted() {
+        val input = "NO^\\bullet + \\ce{NO^\\bullet}"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertFalse("Should not contain bullet word", cleaned.contains("bullet"))
+        assertTrue("Should contain •", cleaned.contains("•"))
+    }
+
+    @Test
+    fun testLongrightarrowConverted() {
+        val input = "A \\longrightarrow B \\implies C"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertFalse("Should not leak longrightarrow", cleaned.contains("longrightarrow"))
+        assertTrue("Should contain ⟶", cleaned.contains("⟶"))
+        assertTrue("Should contain ⇒", cleaned.contains("⇒"))
+    }
+
+    @Test
+    fun testChemistrySubscriptsBh4() {
+        val input = "\$BH_4\$"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertEquals("BH₄", cleaned)
+    }
+
+    @Test
+    fun testInlineParensMathDelimitersCleaned() {
+        val input = "\\( x + y \\)"
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertEquals("x + y", cleaned)
+    }
+
+    @Test
+    fun testPreservesBoundarySpacesPreventingEatenSpaces() {
+        val input = " the list "
+        val cleaned = LatexParser.cleanInlineLatex(input)
+        assertEquals(" the list ", cleaned)
+    }
 }

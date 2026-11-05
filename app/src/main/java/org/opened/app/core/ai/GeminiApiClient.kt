@@ -36,9 +36,11 @@ class GeminiApiClient @Inject constructor(
         .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
         .build()
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         encodeDefaults = true
         coerceInputValues = true
     }

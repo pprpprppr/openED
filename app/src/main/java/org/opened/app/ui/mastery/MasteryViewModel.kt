@@ -60,7 +60,13 @@ class MasteryViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MasteryUiState())
     val uiState: StateFlow<MasteryUiState> = _uiState.asStateFlow()
 
-    private val json = Json { ignoreUnknownKeys = true }
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        allowTrailingComma = true
+        coerceInputValues = true
+    }
 
     fun selectTab(index: Int) = _uiState.update { it.copy(selectedTabIndex = index) }
 

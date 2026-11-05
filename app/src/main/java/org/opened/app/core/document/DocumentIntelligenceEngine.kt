@@ -49,7 +49,13 @@ class DocumentIntelligenceEngine @Inject constructor(
     private val preferencesRepository: UserPreferencesRepository
 ) {
 
-    private val json = Json { ignoreUnknownKeys = true }
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        allowTrailingComma = true
+        coerceInputValues = true
+    }
 
     /**
      * Ingest, chunk, and index an imported file into local Room storage.

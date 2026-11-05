@@ -34,9 +34,11 @@ class AnthropicProvider @Inject constructor(
 
     override val provider: AiProvider = AiProvider.CLAUDE
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         coerceInputValues = true
     }
 

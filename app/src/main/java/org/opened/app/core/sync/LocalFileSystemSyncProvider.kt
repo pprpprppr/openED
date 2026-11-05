@@ -23,10 +23,13 @@ class LocalFileSystemSyncProvider @Inject constructor(
     override val providerId: String = "LOCAL"
     override val displayName: String = "Local Device Archive"
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         encodeDefaults = true
+        coerceInputValues = true
     }
 
     private val syncFileName = "opened_sync_bundle.zip"

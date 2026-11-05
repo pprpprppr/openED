@@ -69,15 +69,18 @@ fun buildInteractiveAnnotatedString(
         // 1. [[Wiki Links]]
         // 2. [Markdown Links](url)
         // 3. `inline code`
-        // 4. $inline math$ (handling nested braces)
-        // 5. **bold**
-        // 6. *italic*
-        val tokenRegex = Regex("""(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)""")
+        // 4. \(inline math\)
+        // 5. \[display math\]
+        // 6. $inline math$ (handling nested braces)
+        // 7. **bold**
+        // 8. *italic*
+        val tokenRegex = Regex("""(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)""")
         var lastIndex = 0
 
         fun appendCleanedText(raw: String) {
-            // Never allow raw LaTeX leaks or stray braces in body text
-            val cleaned = if (raw.contains('\\') || (raw.contains('{') && raw.contains('}'))) {
+            if (raw.isEmpty()) return
+            // Never allow raw LaTeX leaks, unparsed math, or stray braces in body text
+            val cleaned = if (raw.contains('\\') || (raw.contains('{') && raw.contains('}')) || raw.contains('$')) {
                 LatexParser.cleanInlineLatex(raw)
             } else {
                 raw
@@ -141,9 +144,41 @@ fun buildInteractiveAnnotatedString(
                     pop()
                 }
 
+                // \(inline math\)
+                fullMatch.startsWith("\\(") && fullMatch.endsWith("\\)") && fullMatch.length > 4 -> {
+                    val mathExpr = match.groupValues[9]
+                    val formatted = LatexParser.cleanInlineLatex(mathExpr)
+                    pushStyle(
+                        SpanStyle(
+                            fontStyle = FontStyle.Italic,
+                            color = Color(0xFF818CF8),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                    )
+                    append(formatted)
+                    pop()
+                }
+
+                // \[display math\]
+                fullMatch.startsWith("\\[") && fullMatch.endsWith("\\]") && fullMatch.length > 4 -> {
+                    val mathExpr = match.groupValues[11]
+                    val formatted = LatexParser.cleanInlineLatex(mathExpr)
+                    pushStyle(
+                        SpanStyle(
+                            fontStyle = FontStyle.Italic,
+                            color = Color(0xFF818CF8),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                    )
+                    append(formatted)
+                    pop()
+                }
+
                 // $inline math$
                 fullMatch.startsWith("$") && fullMatch.endsWith("$") && fullMatch.length > 2 -> {
-                    val mathExpr = match.groupValues[9]
+                    val mathExpr = match.groupValues[13]
                     val formatted = LatexParser.cleanInlineLatex(mathExpr)
                     pushStyle(
                         SpanStyle(
@@ -159,7 +194,7 @@ fun buildInteractiveAnnotatedString(
 
                 // **bold**
                 fullMatch.startsWith("**") && fullMatch.endsWith("**") -> {
-                    val boldText = match.groupValues[11]
+                    val boldText = match.groupValues[15]
                     pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
                     append(boldText)
                     pop()
@@ -167,7 +202,7 @@ fun buildInteractiveAnnotatedString(
 
                 // *italic*
                 fullMatch.startsWith("*") && fullMatch.endsWith("*") -> {
-                    val italicText = match.groupValues[13]
+                    val italicText = match.groupValues[17]
                     pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
                     append(italicText)
                     pop()

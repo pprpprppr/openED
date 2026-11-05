@@ -32,9 +32,11 @@ class OllamaCompatibleProvider @Inject constructor(
 
     override val provider: AiProvider = AiProvider.CUSTOM
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         coerceInputValues = true
     }
 

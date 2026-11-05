@@ -31,10 +31,13 @@ class DriveBackupManager @Inject constructor(
     private val authManager: GoogleAuthManager,
     private val preferencesRepository: UserPreferencesRepository
 ) {
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         encodeDefaults = true
+        coerceInputValues = true
     }
 
     private val backupFileName = "opened_backup_v1.zip"

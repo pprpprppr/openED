@@ -107,32 +107,40 @@ fun RichMarkdownRenderer(
                     is MarkdownNode.Heading -> {
                         Spacer(modifier = Modifier.height(if (index == 0) 8.dp else 20.dp))
                         when (node.level) {
-                            1 -> Text(
+                            1 -> InteractiveMarkdownText(
                                 text = node.text,
-                                style = MaterialTheme.typography.headlineLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold,
+                                onChapterClick = onChapterClick,
+                                style = MaterialTheme.typography.headlineLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
                                 modifier = Modifier.padding(bottom = 6.dp)
                             )
-                            2 -> Text(
+                            2 -> InteractiveMarkdownText(
                                 text = node.text,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.SemiBold,
+                                onChapterClick = onChapterClick,
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
                                 modifier = Modifier.padding(bottom = 6.dp)
                             )
-                            3 -> Text(
+                            3 -> InteractiveMarkdownText(
                                 text = node.text,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.SemiBold,
+                                onChapterClick = onChapterClick,
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
-                            else -> Text(
+                            else -> InteractiveMarkdownText(
                                 text = node.text,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Medium,
+                                onChapterClick = onChapterClick,
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
@@ -411,21 +419,24 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
             continue
         }
 
-        // Math block $$ ... $$
-        if (trimmed.startsWith("$$")) {
+        // Math block $$ ... $$ or \[ ... \]
+        if (trimmed.startsWith("$$") || trimmed.startsWith("\\[")) {
+            val isBracket = trimmed.startsWith("\\[")
+            val closingDelimiter = if (isBracket) "\\]" else "$$"
+            val prefix = if (isBracket) "\\[" else "$$"
             val mathLines = mutableListOf<String>()
-            if (trimmed.endsWith("$$") && trimmed.length > 2) {
+            if (trimmed.endsWith(closingDelimiter) && trimmed.length > prefix.length + closingDelimiter.length) {
                 // single line math block
-                nodes.add(MarkdownNode.Math(trimmed.removePrefix("$$").removeSuffix("$$").trim(), isComplete = true))
+                nodes.add(MarkdownNode.Math(trimmed.removePrefix(prefix).removeSuffix(closingDelimiter).trim(), isComplete = true))
                 i++
                 continue
             }
-            mathLines.add(trimmed.removePrefix("$$"))
+            mathLines.add(trimmed.removePrefix(prefix))
             i++
             var closed = false
             while (i < lines.size) {
-                if (lines[i].trim().endsWith("$$")) {
-                    mathLines.add(lines[i].trim().removeSuffix("$$"))
+                if (lines[i].trim().endsWith(closingDelimiter)) {
+                    mathLines.add(lines[i].trim().removeSuffix(closingDelimiter))
                     closed = true
                     i++
                     break

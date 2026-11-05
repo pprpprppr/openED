@@ -33,6 +33,7 @@ enum class BracketType {
 object LatexParser {
 
     private val SUPERSCRIPTS = mapOf(
+        '•' to '•', '●' to '●', '·' to '·',
         '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
         '5' to '⁵', '6' to '⁶', '7' to '⁷', '8' to '⁸', '9' to '⁹',
         '+' to '⁺', '-' to '⁻', '=' to '⁼', '(' to '⁽', ')' to '⁾',
@@ -64,6 +65,15 @@ object LatexParser {
         "leftrightarrow" to "↔", "Rightarrow" to "⇒", "Leftarrow" to "⇐",
         "Leftrightarrow" to "⇔", "iff" to "⇔", "mapsto" to "↦",
         "uparrow" to "↑", "downarrow" to "↓",
+        "longrightarrow" to "⟶", "longleftarrow" to "⟵",
+        "Longrightarrow" to "⟹", "Longleftarrow" to "⟺",
+        "longleftrightarrow" to "⟷", "Longleftrightarrow" to "⟺",
+        "implies" to "⇒", "impliedby" to "⇐",
+        "rightleftharpoons" to "⇌", "leftrightharpoons" to "⇋",
+        "harr" to "↔", "rarr" to "→", "larr" to "←",
+
+        // Bullets & Symbols
+        "bullet" to "•",
 
         // Relations & Comparison
         "le" to "≤", "leq" to "≤", "ge" to "≥", "geq" to "≥",
@@ -124,9 +134,13 @@ object LatexParser {
      * stripping stray braces, converting vectors/sets, and never letting raw LaTeX leaks occur.
      */
     fun cleanInlineLatex(raw: String): String {
+        val leadingSpace = raw.takeWhile { it.isWhitespace() }
+        val trailingSpace = raw.takeLastWhile { it.isWhitespace() }
+
         var text = raw.trim()
             .removePrefix("$$").removeSuffix("$$")
             .removePrefix("\\[").removeSuffix("\\]")
+            .removePrefix("\\(").removeSuffix("\\)")
             .removePrefix("$").removeSuffix("$")
             .replace("$", "")
             .trim()
@@ -137,10 +151,31 @@ object LatexParser {
         val placeholderUnderscore = "\u0000PROTECTEDUNDERSCORE\u0000"
         text = text.replace("\\_", placeholderUnderscore)
 
-        // 2. Inline matrices \begin{bmatrix} a \\ b \end{bmatrix} -> [a, b]ᵀ
+        // 2. Chemistry: \ce{...} (e.g. \ce{BH4}, \ce{NO^\bullet}, \ce{H2O})
+        text = text.replace(Regex("""\\ce\{([^{}]+)\}""")) { match ->
+            cleanChemistryFormula(match.groupValues[1])
+        }
+
+        // 3. \operatorname{...} (e.g. \operatorname{rank} -> rank, \operatorname{diag} -> diag)
+        text = text.replace(Regex("""\\operatorname\*?\{([^{}]+)\}""")) { match ->
+            " ${match.groupValues[1].trim()} "
+        }
+
+        // 4. \boxed{...} (e.g. \boxed{A} -> A)
+        text = text.replace(Regex("""\\boxed\{([^{}]+)\}""")) { match ->
+            match.groupValues[1].trim()
+        }
+
+        // 5. Transpose: V^\mathsf{T}, V^{\mathsf{T}}, V^T, V^\top, etc.
+        text = text.replace(Regex("""\^\{\\?(?:mathsf|mathrm)?\{?T\}?\}|\^\\?(?:mathsf|mathrm)?\{?T\}?|\^\{\\top\}|\^\\top|\^T|\^\{T\}|\^\{\\intercal\}"""), "ᵀ")
+
+        // 6. Radicals/bullets: NO^\bullet, ^\bullet -> •
+        text = text.replace(Regex("""\^\{\\bullet\}|\^\\bullet|\^•|\^\{•\}"""), "•")
+
+        // 7. Inline matrices \begin{bmatrix} a \\ b \end{bmatrix} -> [a, b]ᵀ
         text = replaceInlineMatrices(text)
 
-        // 3. Hat and vector accents
+        // 8. Hat and vector accents
         text = text.replace(Regex("""\\hat\{i\}|\\hat\{ı\}|\\hat\s+i"""), "î")
             .replace(Regex("""\\hat\{j\}|\\hat\s+j"""), "ĵ")
             .replace(Regex("""\\hat\{k\}|\\hat\s+k"""), "k̂")
@@ -159,7 +194,7 @@ object LatexParser {
             .replace(Regex("""\\vec\{j\}|\\vec\s+j"""), "j⃗")
             .replace(Regex("""\\vec\{([^}]+)\}""")) { "${it.groupValues[1]}⃗" }
 
-        // 4. Blackboard bold sets
+        // 9. Blackboard bold sets
         text = text.replace("\\mathbb{R}", "ℝ")
             .replace("\\mathbb{N}", "ℕ")
             .replace("\\mathbb{Z}", "ℤ")
@@ -170,17 +205,17 @@ object LatexParser {
             .replace("\\mathbb{H}", "ℍ")
             .replace(Regex("""\\mathbb\{([A-Za-z])\}""")) { it.groupValues[1] }
 
-        // 5. Formats: \mathbf, \boldsymbol, \mathrm, \text, \mathit
-        text = text.replace(Regex("""\\(mathbf|boldsymbol|mathrm|text|textbf|textit|mathit)\{([^{}]+)\}""")) { it.groupValues[2] }
+        // 10. Formats: \mathbf, \boldsymbol, \mathrm, \text, \mathit, \mathsf, \mathtt, \mathcal, \mathscr, \mathbb, \mathfrak
+        text = text.replace(Regex("""\\(mathbf|boldsymbol|mathrm|text|textbf|textit|mathit|mathsf|mathtt|mathcal|mathscr|mathbb|mathfrak|textnormal)\{([^{}]+)\}""")) { it.groupValues[2] }
 
-        // 6. Non-letter spacing commands
+        // 11. Non-letter spacing commands
         text = text.replace("\\,", " ")
             .replace("\\;", " ")
             .replace("\\:", " ")
             .replace("\\!", "")
             .replace("\\ ", " ")
 
-        // 7. Whole-word regex matching for LaTeX commands: \\([a-zA-Z]+)
+        // 12. Whole-word regex matching for LaTeX commands: \\([a-zA-Z]+)
         text = Regex("""\\([a-zA-Z]+)""").replace(text) { match ->
             val cmd = match.groupValues[1]
             LATEX_COMMANDS[cmd] ?: cmd
@@ -190,7 +225,7 @@ object LatexParser {
         text = text.replace(Regex("""⌊\s+"""), "⌊").replace(Regex("""\s+⌋"""), "⌋")
         text = text.replace(Regex("""⌈\s+"""), "⌈").replace(Regex("""\s+⌉"""), "⌉")
 
-        // 8. Fractions: \frac{a}{b} -> a/b or (a)/(b)
+        // 13. Fractions: \frac{a}{b} -> a/b or (a)/(b)
         text = Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}""").replace(text) { match ->
             val num = cleanInlineLatex(match.groupValues[1].trim())
             val den = cleanInlineLatex(match.groupValues[2].trim())
@@ -201,15 +236,15 @@ object LatexParser {
             }
         }
 
-        // 9. Square roots: \sqrt{...} -> √( ... )
+        // 14. Square roots: \sqrt{...} -> √( ... )
         text = Regex("""\\sqrt\{([^{}]+)\}""").replace(text) { match ->
             "√(${cleanInlineLatex(match.groupValues[1].trim())})"
         }
 
-        // 10. Transpose ^T or ^\top or ^\intercal
+        // 15. Transpose ^T or ^\top or ^\intercal
         text = text.replace(Regex("""\^\{\\top\}|\^\\top|\^T|\^\{T\}|\^\{\\intercal\}"""), "ᵀ")
 
-        // 11. Superscripts: ^{x} or ^x (resolve inner macros before mapping)
+        // 16. Superscripts: ^{x} or ^x (resolve inner macros before mapping)
         text = Regex("""\^\{([^{}]+)\}""").replace(text) { match ->
             val inner = cleanInlineLatex(match.groupValues[1])
             val allMapped = inner.all { SUPERSCRIPTS.containsKey(it) }
@@ -219,12 +254,12 @@ object LatexParser {
                 "^($inner)"
             }
         }
-        text = Regex("""\^([0-9a-zA-Z])""").replace(text) { match ->
+        text = Regex("""\^([0-9a-zA-Z•●·])""").replace(text) { match ->
             val c = match.groupValues[1].first()
             (SUPERSCRIPTS[c] ?: "^$c").toString()
         }
 
-        // 12. Subscripts: _{x} or _x
+        // 17. Subscripts: _{x} or _x
         text = Regex("""_\{([^{}]+)\}""").replace(text) { match ->
             val inner = cleanInlineLatex(match.groupValues[1])
             val allMapped = inner.all { SUBSCRIPTS.containsKey(it) }
@@ -239,17 +274,46 @@ object LatexParser {
             (SUBSCRIPTS[c] ?: "_$c").toString()
         }
 
-        // 13. Strip leftover formatting commands and braces
+        // 18. Clean stray delimiters
+        text = text.replace("\\(", "(").replace("\\)", ")")
+            .replace("\\[", "[").replace("\\]", "]")
+
+        // 19. Strip leftover formatting commands and braces
         text = text.replace(Regex("""\\[a-zA-Z]+"""), "") // remove remaining backslash commands
         text = text.replace("{", "").replace("}", "") // strip ALL remaining raw braces {X} -> X
 
-        // 14. Restore protected escaped underscores
+        // 20. Restore protected escaped underscores
         text = text.replace(placeholderUnderscore, "_")
 
         // Normalize multiple spaces
-        text = text.replace(Regex("""\s{2,}"""), " ").trim()
+        text = text.replace(Regex("""[ \t]{2,}"""), " ").trim()
 
-        return text
+        return if (raw.isBlank()) "" else "$leadingSpace$text$trailingSpace"
+    }
+
+    private fun cleanChemistryFormula(formula: String): String {
+        var s = formula.trim()
+        s = s.replace("->", "→").replace("<=>", "⇌")
+        s = s.replace(Regex("""\^\\bullet|\^\{\\bullet\}|\^•|\^\{•\}"""), "•")
+        s = s.replace(Regex("""\^\{([^{}]+)\}""")) { m ->
+            m.groupValues[1].map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+        }
+        s = s.replace(Regex("""\^([0-9+\-•])""")) { m ->
+            (SUPERSCRIPTS[m.groupValues[1].first()] ?: "^${m.groupValues[1]}").toString()
+        }
+        s = s.replace(Regex("""_\{([^{}]+)\}""")) { m ->
+            m.groupValues[1].map { SUBSCRIPTS[it] ?: it }.joinToString("")
+        }
+        s = s.replace(Regex("""_([0-9a-zA-Z])""")) { m ->
+            (SUBSCRIPTS[m.groupValues[1].first()] ?: "_${m.groupValues[1]}").toString()
+        }
+        // Digits after chemical element letters: H2O -> H₂O, BH4 -> BH₄
+        s = s.replace(Regex("""([A-Za-z\)])([0-9]+)""")) { m ->
+            val element = m.groupValues[1]
+            val digits = m.groupValues[2].map { SUBSCRIPTS[it] ?: it }.joinToString("")
+            "$element$digits"
+        }
+        return s
     }
 
     private fun replaceInlineMatrices(input: String): String {

@@ -27,9 +27,11 @@ class AiLearningEngine @Inject constructor(
     private val repository: OpenEDRepository,
     private val preferencesRepository: UserPreferencesRepository
 ) {
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         coerceInputValues = true
     }
 
@@ -458,16 +460,7 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
     }
 
     private fun cleanJsonOutput(raw: String): String {
-        var trimmed = raw.trim()
-        if (trimmed.startsWith("```json")) {
-            trimmed = trimmed.removePrefix("```json")
-        } else if (trimmed.startsWith("```")) {
-            trimmed = trimmed.removePrefix("```")
-        }
-        if (trimmed.endsWith("```")) {
-            trimmed = trimmed.removeSuffix("```")
-        }
-        return trimmed.trim()
+        return JsonRepairer.cleanAndRepairJson(raw)
     }
 
     // -------------------------------------------------------------------------

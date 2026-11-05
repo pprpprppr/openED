@@ -32,9 +32,11 @@ class GeminiProvider @Inject constructor(
 
     override val provider: AiProvider = AiProvider.GEMINI
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         coerceInputValues = true
     }
 

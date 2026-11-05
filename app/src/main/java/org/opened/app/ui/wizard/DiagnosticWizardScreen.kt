@@ -124,7 +124,7 @@ fun DiagnosticWizardScreen(
                 WizardStep.GENERATING_QUESTIONS -> {
                     LoadingStepIndicator(
                         title = "Generating Diagnostic Interview",
-                        subtitle = "Gemini is generating 3-5 targeted assessment questions tailored to '${uiState.topic}'..."
+                        subtitle = "${uiState.activeProviderName} is generating 3-5 targeted assessment questions tailored to '${uiState.topic}'..."
                     )
                 }
 
@@ -134,6 +134,7 @@ fun DiagnosticWizardScreen(
                         selectedAnswers = uiState.selectedAnswers,
                         customAnswers = uiState.customTextAnswers,
                         errorMessage = uiState.errorMessage,
+                        providerName = uiState.activeProviderName,
                         onToggleOption = { qId, opt, isMulti ->
                             viewModel.toggleAnswerOption(qId, opt, isMulti)
                         },
@@ -316,6 +317,7 @@ private fun AnsweringQuestionsContent(
     selectedAnswers: Map<String, List<String>>,
     customAnswers: Map<String, String>,
     errorMessage: String?,
+    providerName: String = "AI",
     onToggleOption: (String, String, Boolean) -> Unit,
     onCustomAnswer: (String, String) -> Unit,
     onSubmit: () -> Unit
@@ -332,7 +334,7 @@ private fun AnsweringQuestionsContent(
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Answer these assessment questions so Gemini can adapt technical depth, pacing, and real-world practical examples.",
+                text = "Answer these assessment questions so $providerName can adapt technical depth, pacing, and real-world practical examples.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)

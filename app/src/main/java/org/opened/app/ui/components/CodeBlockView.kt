@@ -114,17 +114,19 @@ fun CodeBlockView(
             }
 
             // Code content with horizontal scroll
+            val scrollState = rememberScrollState()
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp)
-                    .horizontalScroll(rememberScrollState())
+                    .horizontalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 Text(
                     text = highlightedText,
                     fontFamily = FontFamily.Monospace,
                     fontSize = 13.sp,
-                    lineHeight = 20.sp
+                    lineHeight = 22.sp,
+                    softWrap = false
                 )
             }
         }

@@ -33,9 +33,11 @@ class OpenAiProvider @Inject constructor(
 
     override val provider: AiProvider = AiProvider.OPENAI
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         coerceInputValues = true
     }
 

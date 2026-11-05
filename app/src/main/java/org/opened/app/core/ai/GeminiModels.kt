@@ -64,28 +64,28 @@ data class DiagnosticQuestionsResponse(
 
 @Serializable
 data class SyllabusChapterItem(
-    val title: String,
+    val title: String = "",
     val estimatedMinutes: Int = 15,
-    val summary: String,
+    val summary: String = "",
     val keyConcepts: List<String> = emptyList()
 )
 
 @Serializable
 data class SyllabusModuleItem(
-    val title: String,
-    val summary: String,
-    val chapters: List<SyllabusChapterItem>
+    val title: String = "",
+    val summary: String = "",
+    val chapters: List<SyllabusChapterItem> = emptyList()
 )
 
 @Serializable
 data class SyllabusResponse(
-    val title: String,
-    val topic: String,
-    val userLevel: String, // BEGINNER, INTERMEDIATE, ADVANCED
-    val targetAudience: String,
-    val estimatedTotalHours: Double,
+    val title: String = "",
+    val topic: String = "",
+    val userLevel: String = "BEGINNER", // BEGINNER, INTERMEDIATE, ADVANCED
+    val targetAudience: String = "",
+    val estimatedTotalHours: Double = 0.0,
     val prerequisites: List<String> = emptyList(),
-    val modules: List<SyllabusModuleItem>
+    val modules: List<SyllabusModuleItem> = emptyList()
 )
 
 @Serializable

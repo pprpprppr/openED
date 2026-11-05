@@ -12,11 +12,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.formatUserFriendlyAiError
+import org.opened.app.core.ai.AiProvider
+import org.opened.app.core.datastore.UserPreferencesRepository
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 @HiltViewModel
 class DiagnosticWizardViewModel @Inject constructor(
-    private val aiLearningEngine: AiLearningEngine
+    private val aiLearningEngine: AiLearningEngine,
+    private val preferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -31,6 +35,14 @@ class DiagnosticWizardViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(DiagnosticWizardUiState())
     val uiState: StateFlow<DiagnosticWizardUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch(Dispatchers.IO) {
+            val prefs = preferencesRepository.userPreferencesFlow.first()
+            val provider = AiProvider.fromId(prefs.selectedProvider)
+            _uiState.update { it.copy(activeProviderName = provider.displayName) }
+        }
+    }
 
     fun setTopic(topic: String) {
         _uiState.update { it.copy(topic = topic, errorMessage = null) }

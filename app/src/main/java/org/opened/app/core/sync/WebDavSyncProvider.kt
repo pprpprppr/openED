@@ -28,10 +28,13 @@ class WebDavSyncProvider @Inject constructor(
     override val providerId: String = "WEBDAV"
     override val displayName: String = "WebDAV / Nextcloud"
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         encodeDefaults = true
+        coerceInputValues = true
     }
 
     private val syncFileName = "opened_webdav_bundle.zip"

@@ -12,6 +12,7 @@ data class HomeUiState(
     val isSearching: Boolean = false,
     val isLoading: Boolean = false,
     val hasApiKey: Boolean = true,
+    val activeProviderName: String = "AI",
     val dueFlashcardCount: Int = 0,
     val errorMessage: String? = null
 )

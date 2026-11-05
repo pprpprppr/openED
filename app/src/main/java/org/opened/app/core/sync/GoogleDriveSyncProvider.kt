@@ -24,9 +24,12 @@ class GoogleDriveSyncProvider @Inject constructor(
     override val providerId: String = "GOOGLE_DRIVE"
     override val displayName: String = "Google Drive (App Data)"
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = kotlinx.serialization.json.Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
+        coerceInputValues = true
     }
 
     override suspend fun isConfigured(): Boolean {

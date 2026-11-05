@@ -21,10 +21,13 @@ import org.opened.app.ui.settings.SettingsUiState
 
 class BackupBundleSerializationTest {
 
+    @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+        allowTrailingComma = true
         encodeDefaults = true
+        coerceInputValues = true
     }
 
     @Test
