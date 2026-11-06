@@ -103,6 +103,15 @@ class CourseWorkspaceViewModel @Inject constructor(
                     .collectLatest { pathWithModules ->
                         _uiState.update { it.copy(pathWithModules = pathWithModules) }
 
+                        // Recover any chapters stuck in GENERATING state from previous unexpected app termination
+                        pathWithModules?.allChapters?.filter { it.status == ChapterStatus.GENERATING }?.forEach { stuck ->
+                            if (stuck.markdownContent.isNotBlank()) {
+                                repository.updateChapterStatus(stuck.id, ChapterStatus.COMPLETED)
+                            } else {
+                                repository.updateChapterStatus(stuck.id, ChapterStatus.PENDING)
+                            }
+                        }
+
                         val currentActive = _uiState.value.activeChapterId
                         if (currentActive == null && pathWithModules != null) {
                             val targetChapterId = initialChapterId
@@ -210,6 +219,7 @@ class CourseWorkspaceViewModel @Inject constructor(
             _uiState.update { it.copy(isStreaming = true, streamingContent = "", errorMessage = null) }
             val accumulatedText = StringBuilder()
             var lastEmitTime = 0L
+            var streamSuccess = false
 
             try {
                 val pathId = _uiState.value.pathWithModules?.studyPath?.id
@@ -217,19 +227,10 @@ class CourseWorkspaceViewModel @Inject constructor(
                     ?: (pathId?.let { repository.getStudyPathWithModules(it)?.studyPath?.userLevel } ?: "BEGINNER")
 
                 aiLearningEngine.streamChapterContent(chapterId, userLevel)
-                    .catch { e ->
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        _uiState.update {
-                            it.copy(
-                                isStreaming = false,
-                                errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate chapter content.")
-                            )
-                        }
-                    }
                     .collect { chunk ->
                         accumulatedText.append(chunk)
                         val now = System.currentTimeMillis()
-                        if (now - lastEmitTime >= 200L) {
+                        if (now - lastEmitTime >= 150L) {
                             lastEmitTime = now
                             val currentText = accumulatedText.toString()
                             _uiState.update { it.copy(streamingContent = currentText) }
@@ -238,8 +239,19 @@ class CourseWorkspaceViewModel @Inject constructor(
 
                 // Final emission and write once to Room SQLite after stream finishes
                 val finalText = accumulatedText.toString().trim()
-                _uiState.update { it.copy(streamingContent = finalText) }
                 if (finalText.isNotEmpty()) {
+                    streamSuccess = true
+                    _uiState.update { state ->
+                        state.copy(
+                            streamingContent = finalText,
+                            chapterDetails = state.chapterDetails?.copy(
+                                chapter = state.chapterDetails.chapter.copy(
+                                    markdownContent = finalText,
+                                    status = ChapterStatus.COMPLETED
+                                )
+                            )
+                        )
+                    }
                     repository.updateChapterContent(chapterId, finalText, ChapterStatus.COMPLETED)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -252,7 +264,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                     )
                 }
             } finally {
-                if (accumulatedText.toString().trim().isBlank()) {
+                if (!streamSuccess) {
                     repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
                 }
                 _uiState.update { it.copy(isStreaming = false, streamingContent = null) }

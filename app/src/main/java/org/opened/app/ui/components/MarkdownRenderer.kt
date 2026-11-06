@@ -374,12 +374,21 @@ fun TableBlockView(
     }
 }
 
-private fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
+private fun isTableStart(lines: List<String>, index: Int): Boolean {
+    if (index + 1 >= lines.size) return false
+    val first = lines[index].trim()
+    val second = lines[index + 1].trim()
+    return first.startsWith("|") && first.endsWith("|") &&
+           second.startsWith("|") && second.contains("---")
+}
+
+internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
     val nodes = mutableListOf<MarkdownNode>()
     val lines = raw.lines()
     var i = 0
 
     while (i < lines.size) {
+        val startI = i
         val line = lines[i]
         val trimmed = line.trim()
 
@@ -449,25 +458,22 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
         }
 
         // Markdown Table: | Header 1 | Header 2 |
-        if (trimmed.startsWith("|") && trimmed.endsWith("|") && i + 1 < lines.size) {
-            val nextTrimmed = lines[i + 1].trim()
-            if (nextTrimmed.startsWith("|") && nextTrimmed.contains("---")) {
-                val headers = trimmed.split("|")
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                i += 2 // skip header and delimiter
+        if (isTableStart(lines, i)) {
+            val headers = trimmed.split("|")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            i += 2 // skip header and delimiter
 
-                val rows = mutableListOf<List<String>>()
-                while (i < lines.size && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
-                    val cells = lines[i].trim().split("|")
-                        .map { it.trim() }
-                        .filterIndexed { index, _ -> index > 0 && index <= headers.size }
-                    rows.add(cells)
-                    i++
-                }
-                nodes.add(MarkdownNode.Table(headers = headers, rows = rows))
-                continue
+            val rows = mutableListOf<List<String>>()
+            while (i < lines.size && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+                val cells = lines[i].trim().split("|")
+                    .map { it.trim() }
+                    .filterIndexed { index, _ -> index > 0 && index <= headers.size }
+                rows.add(cells)
+                i++
             }
+            nodes.add(MarkdownNode.Table(headers = headers, rows = rows))
+            continue
         }
 
         // Callout Alert: > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
@@ -537,25 +543,36 @@ private fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
 
         // Paragraph - accumulate consecutive plain lines
         val paragraphLines = mutableListOf<String>()
-        while (i < lines.size && lines[i].trim().isNotEmpty() &&
-            !lines[i].trim().startsWith("#") &&
-            !lines[i].trim().startsWith("```") &&
-            !lines[i].trim().startsWith("$$") &&
-            !lines[i].trim().startsWith(">") &&
-            !lines[i].trim().startsWith("- ") &&
-            !lines[i].trim().startsWith("* ") &&
-            !(lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) &&
-            !Regex("""^(\d+)\.\s+(.*)""").matches(lines[i].trim()) &&
-            lines[i].trim() != "---"
-        ) {
-            paragraphLines.add(lines[i].trim())
+        while (i < lines.size) {
+            val currentTrimmed = lines[i].trim()
+            if (currentTrimmed.isEmpty()) break
+            if (currentTrimmed == "---" || currentTrimmed == "***" || currentTrimmed == "___") break
+            if (currentTrimmed.startsWith("#")) break
+            if (currentTrimmed.startsWith("```")) break
+            if (currentTrimmed.startsWith("$$") || currentTrimmed.startsWith("\\[")) break
+            if (currentTrimmed.startsWith(">")) break
+            if (currentTrimmed.startsWith("- ") || currentTrimmed.startsWith("* ")) break
+            if (Regex("""^(\d+)\.\s+(.*)""").matches(currentTrimmed)) break
+            if (isTableStart(lines, i)) break
+
+            paragraphLines.add(currentTrimmed)
             i++
         }
+
         if (paragraphLines.isNotEmpty()) {
             val paragraphContent = paragraphLines.joinToString(" ").trim()
             if (paragraphContent.isNotBlank()) {
                 nodes.add(MarkdownNode.Paragraph(paragraphContent))
             }
+        }
+
+        // Guaranteed progress safeguard: ensure index i advances to avoid any infinite loop
+        if (i == startI) {
+            val fallbackLine = lines[i].trim()
+            if (fallbackLine.isNotEmpty()) {
+                nodes.add(MarkdownNode.Paragraph(fallbackLine))
+            }
+            i++
         }
     }
 

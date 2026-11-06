@@ -186,6 +186,9 @@ class GeminiApiClient @Inject constructor(
                     if (jsonStr.isBlank()) return false
                     return try {
                         val parsed = json.decodeFromString(GeminiGenerateResponse.serializer(), jsonStr)
+                        if (parsed.error != null) {
+                            throw GeminiApiException(parsed.error.code ?: 400, parsed.error.message ?: "Gemini streaming error")
+                        }
                         val chunkText = parsed.candidates
                             ?.firstOrNull()
                             ?.content
@@ -198,6 +201,8 @@ class GeminiApiClient @Inject constructor(
                         }
                         true
                     } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: GeminiApiException) {
                         throw e
                     } catch (e: Exception) {
                         false
@@ -217,16 +222,16 @@ class GeminiApiClient @Inject constructor(
                     } else if (trimmed.startsWith("data:")) {
                         val payload = trimmed.substring(5).trim()
                         if (payload.isNotEmpty()) {
-                            // First attempt immediate parsing of single-line data event
-                            val parsedImmediately = tryParseAndEmit(payload)
-                            if (!parsedImmediately) {
-                                // Accumulate in buffer for multi-line JSON events
-                                if (sseDataBuffer.isNotEmpty()) {
-                                    sseDataBuffer.append("\n")
+                            if (sseDataBuffer.isNotEmpty()) {
+                                sseDataBuffer.append("\n").append(payload)
+                                if (tryParseAndEmit(sseDataBuffer.toString())) {
+                                    sseDataBuffer.clear()
                                 }
-                                sseDataBuffer.append(payload)
                             } else {
-                                sseDataBuffer.clear()
+                                val parsedImmediately = tryParseAndEmit(payload)
+                                if (!parsedImmediately) {
+                                    sseDataBuffer.append(payload)
+                                }
                             }
                         }
                     }

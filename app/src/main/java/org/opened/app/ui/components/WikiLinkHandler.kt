@@ -31,12 +31,14 @@ fun InteractiveMarkdownText(
     val secondaryColor = MaterialTheme.colorScheme.secondary
 
     val annotatedString = remember(text, primaryColor, secondaryColor, color) {
-        buildInteractiveAnnotatedString(
-            text = text,
-            defaultColor = color,
-            wikiLinkColor = primaryColor,
-            urlColor = secondaryColor
-        )
+        runCatching {
+            buildInteractiveAnnotatedString(
+                text = text,
+                defaultColor = color,
+                wikiLinkColor = primaryColor,
+                urlColor = secondaryColor
+            )
+        }.getOrElse { AnnotatedString(text) }
     }
 
     ClickableText(
@@ -80,7 +82,7 @@ fun buildInteractiveAnnotatedString(
         fun appendCleanedText(raw: String) {
             if (raw.isEmpty()) return
             // Never allow raw LaTeX leaks, unparsed math, or stray braces in body text
-            val cleaned = if (raw.contains('\\') || (raw.contains('{') && raw.contains('}')) || raw.contains('$')) {
+            val cleaned = if (raw.contains('\\') || (raw.contains('{') && raw.contains('}'))) {
                 LatexParser.cleanInlineLatex(raw)
             } else {
                 raw
