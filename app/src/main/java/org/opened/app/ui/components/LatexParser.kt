@@ -1,7 +1,5 @@
 package org.opened.app.ui.components
 
-import java.util.regex.Pattern
-
 sealed class Math2DNode {
     data class Text(val content: String) : Math2DNode()
     data class Matrix(
@@ -31,6 +29,53 @@ enum class BracketType {
 }
 
 object LatexParser {
+
+    private const val MAX_REPLACE_ITERATIONS = 25
+
+    // Pre-compiled Regex constants to eliminate repeated compilation on Main/Worker threads
+    private val CE_REGEX = Regex("""\\ce\{([^{}]+)\}""")
+    private val OPERATOR_NAME_REGEX = Regex("""\\operatorname\*?\{([^{}]+)\}""")
+    private val BOXED_REGEX = Regex("""\\boxed\{([^{}]+)\}""")
+    private val TRANSPOSE_REGEX = Regex("""\^\{\\?(?:mathsf|mathrm)?\{?T\}?\}|\^\\?(?:mathsf|mathrm)?\{?T\}?|\^\{\\top\}|\^\\top|\^T|\^\{T\}|\^\{\\intercal\}""")
+    private val BULLET_ACCENT_REGEX = Regex("""\^\{\\bullet\}|\^\\bullet|\^•|\^\{•\}""")
+    private val HAT_ACCENTS_REGEX = Regex("""\\hat\{([^}]+)\}""")
+    private val VEC_ACCENTS_REGEX = Regex("""\\vec\{([^}]+)\}""")
+    private val MATH_BB_GENERIC_REGEX = Regex("""\\mathbb\{([A-Za-z])\}""")
+    private val FORMATTING_COMMANDS_REGEX = Regex("""\\(mathbf|boldsymbol|mathrm|text|textbf|textit|mathit|mathsf|mathtt|mathcal|mathscr|mathbb|mathfrak|textnormal)\{([^{}]+)\}""")
+    private val LATEX_COMMAND_WORD_REGEX = Regex("""\\([a-zA-Z]+)""")
+    private val FLOOR_SPACES_REGEX = Regex("""⌊\s+""")
+    private val FLOOR_CLOSE_SPACES_REGEX = Regex("""\s+⌋""")
+    private val CEIL_SPACES_REGEX = Regex("""⌈\s+""")
+    private val CEIL_CLOSE_SPACES_REGEX = Regex("""\s+⌉""")
+    private val FRAC_REGEX = Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}""")
+    private val SQRT_REGEX = Regex("""\\sqrt\{([^{}]+)\}""")
+    private val SUPERSCRIPT_BRACED_REGEX = Regex("""\^\{([^{}]+)\}""")
+    private val SUPERSCRIPT_SINGLE_REGEX = Regex("""\^([0-9a-zA-Z•●·])""")
+    private val SUBSCRIPT_BRACED_REGEX = Regex("""_\{([^{}]+)\}""")
+    private val SUBSCRIPT_SINGLE_REGEX = Regex("""_([0-9a-zA-Z])""")
+    private val LEFTOVER_COMMANDS_REGEX = Regex("""\\[a-zA-Z]+""")
+    private val MULTIPLE_SPACES_REGEX = Regex("""[ \t]{2,}""")
+
+    private val CHEM_BULLET_REGEX = Regex("""\^\\bullet|\^\{\\bullet\}|\^•|\^\{•\}""")
+    private val CHEM_SUPERSCRIPT_BRACED_REGEX = Regex("""\^\{([^{}]+)\}""")
+    private val CHEM_SUPERSCRIPT_SINGLE_REGEX = Regex("""\^([0-9+\-•])""")
+    private val CHEM_SUBSCRIPT_BRACED_REGEX = Regex("""_\{([^{}]+)\}""")
+    private val CHEM_SUBSCRIPT_SINGLE_REGEX = Regex("""_([0-9a-zA-Z])""")
+    private val CHEM_DIGITS_REGEX = Regex("""([A-Za-z\)])([0-9]+)""")
+
+    private val INLINE_MATRIX_REGEX = Regex("""\\begin\{(bmatrix|pmatrix|matrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
+    private val DISPLAY_MATRIX_REGEX = Regex("""\\begin\{(bmatrix|pmatrix|vmatrix|matrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
+    private val BIG_OP_REGEX = Regex("""\\(sum|prod|int|lim)(?:_\{?([^{}\n^]+)\}?)?(?:\^\{?([^{}\n_]+)\}?)?""")
+
+    private val SPOKEN_FRAC_REGEX = Regex("""\\frac\{([^}]+)\}\{([^}]+)\}""")
+    private val SPOKEN_SQRT_REGEX = Regex("""\\sqrt\{([^}]+)\}""")
+    private val SPOKEN_SUM_REGEX = Regex("""\\sum_\{([^}]+)\}\^\{([^}]+)\}""")
+    private val SPOKEN_INT_REGEX = Regex("""\\int_\{([^}]+)\}\^\{([^}]+)\}""")
+    private val SPOKEN_POW2_REGEX = Regex("""\^2\b""")
+    private val SPOKEN_POW3_REGEX = Regex("""\^3\b""")
+    private val SPOKEN_POWN_REGEX = Regex("""\^\{([^}]+)\}""")
+    private val SPOKEN_SUBN_REGEX = Regex("""_\{([^}]+)\}""")
+    private val SPOKEN_COMMANDS_REGEX = Regex("""\\[a-zA-Z]+""")
 
     private val SUPERSCRIPTS = mapOf(
         '•' to '•', '●' to '●', '·' to '·',
@@ -152,25 +197,40 @@ object LatexParser {
         text = text.replace("\\_", placeholderUnderscore)
 
         // 2. Chemistry: \ce{...} (e.g. \ce{BH4}, \ce{NO^\bullet}, \ce{H2O})
-        text = text.replace(Regex("""\\ce\{([^{}]+)\}""")) { match ->
-            cleanChemistryFormula(match.groupValues[1])
+        var iter = 0
+        while (CE_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = text.replace(CE_REGEX) { match ->
+                cleanChemistryFormula(match.groupValues[1])
+            }
+            if (next == text) break
+            text = next
         }
 
         // 3. \operatorname{...} (e.g. \operatorname{rank} -> rank, \operatorname{diag} -> diag)
-        text = text.replace(Regex("""\\operatorname\*?\{([^{}]+)\}""")) { match ->
-            " ${match.groupValues[1].trim()} "
+        iter = 0
+        while (OPERATOR_NAME_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = text.replace(OPERATOR_NAME_REGEX) { match ->
+                " ${match.groupValues[1].trim()} "
+            }
+            if (next == text) break
+            text = next
         }
 
         // 4. \boxed{...} (e.g. \boxed{A} -> A)
-        text = text.replace(Regex("""\\boxed\{([^{}]+)\}""")) { match ->
-            match.groupValues[1].trim()
+        iter = 0
+        while (BOXED_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = text.replace(BOXED_REGEX) { match ->
+                match.groupValues[1].trim()
+            }
+            if (next == text) break
+            text = next
         }
 
         // 5. Transpose: V^\mathsf{T}, V^{\mathsf{T}}, V^T, V^\top, etc.
-        text = text.replace(Regex("""\^\{\\?(?:mathsf|mathrm)?\{?T\}?\}|\^\\?(?:mathsf|mathrm)?\{?T\}?|\^\{\\top\}|\^\\top|\^T|\^\{T\}|\^\{\\intercal\}"""), "ᵀ")
+        text = text.replace(TRANSPOSE_REGEX, "ᵀ")
 
         // 6. Radicals/bullets: NO^\bullet, ^\bullet -> •
-        text = text.replace(Regex("""\^\{\\bullet\}|\^\\bullet|\^•|\^\{•\}"""), "•")
+        text = text.replace(BULLET_ACCENT_REGEX, "•")
 
         // 7. Inline matrices \begin{bmatrix} a \\ b \end{bmatrix} -> [a, b]ᵀ
         text = replaceInlineMatrices(text)
@@ -184,7 +244,7 @@ object LatexParser {
             .replace(Regex("""\\hat\{z\}|\\hat\s+z"""), "ẑ")
             .replace(Regex("""\\hat\{w\}|\\hat\s+w"""), "ŵ")
             .replace(Regex("""\\hat\{theta\}|\\hat\\theta"""), "θ̂")
-            .replace(Regex("""\\hat\{([^}]+)\}""")) { "${it.groupValues[1]}̂" }
+            .replace(HAT_ACCENTS_REGEX) { "${it.groupValues[1]}̂" }
             .replace(Regex("""\\vec\{v\}|\\vec\s+v"""), "v⃗")
             .replace(Regex("""\\vec\{u\}|\\vec\s+u"""), "u⃗")
             .replace(Regex("""\\vec\{w\}|\\vec\s+w"""), "w⃗")
@@ -192,7 +252,7 @@ object LatexParser {
             .replace(Regex("""\\vec\{y\}|\\vec\s+y"""), "y⃗")
             .replace(Regex("""\\vec\{i\}|\\vec\s+i"""), "i⃗")
             .replace(Regex("""\\vec\{j\}|\\vec\s+j"""), "j⃗")
-            .replace(Regex("""\\vec\{([^}]+)\}""")) { "${it.groupValues[1]}⃗" }
+            .replace(VEC_ACCENTS_REGEX) { "${it.groupValues[1]}⃗" }
 
         // 9. Blackboard bold sets
         text = text.replace("\\mathbb{R}", "ℝ")
@@ -203,10 +263,15 @@ object LatexParser {
             .replace("\\mathbb{P}", "ℙ")
             .replace("\\mathbb{E}", "𝔼")
             .replace("\\mathbb{H}", "ℍ")
-            .replace(Regex("""\\mathbb\{([A-Za-z])\}""")) { it.groupValues[1] }
+            .replace(MATH_BB_GENERIC_REGEX) { it.groupValues[1] }
 
         // 10. Formats: \mathbf, \boldsymbol, \mathrm, \text, \mathit, \mathsf, \mathtt, \mathcal, \mathscr, \mathbb, \mathfrak
-        text = text.replace(Regex("""\\(mathbf|boldsymbol|mathrm|text|textbf|textit|mathit|mathsf|mathtt|mathcal|mathscr|mathbb|mathfrak|textnormal)\{([^{}]+)\}""")) { it.groupValues[2] }
+        iter = 0
+        while (FORMATTING_COMMANDS_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = text.replace(FORMATTING_COMMANDS_REGEX) { it.groupValues[2] }
+            if (next == text) break
+            text = next
+        }
 
         // 11. Non-letter spacing commands
         text = text.replace("\\,", " ")
@@ -216,60 +281,80 @@ object LatexParser {
             .replace("\\ ", " ")
 
         // 12. Whole-word regex matching for LaTeX commands: \\([a-zA-Z]+)
-        text = Regex("""\\([a-zA-Z]+)""").replace(text) { match ->
+        text = LATEX_COMMAND_WORD_REGEX.replace(text) { match ->
             val cmd = match.groupValues[1]
             LATEX_COMMANDS[cmd] ?: cmd
         }
 
         // Clean spaces around brackets, floors, and ceilings
-        text = text.replace(Regex("""⌊\s+"""), "⌊").replace(Regex("""\s+⌋"""), "⌋")
-        text = text.replace(Regex("""⌈\s+"""), "⌈").replace(Regex("""\s+⌉"""), "⌉")
+        text = text.replace(FLOOR_SPACES_REGEX, "⌊").replace(FLOOR_CLOSE_SPACES_REGEX, "⌋")
+        text = text.replace(CEIL_SPACES_REGEX, "⌈").replace(CEIL_CLOSE_SPACES_REGEX, "⌉")
 
         // 13. Fractions: \frac{a}{b} -> a/b or (a)/(b)
-        text = Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}""").replace(text) { match ->
-            val num = cleanInlineLatex(match.groupValues[1].trim())
-            val den = cleanInlineLatex(match.groupValues[2].trim())
-            if (num.length <= 3 && den.length <= 3 && !num.contains(" ") && !den.contains(" ")) {
-                "$num/$den"
-            } else {
-                "($num)/($den)"
+        iter = 0
+        while (FRAC_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = FRAC_REGEX.replace(text) { match ->
+                val num = match.groupValues[1].trim()
+                val den = match.groupValues[2].trim()
+                if (num.length <= 3 && den.length <= 3 && !num.contains(" ") && !den.contains(" ")) {
+                    "$num/$den"
+                } else {
+                    "($num)/($den)"
+                }
             }
+            if (next == text) break
+            text = next
         }
 
         // 14. Square roots: \sqrt{...} -> √( ... )
-        text = Regex("""\\sqrt\{([^{}]+)\}""").replace(text) { match ->
-            "√(${cleanInlineLatex(match.groupValues[1].trim())})"
+        iter = 0
+        while (SQRT_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = SQRT_REGEX.replace(text) { match ->
+                "√(${match.groupValues[1].trim()})"
+            }
+            if (next == text) break
+            text = next
         }
 
         // 15. Transpose ^T or ^\top or ^\intercal
-        text = text.replace(Regex("""\^\{\\top\}|\^\\top|\^T|\^\{T\}|\^\{\\intercal\}"""), "ᵀ")
+        text = text.replace(TRANSPOSE_REGEX, "ᵀ")
 
-        // 16. Superscripts: ^{x} or ^x (resolve inner macros before mapping)
-        text = Regex("""\^\{([^{}]+)\}""").replace(text) { match ->
-            val inner = cleanInlineLatex(match.groupValues[1])
-            val allMapped = inner.all { SUPERSCRIPTS.containsKey(it) }
-            if (allMapped && inner.isNotBlank()) {
-                inner.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
-            } else {
-                "^($inner)"
+        // 16. Superscripts: ^{x} or ^x
+        iter = 0
+        while (SUPERSCRIPT_BRACED_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = SUPERSCRIPT_BRACED_REGEX.replace(text) { match ->
+                val inner = match.groupValues[1]
+                val allMapped = inner.all { SUPERSCRIPTS.containsKey(it) }
+                if (allMapped && inner.isNotBlank()) {
+                    inner.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+                } else {
+                    "^($inner)"
+                }
             }
+            if (next == text) break
+            text = next
         }
-        text = Regex("""\^([0-9a-zA-Z•●·])""").replace(text) { match ->
+        text = SUPERSCRIPT_SINGLE_REGEX.replace(text) { match ->
             val c = match.groupValues[1].first()
             (SUPERSCRIPTS[c] ?: "^$c").toString()
         }
 
         // 17. Subscripts: _{x} or _x
-        text = Regex("""_\{([^{}]+)\}""").replace(text) { match ->
-            val inner = cleanInlineLatex(match.groupValues[1])
-            val allMapped = inner.all { SUBSCRIPTS.containsKey(it) }
-            if (allMapped && inner.isNotBlank()) {
-                inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
-            } else {
-                "_($inner)"
+        iter = 0
+        while (SUBSCRIPT_BRACED_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = SUBSCRIPT_BRACED_REGEX.replace(text) { match ->
+                val inner = match.groupValues[1]
+                val allMapped = inner.all { SUBSCRIPTS.containsKey(it) }
+                if (allMapped && inner.isNotBlank()) {
+                    inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
+                } else {
+                    "_($inner)"
+                }
             }
+            if (next == text) break
+            text = next
         }
-        text = Regex("""_([0-9a-zA-Z])""").replace(text) { match ->
+        text = SUBSCRIPT_SINGLE_REGEX.replace(text) { match ->
             val c = match.groupValues[1].first()
             (SUBSCRIPTS[c] ?: "_$c").toString()
         }
@@ -279,14 +364,14 @@ object LatexParser {
             .replace("\\[", "[").replace("\\]", "]")
 
         // 19. Strip leftover formatting commands and braces
-        text = text.replace(Regex("""\\[a-zA-Z]+"""), "") // remove remaining backslash commands
-        text = text.replace("{", "").replace("}", "") // strip ALL remaining raw braces {X} -> X
+        text = text.replace(LEFTOVER_COMMANDS_REGEX, "")
+        text = text.replace("{", "").replace("}", "")
 
         // 20. Restore protected escaped underscores
         text = text.replace(placeholderUnderscore, "_")
 
         // Normalize multiple spaces
-        text = text.replace(Regex("""[ \t]{2,}"""), " ").trim()
+        text = text.replace(MULTIPLE_SPACES_REGEX, " ").trim()
 
         return if (raw.isBlank()) "" else "$leadingSpace$text$trailingSpace"
     }
@@ -294,21 +379,35 @@ object LatexParser {
     private fun cleanChemistryFormula(formula: String): String {
         var s = formula.trim()
         s = s.replace("->", "→").replace("<=>", "⇌")
-        s = s.replace(Regex("""\^\\bullet|\^\{\\bullet\}|\^•|\^\{•\}"""), "•")
-        s = s.replace(Regex("""\^\{([^{}]+)\}""")) { m ->
-            m.groupValues[1].map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+        s = s.replace(CHEM_BULLET_REGEX, "•")
+
+        var iter = 0
+        while (CHEM_SUPERSCRIPT_BRACED_REGEX.containsMatchIn(s) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = s.replace(CHEM_SUPERSCRIPT_BRACED_REGEX) { m ->
+                m.groupValues[1].map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+            }
+            if (next == s) break
+            s = next
         }
-        s = s.replace(Regex("""\^([0-9+\-•])""")) { m ->
+
+        s = s.replace(CHEM_SUPERSCRIPT_SINGLE_REGEX) { m ->
             (SUPERSCRIPTS[m.groupValues[1].first()] ?: "^${m.groupValues[1]}").toString()
         }
-        s = s.replace(Regex("""_\{([^{}]+)\}""")) { m ->
-            m.groupValues[1].map { SUBSCRIPTS[it] ?: it }.joinToString("")
+
+        iter = 0
+        while (CHEM_SUBSCRIPT_BRACED_REGEX.containsMatchIn(s) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = s.replace(CHEM_SUBSCRIPT_BRACED_REGEX) { m ->
+                m.groupValues[1].map { SUBSCRIPTS[it] ?: it }.joinToString("")
+            }
+            if (next == s) break
+            s = next
         }
-        s = s.replace(Regex("""_([0-9a-zA-Z])""")) { m ->
+
+        s = s.replace(CHEM_SUBSCRIPT_SINGLE_REGEX) { m ->
             (SUBSCRIPTS[m.groupValues[1].first()] ?: "_${m.groupValues[1]}").toString()
         }
-        // Digits after chemical element letters: H2O -> H₂O, BH4 -> BH₄
-        s = s.replace(Regex("""([A-Za-z\)])([0-9]+)""")) { m ->
+
+        s = s.replace(CHEM_DIGITS_REGEX) { m ->
             val element = m.groupValues[1]
             val digits = m.groupValues[2].map { SUBSCRIPTS[it] ?: it }.joinToString("")
             "$element$digits"
@@ -317,15 +416,13 @@ object LatexParser {
     }
 
     private fun replaceInlineMatrices(input: String): String {
-        val matrixRegex = Regex("""\\begin\{(bmatrix|pmatrix|matrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
-        return matrixRegex.replace(input) { match ->
+        return INLINE_MATRIX_REGEX.replace(input) { match ->
             val content = match.groupValues[2].trim()
             val rows = content.split("\\\\").map { it.trim() }.filter { it.isNotEmpty() }
             if (rows.size == 1) {
                 val cols = rows[0].split("&").map { cleanInlineLatex(it.trim()) }
                 "[${cols.joinToString(", ")}]"
             } else {
-                // Check if it is a single column vector (each row has no '&')
                 val isColVector = rows.all { !it.contains("&") }
                 if (isColVector) {
                     val elements = rows.map { cleanInlineLatex(it) }
@@ -345,7 +442,7 @@ object LatexParser {
      * Parses a display math LaTeX string into a 2D structured AST for Compose rendering.
      */
     fun parseDisplayMath(raw: String): Math2DNode {
-        var clean = raw.trim()
+        val clean = raw.trim()
             .removePrefix("$$").removeSuffix("$$")
             .removePrefix("\\[").removeSuffix("\\]")
             .removePrefix("$").removeSuffix("$")
@@ -354,13 +451,11 @@ object LatexParser {
         if (clean.isBlank()) return Math2DNode.Text("")
 
         // Check for standalone or embedded matrix
-        val matrixRegex = Regex("""\\begin\{(bmatrix|pmatrix|vmatrix|matrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
-        val matrixMatch = matrixRegex.find(clean)
-
+        val matrixMatch = DISPLAY_MATRIX_REGEX.find(clean)
         if (matrixMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, matrixMatch.range.first).trim()
-            if (prefix.isNotEmpty()) {
+            if (prefix.isNotEmpty() && prefix != clean) {
                 nodes.add(parseDisplayMath(prefix))
             }
 
@@ -383,7 +478,7 @@ object LatexParser {
             nodes.add(Math2DNode.Matrix(rows = rows, bracketType = bracketType))
 
             val suffix = clean.substring(matrixMatch.range.last + 1).trim()
-            if (suffix.isNotEmpty()) {
+            if (suffix.isNotEmpty() && suffix != clean) {
                 nodes.add(parseDisplayMath(suffix))
             }
 
@@ -391,12 +486,11 @@ object LatexParser {
         }
 
         // Check for stacked fraction \frac{numerator}{denominator}
-        val fracRegex = Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}""")
-        val fracMatch = fracRegex.find(clean)
+        val fracMatch = FRAC_REGEX.find(clean)
         if (fracMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, fracMatch.range.first).trim()
-            if (prefix.isNotEmpty()) {
+            if (prefix.isNotEmpty() && prefix != clean) {
                 nodes.add(parseDisplayMath(prefix))
             }
 
@@ -410,7 +504,7 @@ object LatexParser {
             )
 
             val suffix = clean.substring(fracMatch.range.last + 1).trim()
-            if (suffix.isNotEmpty()) {
+            if (suffix.isNotEmpty() && suffix != clean) {
                 nodes.add(parseDisplayMath(suffix))
             }
 
@@ -418,12 +512,11 @@ object LatexParser {
         }
 
         // Check for square root \sqrt{inner}
-        val sqrtRegex = Regex("""\\sqrt\{([^{}]+)\}""")
-        val sqrtMatch = sqrtRegex.find(clean)
+        val sqrtMatch = SQRT_REGEX.find(clean)
         if (sqrtMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, sqrtMatch.range.first).trim()
-            if (prefix.isNotEmpty()) {
+            if (prefix.isNotEmpty() && prefix != clean) {
                 nodes.add(parseDisplayMath(prefix))
             }
 
@@ -431,7 +524,7 @@ object LatexParser {
             nodes.add(Math2DNode.Sqrt(inner = parseDisplayMath(inner)))
 
             val suffix = clean.substring(sqrtMatch.range.last + 1).trim()
-            if (suffix.isNotEmpty()) {
+            if (suffix.isNotEmpty() && suffix != clean) {
                 nodes.add(parseDisplayMath(suffix))
             }
 
@@ -439,12 +532,11 @@ object LatexParser {
         }
 
         // Check for Summations, Products, Integrals \sum_{lower}^{upper} or \int_{lower}^{upper}
-        val opRegex = Regex("""\\(sum|prod|int|lim)(?:_\{?([^{}\n^]+)\}?)?(?:\^\{?([^{}\n_]+)\}?)?""")
-        val opMatch = opRegex.find(clean)
+        val opMatch = BIG_OP_REGEX.find(clean)
         if (opMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, opMatch.range.first).trim()
-            if (prefix.isNotEmpty()) {
+            if (prefix.isNotEmpty() && prefix != clean) {
                 nodes.add(parseDisplayMath(prefix))
             }
 
@@ -460,7 +552,7 @@ object LatexParser {
             val upper = opMatch.groupValues.getOrNull(3)?.trim()?.ifBlank { null }?.let { cleanInlineLatex(it) }
 
             val suffix = clean.substring(opMatch.range.last + 1).trim()
-            val exprNode = if (suffix.isNotEmpty()) parseDisplayMath(suffix) else null
+            val exprNode = if (suffix.isNotEmpty() && suffix != clean) parseDisplayMath(suffix) else null
 
             nodes.add(
                 Math2DNode.BigOp(
@@ -474,7 +566,6 @@ object LatexParser {
             return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
         }
 
-        // Otherwise plain text, clean with cleanInlineLatex
         return Math2DNode.Text(cleanInlineLatex(clean))
     }
 
@@ -489,15 +580,15 @@ object LatexParser {
             .removePrefix("$").removeSuffix("$")
             .trim()
 
-        spoken = spoken.replace(Regex("""\\frac\{([^}]+)\}\{([^}]+)\}"""), "fraction with numerator $1 over denominator $2")
-        spoken = spoken.replace(Regex("""\\sqrt\{([^}]+)\}"""), "square root of $1")
-        spoken = spoken.replace(Regex("""\\sum_\{([^}]+)\}\^\{([^}]+)\}"""), "summation from $1 to $2 of ")
-        spoken = spoken.replace(Regex("""\\int_\{([^}]+)\}\^\{([^}]+)\}"""), "integral from $1 to $2 of ")
-        spoken = spoken.replace(Regex("""\^2\b"""), " squared")
-        spoken = spoken.replace(Regex("""\^3\b"""), " cubed")
-        spoken = spoken.replace(Regex("""\^\{([^}]+)\}"""), " to the power of $1")
-        spoken = spoken.replace(Regex("""_\{([^}]+)\}"""), " subscript $1")
-        spoken = spoken.replace(Regex("""\\[a-zA-Z]+""")) { match ->
+        spoken = SPOKEN_FRAC_REGEX.replace(spoken) { "fraction with numerator ${it.groupValues[1]} over denominator ${it.groupValues[2]}" }
+        spoken = SPOKEN_SQRT_REGEX.replace(spoken) { "square root of ${it.groupValues[1]}" }
+        spoken = SPOKEN_SUM_REGEX.replace(spoken) { "summation from ${it.groupValues[1]} to ${it.groupValues[2]} of " }
+        spoken = SPOKEN_INT_REGEX.replace(spoken) { "integral from ${it.groupValues[1]} to ${it.groupValues[2]} of " }
+        spoken = SPOKEN_POW2_REGEX.replace(spoken, " squared")
+        spoken = SPOKEN_POW3_REGEX.replace(spoken, " cubed")
+        spoken = SPOKEN_POWN_REGEX.replace(spoken) { " to the power of ${it.groupValues[1]}" }
+        spoken = SPOKEN_SUBN_REGEX.replace(spoken) { " subscript ${it.groupValues[1]}" }
+        spoken = SPOKEN_COMMANDS_REGEX.replace(spoken) { match ->
             when (match.value) {
                 "\\alpha" -> "alpha"
                 "\\beta" -> "beta"

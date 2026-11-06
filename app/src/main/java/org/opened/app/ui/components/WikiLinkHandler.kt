@@ -3,6 +3,8 @@ package org.opened.app.ui.components
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -15,9 +17,16 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 const val TAG_WIKI_LINK = "TAG_WIKI_LINK"
 const val TAG_URL_LINK = "TAG_URL_LINK"
+
+// Pre-compiled token regex for high-performance interactive parsing
+private val TOKEN_REGEX = Regex(
+    """(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)"""
+)
 
 @Composable
 fun InteractiveMarkdownText(
@@ -67,16 +76,6 @@ fun buildInteractiveAnnotatedString(
     urlColor: Color
 ): AnnotatedString {
     return buildAnnotatedString {
-        // Regex pattern to match:
-        // 1. [[Wiki Links]]
-        // 2. [Markdown Links](url)
-        // 3. `inline code`
-        // 4. \(inline math\)
-        // 5. \[display math\]
-        // 6. $inline math$ (handling nested braces)
-        // 7. **bold**
-        // 8. *italic*
-        val tokenRegex = Regex("""(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)""")
         var lastIndex = 0
 
         fun appendCleanedText(raw: String) {
@@ -90,7 +89,10 @@ fun buildInteractiveAnnotatedString(
             append(cleaned)
         }
 
-        for (match in tokenRegex.findAll(text)) {
+        var iter = 0
+        for (match in TOKEN_REGEX.findAll(text)) {
+            if (iter++ > 3000) break
+
             // Append plain text before match
             if (match.range.first > lastIndex) {
                 appendCleanedText(text.substring(lastIndex, match.range.first))
@@ -101,7 +103,6 @@ fun buildInteractiveAnnotatedString(
                 // [[Wiki Link]]
                 fullMatch.startsWith("[[") && fullMatch.endsWith("]]") -> {
                     val chapterTitle = match.groupValues[2].trim()
-                    val start = length
                     pushStringAnnotation(tag = TAG_WIKI_LINK, annotation = chapterTitle)
                     pushStyle(
                         SpanStyle(

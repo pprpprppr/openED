@@ -327,7 +327,7 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
                 repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
             }
         }
-    }
+    }.flowOn(Dispatchers.IO)
 
     private fun sanitizeNonCsCodeBlocks(markdown: String): String {
         val codeBlockRegex = "```(python|javascript|typescript|c|cpp|java|rust|go|csharp)[\\s\\S]*?```".toRegex(RegexOption.IGNORE_CASE)

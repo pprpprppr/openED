@@ -196,4 +196,22 @@ class LatexParserTest {
         val cleaned = LatexParser.cleanInlineLatex(input)
         assertEquals(" the list ", cleaned)
     }
+
+    @Test(timeout = 2000L)
+    fun testLatexParserCompletesOn10000CharHalfStreamedWithUnclosedBracesUnder100ms() {
+        val sb = StringBuilder()
+        while (sb.length < 10000) {
+            sb.append("Let \\frac{numerator {nested and \\sqrt{inner without closing brace and \\mathbf{bold unclosed. ")
+            sb.append("Consider \\ce{H2O and \\operatorname{rank of \\mathbb{R. ")
+        }
+        val text = sb.toString()
+        assertTrue(text.length >= 10000)
+
+        val startTime = System.currentTimeMillis()
+        val cleaned = LatexParser.cleanInlineLatex(text)
+        val duration = System.currentTimeMillis() - startTime
+
+        assertTrue("Expected non-empty output", cleaned.isNotEmpty())
+        assertTrue("LatexParser.cleanInlineLatex took $duration ms, expected < 100ms", duration < 100)
+    }
 }

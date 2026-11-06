@@ -23,7 +23,9 @@ import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.database.model.ChapterWithDetails
+import org.opened.app.core.tts.MarkdownStripper
 import org.opened.app.core.tts.TtsManager
+import org.opened.app.core.tts.TtsPlaybackState
 import org.opened.app.core.tts.TtsState
 import org.opened.app.domain.repository.OpenEDRepository
 import java.text.SimpleDateFormat
@@ -66,6 +68,7 @@ class CourseWorkspaceViewModel @Inject constructor(
 
     init {
         observeActiveProvider()
+        observeTtsErrors()
         val pathId = savedStateHandle.get<String>("pathId")
         val chapterId = savedStateHandle.get<String>("chapterId")
         if (pathId != null) {
@@ -78,6 +81,16 @@ class CourseWorkspaceViewModel @Inject constructor(
             preferencesRepository.userPreferencesFlow.collectLatest { prefs ->
                 val provider = AiProvider.fromId(prefs.selectedProvider)
                 _uiState.update { it.copy(activeProviderName = provider.displayName) }
+            }
+        }
+    }
+
+    private fun observeTtsErrors() {
+        viewModelScope.launch {
+            ttsManager.state.collectLatest { state ->
+                if (state.errorMessage != null && state.playbackState == TtsPlaybackState.ERROR) {
+                    _uiState.update { it.copy(errorMessage = state.errorMessage) }
+                }
             }
         }
     }
@@ -230,7 +243,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                     .collect { chunk ->
                         accumulatedText.append(chunk)
                         val now = System.currentTimeMillis()
-                        if (now - lastEmitTime >= 150L) {
+                        if (now - lastEmitTime >= 350L) {
                             lastEmitTime = now
                             val currentText = accumulatedText.toString()
                             _uiState.update { it.copy(streamingContent = currentText) }
@@ -345,6 +358,10 @@ class CourseWorkspaceViewModel @Inject constructor(
         val show = !_uiState.value.showTtsPlayer
         if (show) {
             try { ttsManager.initialize() } catch (_: Exception) {}
+            val markdown = _uiState.value.chapterDetails?.chapter?.markdownContent
+            if (!markdown.isNullOrBlank() && ttsState.value.playbackState == TtsPlaybackState.IDLE) {
+                ttsPlay()
+            }
         } else {
             try { ttsManager.stop() } catch (_: Exception) {}
         }
@@ -353,12 +370,19 @@ class CourseWorkspaceViewModel @Inject constructor(
 
     fun ttsPlay() {
         val markdown = _uiState.value.chapterDetails?.chapter?.markdownContent ?: return
-        try {
-            ttsManager.speak(markdown)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            _uiState.update { it.copy(errorMessage = "TTS playback error: ${e.localizedMessage}") }
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val clean = MarkdownStripper.stripForSpeech(markdown)
+                val chunks = MarkdownStripper.chunkForSpeech(clean, maxChunkChars = 1800)
+                if (chunks.isNotEmpty()) {
+                    ttsManager.speakChunks(chunks, startIndex = 0)
+                    _uiState.update { it.copy(showTtsPlayer = true) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = "TTS playback error: ${e.localizedMessage}") }
+            }
         }
     }
 
@@ -367,8 +391,7 @@ class CourseWorkspaceViewModel @Inject constructor(
     }
 
     fun ttsResume() {
-        val markdown = _uiState.value.chapterDetails?.chapter?.markdownContent ?: return
-        try { ttsManager.resume(markdown) } catch (_: Exception) {}
+        try { ttsManager.resume() } catch (_: Exception) {}
     }
 
     fun ttsStop() {

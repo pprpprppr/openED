@@ -80,6 +80,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AcademicDomainClassifier
 import org.opened.app.core.database.model.ChapterStatus
+import org.opened.app.core.tts.TtsPlaybackState
 import org.opened.app.ui.components.InlineRefineBottomSheet
 import org.opened.app.ui.components.OutgoingBacklinksSection
 import org.opened.app.ui.components.RichMarkdownRenderer
@@ -98,6 +99,7 @@ fun CourseWorkspaceScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val ttsState by viewModel.ttsState.collectAsStateWithLifecycle()
+    val isTtsActive = uiState.showTtsPlayer || ttsState.playbackState == TtsPlaybackState.PLAYING || ttsState.playbackState == TtsPlaybackState.PAUSED
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -197,7 +199,7 @@ fun CourseWorkspaceScreen(
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                     contentDescription = "Commute Audio Reader",
-                                    tint = if (uiState.showTtsPlayer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    tint = if (isTtsActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
                             }
 
@@ -474,7 +476,7 @@ fun CourseWorkspaceScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // TTS mini-player sits above the pill
-                        AnimatedVisibility(visible = uiState.showTtsPlayer) {
+                        AnimatedVisibility(visible = isTtsActive) {
                             TtsMiniPlayer(
                                 ttsState = ttsState,
                                 onPlay = { viewModel.ttsPlay() },

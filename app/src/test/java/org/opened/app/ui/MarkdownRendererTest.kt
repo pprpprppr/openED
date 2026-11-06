@@ -135,4 +135,24 @@ class MarkdownRendererTest {
             assertTrue("Parsing '$input' took too long ($duration ms) - possible infinite loop!", duration < 1000)
         }
     }
+
+    @Test(timeout = 2000L)
+    fun testParseMarkdownPerformanceOn10000CharHalfStreamedWithUnclosedBraces() {
+        val sb = StringBuilder()
+        while (sb.length < 10000) {
+            sb.append("This is an unclosed streaming text with LaTeX \\frac{numerator without closing brace and {nested {broken braces. ")
+            sb.append("Also inline math \$x + y = \\sqrt{incomplete math and \\mathbf{bold without close. ")
+            sb.append("| Column 1 | Column 2 |\n")
+            sb.append("```python\ndef half_streamed():\n")
+        }
+        val text = sb.toString()
+        assertTrue(text.length >= 10000)
+
+        val startTime = System.currentTimeMillis()
+        val nodes = parseMarkdown(text)
+        val duration = System.currentTimeMillis() - startTime
+
+        assertNotNull(nodes)
+        assertTrue("Expected parsing to complete in < 100ms, took $duration ms", duration < 100)
+    }
 }

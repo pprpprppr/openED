@@ -23,6 +23,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,16 +86,24 @@ fun RichMarkdownRenderer(
     onChapterClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val nodes = remember(markdown) {
-        if (markdown.isBlank()) emptyList()
-        else runCatching {
-            parseMarkdown(markdown).filter { node ->
-                when (node) {
-                    is MarkdownNode.Paragraph -> node.text.isNotBlank()
-                    else -> true
-                }
+    val nodes by androidx.compose.runtime.produceState<List<MarkdownNode>>(
+        initialValue = emptyList(),
+        key1 = markdown
+    ) {
+        if (markdown.isBlank()) {
+            value = emptyList()
+        } else {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching {
+                    parseMarkdown(markdown).filter { node ->
+                        when (node) {
+                            is MarkdownNode.Paragraph -> node.text.isNotBlank()
+                            else -> true
+                        }
+                    }
+                }.getOrElse { emptyList() }
             }
-        }.getOrElse { emptyList() }
+        }
     }
 
     if (nodes.isEmpty()) {
