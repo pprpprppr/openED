@@ -2,11 +2,13 @@
 > **Personal, Local-First, AI-Powered Self-Learning & Knowledge-Graph Studio**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/badge/Release-v1.2.2-green.svg)](https://github.com/pprpprppr/openED/releases/tag/v1.2.2)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple.svg)](https://kotlinlang.org/)
+[![Android SDK](https://img.shields.io/badge/Target_SDK-36_(Android_16)-3DDC84.svg)](https://developer.android.com/about/versions/16)
 [![Jetpack Compose](https://img.shields.io/badge/Compose-Material_3-brightgreen.svg)](https://developer.android.com/jetpack/compose)
 [![Room](https://img.shields.io/badge/Room-SQLite_2.6.1-orange.svg)](https://developer.android.com/training/data-storage/room)
-[![Multi-AI](https://img.shields.io/badge/AI-Gemini%20%7C%20Claude%20%7C%20GPT%20%7C%20Custom-4285F4.svg)](https://ai.google.dev/)
-[![Google Drive](https://img.shields.io/badge/Sync-Google_Drive_v3-34A853.svg)](https://developers.google.com/drive)
+[![Multi-AI](https://img.shields.io/badge/AI-Gemini_3.8_%7C_OpenRouter_%7C_Claude_%7C_GPT_%7C_Ollama-4285F4.svg)](https://ai.google.dev/)
+[![Google Drive](https://img.shields.io/badge/Sync-Google_Drive_SAF-34A853.svg)](https://developers.google.com/drive)
 
 **openED** is a production-grade, open-source native Android application designed to transform any topic—from eBPF kernel programming to nutritional biochemistry—into an adaptive, interconnected self-study curriculum powered by multiple AI providers (Google Gemini, Anthropic Claude, OpenAI GPT, or Custom/Local Ollama BYOK) and synchronized privately to Google Drive.
 
@@ -25,7 +27,8 @@
 - **Real-Time Progress Tracking:** Reactive calculation of overall course progress as chapters are completed.
 
 ### 3. ⚡ On-the-Spot Lesson Streaming & Wiki-Linking
-- **Server-Sent Events (SSE) Streaming:** Streams rich Markdown lessons from Gemini (`streamGenerateContent?alt=sse`) in real time with smooth token emission.
+- **Server-Sent Events (SSE) Streaming:** Streams rich Markdown lessons in real time across any configured provider (`alt=sse`, Anthropic events, OpenAI chunks) with smooth token emission.
+- **ANR-Proof Streaming Pipeline:** UI updates are throttled to 350ms in `CourseWorkspaceViewModel`, network streams are bound to `Dispatchers.IO`, and heavy Markdown AST parsing is dispatched asynchronously on `Dispatchers.Default` via `produceState`, preventing Main Thread jank and ANR ("Application Not Responding") dialogs.
 - **Automated Cross-Reference Detection:** Scans generated text for references to other chapters across your entire library, automatically converting them into clickable `[[Chapter Title]]` wiki-links.
 - **Bi-Directional Knowledge Graph:** Persists link edges in the `ChapterLinkCrossRef` table and renders both **Outgoing Links** and **Backlinks** at the bottom of every chapter reader screen.
 - **Dynamic Tangent Branching:** Highlight any concept in the reader to generate a dedicated tangent sub-chapter on the fly.
@@ -39,32 +42,42 @@
 - **Full Version Control:** Every mutation archives a snapshot to `ChapterRevisionEntity`, enabling complete rollback and revision auditing.
 - **Socratic Q&A Assistant:** Ask follow-up questions anchored to the active chapter; tap a single button to append the explanation as a GitHub-style callout block (`> [!NOTE]`) directly into the lesson content.
 
-### 5. 📊 True 2D Math, Diagrams & Benchmark Charts
+### 5. 📊 True 2D Math, Chemistry, Diagrams & Benchmark Charts
 - **True 2D Mathematical Rendering:** Renders 2D Matrix Grids (`\begin{bmatrix}`, `\begin{pmatrix}`) with bracket borders, stacked fractions with center dividers, summations/integrals (`∑`, `∏`, `∫`) with upper/lower limits, and radical square roots.
+- **Chemistry & Advanced Symbols:** Full Unicode mapping for chemical reaction arrows (`\longrightarrow` $\rightarrow$ $\longrightarrow$, `\rightleftharpoons`), radical intermediates (`NO^\bullet` $\rightarrow$ $\text{NO}^\bullet$), inline formulas (`$BH_4$` $\rightarrow$ $\text{BH}_4$), and highlighted boxes (`\boxed{A}`).
+- **Infinite-Loop Guarded Parsers:** `LatexParser` and `WikiLinkHandler` feature pre-compiled regex caches, 25-iteration maximum bounds, and identity break guards.
 - **Unicode Sets & Accented Vectors:** Converts `\mathbb{R,N,Z,Q,C}` to Unicode (`ℝ`, `ℕ`, `ℤ`, `ℚ`, `ℂ`), `\hat{i}, \hat{j}, \vec{v}` to accented characters (`î`, `ĵ`, `v⃗`), and inline matrices to vector transpose notation (`[a, b]ᵀ`).
 - **Interactive Visual Architecture Diagrams:** Parses ` ```diagram ` / ` ```mermaid ` into pan/zoomable Compose Canvas node-and-arrow diagrams with rounded cards and directional arrowheads.
 - **2D Coordinate & Benchmark Plots:** Parses ` ```chart ` / ` ```plot ` into 2D Cartesian vector plots and performance benchmark comparison bars.
 - **Material 3 Markdown Tables:** Styled table cards with alternating row colors and horizontal scrolling.
-- **Code Syntax Highlighting:** Dark card presentation with language tags, horizontal scrolling, and one-tap copy-to-clipboard functionality.
+- **Unclipped Code Syntax Highlighting:** Dark card presentation with language tags, horizontal scrolling that never clips indentation, and one-tap copy-to-clipboard functionality.
 - **GitHub-Style Alerts:** Native rendering for callout alerts: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, and `[!CAUTION]`.
 
 ### 6. 🔍 Offline Instant Full-Text Search
 - Instantaneous search across all study paths, modules, chapters, revision histories, and Socratic Q&A threads.
 - Direct jump from search results into the exact chapter and highlighted context.
 
-### 7. 🔒 Multi-Provider BYOK & Keystore Security
-- **Multi-Provider AI Router:** Native support for 4 AI engines:
-  1. **Google Gemini** (`gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview`)
-  2. **Anthropic Claude** (`claude-sonnet-4-6`, `claude-opus-4-6`, `claude-haiku-4-5`)
-  3. **OpenAI GPT** (`gpt-4.1`, `gpt-4o`, `o3-mini`)
-  4. **Custom (OpenAI-Compatible):** Base URL, API Key, and Model Name (local Ollama, LM Studio, vLLM, DeepSeek, Groq).
-- **Android Keystore Encryption:** API keys are encrypted at rest with AES-256 GCM using `EncryptedSharedPreferences` backed by the Android Keystore Master Key (`opened_secure_vault`).
-- **Unified Streaming Client:** Direct SSE streaming (`alt=sse`, Anthropic events, OpenAI delta chunks) and structured JSON outputs across all providers.
+### 7. 🔒 Multi-Provider BYOK, Live Model Sync & Keystore Security
+- **Multi-Provider AI Router:** Native Bring-Your-Own-Key (BYOK) architecture supporting 5 AI pathways:
+  1. **Google Gemini (Default):** Flagship `gemini-3.8-flash`, everyday `gemini-3.6-flash`, ultra-lightweight `gemini-3.5-flash-lite`, and deep-reasoning STEM `gemini-3.1-pro-preview`.
+  2. **OpenRouter:** Full model catalog access with real-time live model search, scrollable selector, and automatic HTTPS scheme normalization.
+  3. **Anthropic Claude:** `claude-sonnet-4-6`, `claude-opus-4-6`, and `claude-haiku-4-5`.
+  4. **OpenAI GPT:** `gpt-4.1`, `gpt-4o`, and `o3-mini`.
+  5. **Custom / Local (OpenAI-Compatible):** Connect directly to local Ollama, LM Studio, vLLM, DeepSeek, or Groq with custom base URL, API key, and model ID.
+- **Dynamic AI Status Indication:** Context-aware status messaging displaying the active provider and model (e.g., *"Claude is writing module...", "OpenRouter is generating...", "Gemini is synthesizing..."*).
+- **Bulletproof JSON Parser & Self-Repair Engine:**
+  - Tolerant parser configuring `ignoreUnknownKeys`, `isLenient`, `allowTrailingComma`, and `coerceInputValues`.
+  - Self-healing regex repairer that resolves EOF truncated JSON, strips trailing commas, fixes unescaped newlines in markdown payloads, and provides graceful fallbacks so course generation never gets stuck.
+- **Human-Friendly Actionable Diagnostics:** Replaces raw HTTP codes with clear, readable error messages and remediation tips for quota limits, network timeouts, authentication issues, and invalid models.
+- **Android Keystore Hardware Encryption:** API keys are encrypted at rest with AES-256 GCM using `EncryptedSharedPreferences` backed by the Android Keystore Master Key (`opened_secure_vault`). Zero API key exfiltration guarantee.
+- **Unified Streaming Client:** Background-threaded SSE streaming (`alt=sse`, Anthropic events, OpenAI delta chunks) and structured JSON outputs across all providers.
 
-### 8. ☁️ Google Drive Backup & Synchronization
-- **Portable ZIP Export Bundle:** Serializes the full Room database into a clean JSON bundle packaged in `opened_backup_v1.zip` (excluding private API keys).
-- **Background Sync via WorkManager:** Scheduled periodic backups and on-demand manual sync using Jetpack `WorkManager`.
-- **Conflict Resolution Engine:** Choose between **Merge Local** (preserves local edits and additions) and **Overwrite Local** (replaces local database with remote snapshot).
+### 8. ☁️ Google Drive & SAF Folder Synchronization
+- **Persistent Storage Access Framework (SAF) Sync:** Select any local folder or Google Drive synced directory with persistent Android URI permissions (`FLAG_GRANT_READ/WRITE_URI_PERMISSION`) surviving device reboots.
+- **Google Drive API v3 Backup:** Direct cloud synchronization using OAuth 2.0 app data folder backup.
+- **Portable ZIP Export Bundle:** Serializes the complete Room database into `opened_backup_v1.zip` (strictly stripping sensitive API keys).
+- **Background Sync via WorkManager:** Scheduled periodic backups and on-demand manual sync.
+- **Conflict Resolution Engine:** Choose between **Merge Local** (preserves local additions) and **Overwrite Local** (restores snapshot).
 
 ### 9. 🧠 Spaced Repetition Flashcards (SuperMemo SM-2 / FSRS)
 - **AI Card Synthesis:** Extract 5–10 high-yield active recall flashcards from any chapter using Structured JSON output.
@@ -81,9 +94,16 @@
 - **Force-Directed Physics Simulation:** Visualizes all course chapters and their bi-directional wiki-link connections on a 2D Canvas with gesture-based pan and pinch-to-zoom (`detectTransformGestures`).
 - **Color-Coded Mastery Status:** Completed, generating, and pending nodes rendered dynamically. Tapping any node navigates straight to that lesson.
 
-### 12. 🎧 Commute Audio Mode (Offline TTS Reader)
-- **Embedded Text-to-Speech:** Integrated Android `TextToSpeech` with speed toggles (1.0x, 1.5x, 2.0x) and floating mini-player bar.
-- **Smart Markdown Normalization:** Automatically strips headers, markdown punctuation, raw code blocks, and LaTeX math formatting before vocalization for an uninterrupted listening experience.
+### 12. 🎧 Commute Audio Mode (Overhauled Chunked TTS Engine)
+- **Android 11–16 (API 36) Package Visibility:** Built-in `<queries>` intent declarations ensure seamless discovery and binding to system TTS services (Google TTS, Samsung TTS, Sherpa-ONNX).
+- **Intelligent Markdown Stripper:** Runs on `Dispatchers.Default` before playback:
+  - Replaces ```` ```diagram ```` and ```` ```mermaid ```` diagrams with natural spoken cues (*"Diagram omitted."*).
+  - Condenses fenced code blocks into concise summaries (*"Code example omitted during audio playback."*), preventing hundreds of punctuation marks from being read aloud.
+  - Translates mathematical and scientific notation symbols (`→`, `≥`, `≤`, `≠`, `≈`, `±`, `Δ`, `∑`, `∫`) into natural spoken words.
+  - Cleans Markdown headings, bold/italic asterisks, backticks, and wiki-link brackets.
+- **Sub-1800 Character Chunking:** Automatically divides lessons into paragraph and sentence chunks under 1,800 characters, completely bypassing Android's 4,000-character silent truncation threshold.
+- **Resilient Asynchronous Queueing:** Equipped with a `pendingChunks` queue that automatically begins playback the moment the TTS engine finishes initialization.
+- **Floating Audio Control Player:** Sleek mini-player floating in the Course Workspace offering Play/Pause, Stop, chunk counter (*"Paragraph X of Y"*), and instant speed multipliers (**1.0x**, **1.25x**, **1.5x**, **2.0x**).
 
 ### 13. 📦 Obsidian Vault & Anki Exports
 - **Obsidian Vault Export (.zip):** Exports all courses as nested folders containing `.md` files formatted with standard YAML frontmatter and `[[WikiLinks]]`.
@@ -247,47 +267,57 @@ erDiagram
 
 ---
 
-## 🚀 Setup & Getting Started
+## 🚀 Installation & Quick Start
 
-### 1. Prerequisites
+### 📲 Direct APK Download (Recommended for Users)
+Get the latest pre-compiled, signed release directly from the releases page:
+- 🔗 **[Download openED v1.2.2 APK](https://github.com/pprpprppr/openED/releases/latest)**
+
+---
+
+### 💻 Developer Setup & Building from Source
+
+#### 1. Prerequisites
 - **Android Studio**: Ladybug / Meerkat (or newer)
 - **JDK**: Java 21 OpenJDK
-- **Android SDK**: Compile SDK 35, Min SDK 26
+- **Android SDK**: Target & Compile SDK 36 (Android 16), Min SDK 26
 
-### 2. Gemini API Key (Bring Your Own Key)
-1. Generate an API Key from [Google AI Studio](https://aistudio.google.com/).
-2. Open **openED** on your device or emulator.
-3. Open **Settings** from the top app bar.
-4. Input your Gemini API key and tap **Save Key Securely**.
-5. Select your default model (defaulting to `gemini-3.8-flash`).
+#### 2. Configure Your AI Provider (BYOK)
+openED features a zero-telemetry Bring-Your-Own-Key model. Your keys never leave your device except to query the official endpoints.
+1. Open **openED** on your device or emulator.
+2. Navigate to **Settings** from the top app bar.
+3. Choose your provider:
+   - **Google Gemini:** Enter your key from [Google AI Studio](https://aistudio.google.com/) and choose `gemini-3.8-flash` or `gemini-3.5-flash-lite`.
+   - **OpenRouter:** Paste your [OpenRouter Key](https://openrouter.ai/keys), tap **Fetch Models** to search and select from hundreds of open models.
+   - **Anthropic Claude:** Paste your Claude key from [Anthropic Console](https://console.anthropic.com/).
+   - **OpenAI GPT:** Paste your OpenAI key from [OpenAI Platform](https://platform.openai.com/).
+   - **Custom / Local Ollama:** Set your local endpoint (e.g., `http://10.0.2.2:11434/v1` for Android emulator or your LAN IP) and model name (e.g., `llama3.3`).
+4. Tap **Save Key Securely**.
 
-### 3. Google Drive Cloud Sync Configuration
-1. Navigate to the [Google Cloud Console](https://console.cloud.google.com/).
-2. Create or select your Google Cloud project.
-3. Enable the **Google Drive API** in APIs & Services.
-4. Set up an OAuth Consent Screen (External / Internal) and add the `https://www.googleapis.com/auth/drive.file` scope.
-5. Create an Android OAuth 2.0 Client ID:
-   - **Package Name:** `org.opened.app`
-   - **SHA-1 Fingerprint:** Run `./gradlew signingReport` and copy the SHA-1 of your signing key.
-6. In openED, go to **Settings > Google Drive Backup** to sign in and initiate sync.
+#### 3. Cloud & Local Folder Synchronization
+- **Persistent Local / Cloud Drive Folder (SAF):** Go to **Settings > Google Drive Backup > Select Backup Folder**, pick any folder on your device or linked Google Drive directory. Permissions persist permanently across device reboots.
+- **Google Drive Cloud v3 API:** Enable Drive API in Google Cloud Console, add `https://www.googleapis.com/auth/drive.file` scope, and register your SHA-1 signature.
 
 ---
 
 ## 🛠️ Verification & Build Commands
 
 ```bash
-# Check Kotlin syntax and compile
+# Compile and verify Kotlin syntax
 ./gradlew compileDebugKotlin
 
-# Run all unit tests
-./gradlew test
+# Run all unit tests (including MarkdownStripper, LatexParser & AST benchmarks)
+./gradlew testDebugUnitTest
 
-# Assemble debug APK
+# Assemble production Release APK
+./gradlew assembleRelease
+
+# Assemble Debug APK
 ./gradlew assembleDebug
 ```
 
-The compiled debug APK will be generated at:
-`app/build/outputs/apk/debug/app-debug.apk`
+The compiled release APK will be located at:
+`app/build/outputs/apk/release/app-release.apk`
 
 ---
 
