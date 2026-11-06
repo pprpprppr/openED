@@ -53,6 +53,16 @@ captures/
 *.jks
 *.keystore
 
+# API Keys, secrets & environment files
+*.env
+*.env.*
+*.secret
+*.secrets
+secrets.xml
+api_keys.json
+credentials.json
+google-services.json
+
 # External native build folder
 .externalNativeBuild
 .cxx/

@@ -112,7 +112,7 @@ openED is a local-first, privacy-respecting educational platform providing on-de
   - Hilt: `2.52`
   - compileSdk / targetSdk: `35` -> Upgrade to `36` (Android 16 compatibility)
 - **Local Platform SDK:**
-  - `android-35` and `android-36` both present in `/home/deb/Android/Sdk/platforms`.
+  - `android-35` and `android-36` both present in `$ANDROID_HOME/platforms`.
 
 ---
 

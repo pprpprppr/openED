@@ -16,8 +16,8 @@ openED transforms any personal mobile device into an offline-first, mathematical
 
 | Phase | Description | Key Modules / Artifacts | Status |
 |:---|:---|:---|:---:|
-| **Phase 0** | Full Codebase & Architecture Audit | [`PROJECT_AUDIT.md`](file:///home/deb/openED/PROJECT_AUDIT.md) | ✅ Complete |
-| **Phase 1** | Critical Security Hardening | Android Keystore AES-256-GCM, [`SECURITY_AUDIT.md`](file:///home/deb/openED/SECURITY_AUDIT.md), FileProvider paths lockdown, `data_extraction_rules.xml`, SDK 36 upgrade | ✅ Complete |
+| **Phase 0** | Full Codebase & Architecture Audit | [`PROJECT_AUDIT.md`](./PROJECT_AUDIT.md) | ✅ Complete |
+| **Phase 1** | Critical Security Hardening | Android Keystore AES-256-GCM, [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md), FileProvider paths lockdown, `data_extraction_rules.xml`, SDK 36 upgrade | ✅ Complete |
 | **Phase 2** | Universal AI Intelligence & Pedagogy | `AcademicDomain` classifier (7 authentic disciplines), strict non-CS programming ban, dynamic sizing (6–8 modules, 24–40 chapters) | ✅ Complete |
 | **Phase 3** | Evidence-Grounded Learning | `SourceIntelligenceParser`, evidence quality badges (Fact vs. Hypothesis), Medical/Legal/Financial disclaimers | ✅ Complete |
 | **Phase 4** | Next-Gen Adaptive Learning | Room Migration 2 $\to$ 3, `FSRS-v4` scheduler (`stability`, `difficulty`, `retrievability`), mistake diagnoses, remedial micro-lessons | ✅ Complete |
@@ -104,12 +104,12 @@ All 18 unit test suites and 80 automated unit tests pass with zero failures:
 - **Compiled Debug APK:** `app/build/outputs/apk/debug/app-debug.apk`
 - **Room Database Schema:** `app/schemas/org.opened.app.core.database.OpenEDDatabase/4.json`
 - **Documentation:**
-  - [`PROJECT_AUDIT.md`](file:///home/deb/openED/PROJECT_AUDIT.md)
-  - [`SECURITY_AUDIT.md`](file:///home/deb/openED/SECURITY_AUDIT.md)
-  - [`ARCHITECTURE.md`](file:///home/deb/openED/ARCHITECTURE.md)
-  - [`CONTRIBUTING.md`](file:///home/deb/openED/CONTRIBUTING.md)
-  - [`SECURITY.md`](file:///home/deb/openED/SECURITY.md)
-  - [`PRIVACY.md`](file:///home/deb/openED/PRIVACY.md)
-  - [`ROADMAP.md`](file:///home/deb/openED/ROADMAP.md)
-  - [`CODE_OF_CONDUCT.md`](file:///home/deb/openED/CODE_OF_CONDUCT.md)
-  - [`.github/workflows/android-ci.yml`](file:///home/deb/openED/.github/workflows/android-ci.yml)
+  - [`PROJECT_AUDIT.md`](./PROJECT_AUDIT.md)
+  - [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md)
+  - [`ARCHITECTURE.md`](./ARCHITECTURE.md)
+  - [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+  - [`SECURITY.md`](./SECURITY.md)
+  - [`PRIVACY.md`](./PRIVACY.md)
+  - [`ROADMAP.md`](./ROADMAP.md)
+  - [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+  - [`.github/workflows/android-ci.yml`](./.github/workflows/android-ci.yml)

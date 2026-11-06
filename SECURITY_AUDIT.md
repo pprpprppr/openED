@@ -79,12 +79,12 @@ All Phase 1 security requirements have been implemented, verified, and regressio
 - Android's cloud auto-backup and device-to-device transfer can inadvertently serialize encrypted preferences to Google Drive or peer devices. If hardware-backed Keystore keys cannot be exported across physical devices, restoring encrypted payloads leads to unrecoverable deadlocks or key-mismatch crashes.
 
 ### Hardened Implementation
-- **Android 12+ (API 31+) Rules:** Created [`data_extraction_rules.xml`](file:///home/deb/openED/app/src/main/res/xml/data_extraction_rules.xml):
+- **Android 12+ (API 31+) Rules:** Created [`data_extraction_rules.xml`](./app/src/main/res/xml/data_extraction_rules.xml):
   - Excludes `opened_keystore_vault.xml`, `opened_secure_vault.xml`, and `opened_secure_vault_fallback.xml` from `<cloud-backup>` and `<device-transfer>`.
   - Excludes temporary cache directories.
-- **Legacy (API < 31) Rules:** Created [`backup_rules.xml`](file:///home/deb/openED/app/src/main/res/xml/backup_rules.xml):
+- **Legacy (API < 31) Rules:** Created [`backup_rules.xml`](./app/src/main/res/xml/backup_rules.xml):
   - Full backup exclusion for all credential preferences.
-- **Manifest Integration:** Configured in [`AndroidManifest.xml`](file:///home/deb/openED/app/src/main/AndroidManifest.xml):
+- **Manifest Integration:** Configured in [`AndroidManifest.xml`](./app/src/main/AndroidManifest.xml):
   ```xml
   android:allowBackup="true"
   android:dataExtractionRules="@xml/data_extraction_rules"
@@ -96,9 +96,9 @@ All Phase 1 security requirements have been implemented, verified, and regressio
 ## 5. Android SDK 36 Upgrade & Compliance
 
 - **Compilation & Target:**
-  - Upgraded `compileSdk = 36` and `targetSdk = 36` in [`app/build.gradle.kts`](file:///home/deb/openED/app/build.gradle.kts).
-  - Successfully installed `platforms;android-36` via Android SDK manager into `/home/deb/Android/Sdk/platforms/android-36`.
-  - Added `android.suppressUnsupportedCompileSdk=36` to [`gradle.properties`](file:///home/deb/openED/gradle.properties) to cleanly suppress AGP 8.7.2 advisory warnings.
+  - Upgraded `compileSdk = 36` and `targetSdk = 36` in [`app/build.gradle.kts`](./app/build.gradle.kts).
+  - Successfully verified `platforms;android-36` via Android SDK manager into `$ANDROID_HOME/platforms/android-36`.
+  - Added `android.suppressUnsupportedCompileSdk=36` to [`gradle.properties`](./gradle.properties) to cleanly suppress AGP 8.7.2 advisory warnings.
 - **Behavior Compliance:**
   - Edge-to-edge layout enabled in `MainActivity.kt`.
   - Notification permissions gated under `POST_NOTIFICATIONS`.
@@ -116,6 +116,6 @@ BUILD SUCCESSFUL in 8s
 ```
 - Total Tests: **47 passed, 0 failed, 0 ignored**
 - New Test Suites Added:
-  - [`SecureApiKeyStorageTest.kt`](file:///home/deb/openED/app/src/test/java/org/opened/app/core/security/SecureApiKeyStorageTest.kt) (6 tests)
-  - [`FileProviderSecurityTest.kt`](file:///home/deb/openED/app/src/test/java/org/opened/app/core/export/FileProviderSecurityTest.kt) (1 test)
-  - [`PromptEngineeringTest.kt`](file:///home/deb/openED/app/src/test/java/org/opened/app/core/ai/PromptEngineeringTest.kt) (14 tests)
+  - [`SecureApiKeyStorageTest.kt`](./app/src/test/java/org/opened/app/core/security/SecureApiKeyStorageTest.kt) (6 tests)
+  - [`FileProviderSecurityTest.kt`](./app/src/test/java/org/opened/app/core/export/FileProviderSecurityTest.kt) (1 test)
+  - [`PromptEngineeringTest.kt`](./app/src/test/java/org/opened/app/core/ai/PromptEngineeringTest.kt) (14 tests)
