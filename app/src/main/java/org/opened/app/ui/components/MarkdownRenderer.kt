@@ -86,14 +86,15 @@ fun RichMarkdownRenderer(
     onChapterClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    @Suppress("ProduceStateDoesNotAssignValue")
     val nodes by androidx.compose.runtime.produceState<List<MarkdownNode>>(
         initialValue = emptyList(),
         key1 = markdown
     ) {
-        if (markdown.isBlank()) {
-            value = emptyList()
+        value = if (markdown.isBlank()) {
+            emptyList()
         } else {
-            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 runCatching {
                     parseMarkdown(markdown).filter { node ->
                         when (node) {
