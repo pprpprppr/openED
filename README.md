@@ -2,7 +2,7 @@
 > **Personal, Local-First, AI-Powered Self-Learning & Knowledge-Graph Studio**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.2.2-green.svg)](https://github.com/pprpprppr/openED/releases/tag/v1.2.2)
+[![Release](https://img.shields.io/badge/Release-v1.3.0-green.svg)](https://github.com/pprpprppr/openED/releases/tag/v1.3.0)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple.svg)](https://kotlinlang.org/)
 [![Android SDK](https://img.shields.io/badge/Target_SDK-36_(Android_16)-3DDC84.svg)](https://developer.android.com/about/versions/16)
 [![Jetpack Compose](https://img.shields.io/badge/Compose-Material_3-brightgreen.svg)](https://developer.android.com/jetpack/compose)
