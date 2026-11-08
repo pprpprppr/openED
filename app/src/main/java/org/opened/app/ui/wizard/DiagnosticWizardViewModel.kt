@@ -11,8 +11,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
-import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.ai.AiProvider
+import org.opened.app.core.ai.TutorPersonaRegistry
+import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.datastore.UserPreferencesRepository
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -40,12 +41,109 @@ class DiagnosticWizardViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val prefs = preferencesRepository.userPreferencesFlow.first()
             val provider = AiProvider.fromId(prefs.selectedProvider)
-            _uiState.update { it.copy(activeProviderName = provider.displayName) }
+            _uiState.update {
+                it.copy(
+                    activeProviderName = provider.displayName,
+                    selectedTutorPersonaId = prefs.selectedTutorPersona,
+                    customInstructions = prefs.customSystemInstructions
+                )
+            }
         }
     }
 
     fun setTopic(topic: String) {
-        _uiState.update { it.copy(topic = topic, errorMessage = null) }
+        _uiState.update { current ->
+            val detectedPersonaId = if (!current.isPersonaUserSelected && topic.isNotBlank()) {
+                TutorPersonaRegistry.detectMatchingPersona(topic).id
+            } else {
+                current.selectedTutorPersonaId
+            }
+            current.copy(
+                topic = topic,
+                selectedTutorPersonaId = detectedPersonaId,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun selectTutorPersona(personaId: String) {
+        _uiState.update {
+            it.copy(
+                selectedTutorPersonaId = personaId,
+                isPersonaUserSelected = true
+            )
+        }
+    }
+
+    fun setCustomInstructions(instructions: String) {
+        _uiState.update { it.copy(customInstructions = instructions) }
+    }
+
+    fun toggleCustomInstructions() {
+        _uiState.update { it.copy(isCustomInstructionsExpanded = !it.isCustomInstructionsExpanded) }
+    }
+
+    fun toggleCustomTemplate(templateText: String) {
+        val snippet = templateText.trim()
+        val current = _uiState.value.customInstructions.trim()
+        val isPresent = current.contains(snippet, ignoreCase = true)
+        val updated = if (isPresent) {
+            current.replace(snippet, "")
+                .lines()
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n")
+                .trim()
+        } else {
+            if (current.isBlank()) {
+                snippet
+            } else {
+                "$current\n\n$snippet"
+            }
+        }
+        _uiState.update {
+            it.copy(
+                customInstructions = updated,
+                isCustomInstructionsExpanded = true
+            )
+        }
+    }
+
+    fun generateCustomPromptFromTopic() {
+        val topic = _uiState.value.topic.trim()
+        val customExisting = _uiState.value.customInstructions.trim()
+        val persona = TutorPersonaRegistry.getById(_uiState.value.selectedTutorPersonaId)
+        val userNotes = if (customExisting.isNotBlank()) {
+            customExisting
+        } else if (topic.isNotBlank()) {
+            "Specialized curriculum on '$topic' for a ${_uiState.value.userLevel.lowercase()} student. Provide step-by-step clarity, real-world examples, active recall, and rigorous domain intuition."
+        } else {
+            "Comprehensive, step-by-step mentorship in ${persona.title}."
+        }
+        val targetSubject = if (topic.isNotBlank()) "$topic (${persona.title})" else persona.title
+
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
+            val result = aiLearningEngine.generateSystemInstruction(
+                userNotes = userNotes,
+                targetSubject = targetSubject
+            )
+            result.onSuccess { generatedPrompt ->
+                _uiState.update {
+                    it.copy(
+                        isGeneratingPrompt = false,
+                        customInstructions = generatedPrompt,
+                        isCustomInstructionsExpanded = true
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isGeneratingPrompt = false,
+                        promptGenerationError = formatUserFriendlyAiError(err.localizedMessage ?: "Failed to generate prompt.")
+                    )
+                }
+            }
+        }
     }
 
     fun setUserLevel(level: String) {
@@ -53,7 +151,8 @@ class DiagnosticWizardViewModel @Inject constructor(
     }
 
     fun startDiagnosticInterview() {
-        val topic = _uiState.value.topic.trim()
+        val state = _uiState.value
+        val topic = state.topic.trim()
         if (topic.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Please enter a subject or topic.") }
             return
@@ -69,7 +168,11 @@ class DiagnosticWizardViewModel @Inject constructor(
             }
 
             try {
-                val result = aiLearningEngine.generateDiagnosticQuestions(topic)
+                val result = aiLearningEngine.generateDiagnosticQuestions(
+                    topic = topic,
+                    tutorPersonaOverride = state.selectedTutorPersonaId,
+                    customInstructionsOverride = state.customInstructions
+                )
                 result.fold(
                     onSuccess = { questions ->
                         _uiState.update {
@@ -154,7 +257,9 @@ class DiagnosticWizardViewModel @Inject constructor(
                 val result = aiLearningEngine.generateSyllabus(
                     topic = state.topic,
                     userLevel = state.userLevel,
-                    answers = compiledAnswers
+                    answers = compiledAnswers,
+                    tutorPersonaOverride = state.selectedTutorPersonaId,
+                    customInstructionsOverride = state.customInstructions
                 )
 
                 result.fold(

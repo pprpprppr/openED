@@ -29,6 +29,7 @@ class UserPreferencesRepository @Inject constructor(
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
         val SELECTION_MODE = stringPreferencesKey("selection_mode")
         val CUSTOM_BASE_URL = stringPreferencesKey("custom_base_url")
+        val SELECTED_TUTOR_PERSONA = stringPreferencesKey("selected_tutor_persona")
         val SYSTEM_INSTRUCTIONS = stringPreferencesKey("custom_system_instructions")
         val AUTO_BACKUP_ENABLED = booleanPreferencesKey("auto_backup_enabled")
         val LAST_BACKUP_TIMESTAMP = longPreferencesKey("last_backup_timestamp")
@@ -62,7 +63,11 @@ class UserPreferencesRepository @Inject constructor(
                 selectedModel = preferences[PreferencesKeys.SELECTED_MODEL] ?: UserPreferences.DEFAULT_MODEL,
                 selectionMode = preferences[PreferencesKeys.SELECTION_MODE] ?: "auto",
                 customBaseUrl = preferences[PreferencesKeys.CUSTOM_BASE_URL] ?: UserPreferences.DEFAULT_CUSTOM_BASE_URL,
-                customSystemInstructions = preferences[PreferencesKeys.SYSTEM_INSTRUCTIONS] ?: UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS,
+                selectedTutorPersona = preferences[PreferencesKeys.SELECTED_TUTOR_PERSONA] ?: UserPreferences.DEFAULT_TUTOR_PERSONA,
+                customSystemInstructions = run {
+                    val raw = preferences[PreferencesKeys.SYSTEM_INSTRUCTIONS] ?: ""
+                    if (raw == UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS) "" else raw
+                },
                 autoBackupEnabled = preferences[PreferencesKeys.AUTO_BACKUP_ENABLED] ?: true,
                 lastBackupTimestamp = preferences[PreferencesKeys.LAST_BACKUP_TIMESTAMP] ?: 0L,
                 backupAccountEmail = preferences[PreferencesKeys.BACKUP_ACCOUNT_EMAIL],
@@ -99,6 +104,12 @@ class UserPreferencesRepository @Inject constructor(
     suspend fun setCustomBaseUrl(url: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.CUSTOM_BASE_URL] = url
+        }
+    }
+
+    suspend fun setSelectedTutorPersona(personaId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.SELECTED_TUTOR_PERSONA] = personaId
         }
     }
 

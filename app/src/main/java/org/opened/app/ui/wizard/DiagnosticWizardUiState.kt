@@ -17,6 +17,12 @@ data class DiagnosticWizardUiState(
     val currentStep: WizardStep = WizardStep.ENTER_TOPIC,
     val topic: String = "",
     val userLevel: String = "BEGINNER",
+    val selectedTutorPersonaId: String = "ADAPTIVE_POLYMATH",
+    val customInstructions: String = "",
+    val isCustomInstructionsExpanded: Boolean = false,
+    val isGeneratingPrompt: Boolean = false,
+    val promptGenerationError: String? = null,
+    val isPersonaUserSelected: Boolean = false,
     val questions: List<DiagnosticQuestion> = emptyList(),
     val selectedAnswers: Map<String, List<String>> = emptyMap(), // questionId -> list of selected options
     val customTextAnswers: Map<String, String> = emptyMap(), // questionId -> custom text

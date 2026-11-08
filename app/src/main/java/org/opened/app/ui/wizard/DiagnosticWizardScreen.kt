@@ -1,8 +1,12 @@
 package org.opened.app.ui.wizard
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,14 +29,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
+import org.opened.app.core.ai.TutorPersonaRegistry
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -114,9 +123,19 @@ fun DiagnosticWizardScreen(
                     EnterTopicContent(
                         topic = uiState.topic,
                         userLevel = uiState.userLevel,
+                        selectedTutorPersonaId = uiState.selectedTutorPersonaId,
+                        customInstructions = uiState.customInstructions,
+                        isCustomInstructionsExpanded = uiState.isCustomInstructionsExpanded,
+                        isGeneratingPrompt = uiState.isGeneratingPrompt,
+                        promptGenerationError = uiState.promptGenerationError,
                         errorMessage = uiState.errorMessage,
                         onTopicChange = { viewModel.setTopic(it) },
                         onLevelChange = { viewModel.setUserLevel(it) },
+                        onPersonaChange = { viewModel.selectTutorPersona(it) },
+                        onCustomInstructionsChange = { viewModel.setCustomInstructions(it) },
+                        onToggleCustomInstructions = { viewModel.toggleCustomInstructions() },
+                        onToggleTemplate = { viewModel.toggleCustomTemplate(it) },
+                        onGeneratePrompt = { viewModel.generateCustomPromptFromTopic() },
                         onStart = { viewModel.startDiagnosticInterview() }
                     )
                 }
@@ -173,9 +192,19 @@ fun DiagnosticWizardScreen(
 private fun EnterTopicContent(
     topic: String,
     userLevel: String,
+    selectedTutorPersonaId: String,
+    customInstructions: String,
+    isCustomInstructionsExpanded: Boolean,
+    isGeneratingPrompt: Boolean,
+    promptGenerationError: String?,
     errorMessage: String?,
     onTopicChange: (String) -> Unit,
     onLevelChange: (String) -> Unit,
+    onPersonaChange: (String) -> Unit,
+    onCustomInstructionsChange: (String) -> Unit,
+    onToggleCustomInstructions: () -> Unit,
+    onToggleTemplate: (String) -> Unit,
+    onGeneratePrompt: () -> Unit,
     onStart: () -> Unit
 ) {
     val sampleTopics = listOf(
@@ -185,10 +214,12 @@ private fun EnterTopicContent(
         "Deep Learning Transformer Architectures",
         "Quantum Computing & Qiskit"
     )
+    val activePersona = TutorPersonaRegistry.getById(selectedTutorPersonaId)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(vertical = 12.dp)
     ) {
         Text(
@@ -240,13 +271,74 @@ private fun EnterTopicContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Tutor Subject Persona Selector
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "TUTOR SUBJECT PERSONA",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "${activePersona.icon} ${activePersona.title}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val personas = TutorPersonaRegistry.ALL_PERSONAS.filter { it.id != "CUSTOM" }
+            personas.forEach { persona ->
+                val isSelected = persona.id.equals(selectedTutorPersonaId, ignoreCase = true)
+                Surface(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onPersonaChange(persona.id) },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    },
+                    border = BorderStroke(
+                        width = if (isSelected) 1.5.dp else 1.dp,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(text = persona.icon, fontSize = 13.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = persona.title,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         OutlinedTextField(
             value = topic,
             onValueChange = onTopicChange,
             label = { Text("Topic or Subject") },
-            placeholder = { Text("e.g. Python Programming, eBPF Kernel") },
+            placeholder = { Text("e.g. Molecular Biology, French Revolution, Constitutional Law") },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             isError = errorMessage != null
@@ -261,7 +353,7 @@ private fun EnterTopicContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Text(
             text = "OR CHOOSE A POPULAR DOMAIN",
@@ -293,7 +385,148 @@ private fun EnterTopicContent(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Custom Instructions Expandable Section
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onToggleCustomInstructions() },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Custom System Instructions",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (customInstructions.isNotBlank()) "Active (${customInstructions.length} chars)" else "Optional custom prompt rules",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    imageVector = if (isCustomInstructionsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        AnimatedVisibility(visible = isCustomInstructionsExpanded) {
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    text = "QUICK TEMPLATES (TAP TO TOGGLE)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val templates = listOf(
+                        "✨ 3 Takeaways" to "Always conclude each lesson with 3 concise summary takeaways and bulleted key points.",
+                        "❓ Self-Test Quiz" to "At the end of each chapter, provide 3 multiple-choice self-test questions with detailed answer explanations.",
+                        "🔬 Case Studies" to "Ground every conceptual theory in an authentic real-world case study or empirical experiment.",
+                        "⚡ Socratic Inquirer" to "Include thought-provoking Socratic reflection questions throughout to stimulate critical thinking."
+                    )
+                    templates.forEach { (label, snippet) ->
+                        val isSelected = customInstructions.contains(snippet, ignoreCase = true)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onToggleTemplate(snippet) },
+                            label = {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = customInstructions,
+                    onValueChange = onCustomInstructionsChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Custom Prompt Instructions") },
+                    placeholder = { Text("e.g. Always structure lessons with real-world case studies and 3 self-test questions.") },
+                    maxLines = 4,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                if (promptGenerationError != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = promptGenerationError,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    FilledTonalButton(
+                        onClick = onGeneratePrompt,
+                        enabled = !isGeneratingPrompt,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (isGeneratingPrompt) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Architecting prompt...")
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (customInstructions.isBlank()) "✨ Generate from Topic" else "✨ Polish with AI")
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = onStart,

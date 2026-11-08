@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material.icons.Icons
@@ -42,7 +44,12 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.ui.res.stringResource
 import org.opened.app.R
+import org.opened.app.core.ai.TutorPersona
+import org.opened.app.core.ai.TutorPersonaCategory
+import org.opened.app.core.ai.TutorPersonaRegistry
 import org.opened.app.core.datastore.UserPreferences
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
@@ -50,10 +57,14 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +84,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SuggestionChip
@@ -108,7 +122,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
@@ -681,58 +695,277 @@ fun SettingsScreen(
                 }
             }
 
-            // 3. Custom System Instructions
+            // 3. Tutor Subject Persona & Pedagogy Card
             item {
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Psychology,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.tertiary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Tutor System Instructions",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                        val activePersona = TutorPersonaRegistry.getById(uiState.selectedTutorPersonaId)
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.School,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Tutor Subject Persona",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Choose your AI mentor's domain expertise and pedagogical style.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
 
-                        Text(
-                            text = "Customize the pedagogical persona, technical depth, and tone of your AI mentor.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
-                        )
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        val personaPresets = listOf(
-                            "🌱 Adaptive Polymath (Default)" to UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS,
-                            "🚀 Beginner (Zero Assumptions)" to "You are openED, an empathetic and exceptionally clear tutor. Teach from zero assumptions with friendly, everyday analogies. Avoid cryptic jargon or premature complexity. Build understanding gradually with step-by-step breakdowns, concrete real-world examples, visual diagrams, and highlight common pitfalls to build deep confidence.",
-                            "📐 Feynman Math & Science" to "You are openED, a world-class polymath in physical sciences and mathematics. Use the Feynman technique: start with an unforgettable intuitive metaphor, then build rigorous first-principles mathematical formulations ($$...$$), step-by-step derivations, and conceptual proofs.",
-                            "🏛️ Socratic & Humanities" to "You are openED, a distinguished scholar in history, philosophy, law, and social sciences. Engage deeply with primary sources, competing ideological schools, geopolitical dynamics, ethical thought experiments, and historical precedents without forcing coding or artificial paradigms.",
-                            "⚙️ Production Engineer" to "You are openED, a principal systems architect and staff engineer. Focus relentlessly on production realism, clean architectural patterns, idiomatic performance, concurrency, failure modes, cache efficiency, zero-overhead idioms, and real-world profiling and debugging."
-                        )
-
+                        // Category Filter Chips
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            personaPresets.forEach { (title, personaText) ->
-                                SuggestionChip(
-                                    onClick = { viewModel.applySystemInstructionPreset(personaText) },
+                            TutorPersonaCategory.entries.forEach { category ->
+                                val isSelected = uiState.selectedPersonaCategory == category
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.selectPersonaCategory(category) },
                                     label = {
+                                        Text("${category.icon} ${category.displayName}")
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Persona selection chips / items
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val displayedPersonas = TutorPersonaRegistry.getByCategory(uiState.selectedPersonaCategory)
+                            displayedPersonas.forEach { persona ->
+                                val isSelected = persona.id.equals(uiState.selectedTutorPersonaId, ignoreCase = true)
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { viewModel.selectTutorPersona(persona.id) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                    },
+                                    border = BorderStroke(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                    )
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                    ) {
                                         Text(
-                                            text = title,
-                                            style = MaterialTheme.typography.labelSmall
+                                            text = persona.icon,
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = persona.title,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (isSelected) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Active Persona Detail Callout
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "${activePersona.icon} ${activePersona.title}",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                    ) {
+                                        Text(
+                                            text = activePersona.subject,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = activePersona.summary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Dedicated Separate Custom System Instructions Card
+            item {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Custom System Instructions",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Add personalized rules, strict formatting, or custom prompts.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (uiState.customSystemInstructions.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer
+                                ) {
+                                    Text(
+                                        text = "Active",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Text(
+                            text = "These instructions are blended with your selected subject persona above. If you select 'Custom System Persona', openED will use these instructions exclusively.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+                        )
+
+                        // Quick Template Preset Chips
+                        Text(
+                            text = "QUICK TEMPLATES (TAP TO TOGGLE)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val templates = listOf(
+                                "✨ 3 Takeaways" to "Always conclude each lesson with 3 concise summary takeaways and bulleted key points.",
+                                "❓ Self-Test Quiz" to "At the end of each chapter, provide 3 multiple-choice self-test questions with detailed answer explanations.",
+                                "🔬 Case Studies" to "Ground every conceptual theory in an authentic real-world case study or empirical experiment.",
+                                "⚡ Socratic Inquirer" to "Include thought-provoking Socratic reflection questions throughout to stimulate critical thinking.",
+                                "📐 Step-by-Step Proofs" to "Derive equations and workflows step-by-step with clear theoretical justification before every formula.",
+                                "💡 Analogy-Driven" to "Explain abstract concepts using relatable everyday analogies before technical formalisms."
+                            )
+                            templates.forEach { (label, snippet) ->
+                                val isSelected = uiState.customSystemInstructions.contains(snippet, ignoreCase = true)
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { viewModel.toggleCustomTemplate(snippet) },
+                                    label = {
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    leadingIcon = if (isSelected) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    } else null,
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+                                    )
                                 )
                             }
                         }
@@ -740,9 +973,11 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         OutlinedTextField(
-                            value = uiState.systemInstructions,
-                            onValueChange = { viewModel.setSystemInstructions(it) },
+                            value = uiState.customSystemInstructions,
+                            onValueChange = { viewModel.setCustomSystemInstructions(it) },
                             modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("e.g. Always structure lessons with practical real-world case studies. Provide 3 review questions at the end of every chapter.") },
+                            label = { Text("Custom Instructions") },
                             maxLines = 6,
                             shape = RoundedCornerShape(10.dp)
                         )
@@ -751,20 +986,36 @@ fun SettingsScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            OutlinedButton(
-                                onClick = { viewModel.resetSystemInstructions() },
+                            FilledTonalButton(
+                                onClick = { viewModel.openGeneratePromptDialog() },
                                 shape = RoundedCornerShape(8.dp)
                             ) {
-                                Text("Reset Default")
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("✨ Generate with AI")
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Button(
-                                onClick = { viewModel.saveSystemInstructions() },
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Text("Save Persona")
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (uiState.customSystemInstructions.isNotBlank()) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.clearCustomSystemInstructions() },
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Clear")
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                                Button(
+                                    onClick = { viewModel.saveCustomSystemInstructions() },
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Save")
+                                }
                             }
                         }
                     }
@@ -1505,4 +1756,253 @@ fun SettingsScreen(
             }
         )
     }
+
+    if (uiState.showGeneratePromptDialog) {
+        GeneratePromptDialog(
+            uiState = uiState,
+            onDraftChange = { viewModel.setPromptIdeaDraft(it) },
+            onGenerate = { viewModel.generateSystemInstructionPrompt() },
+            onApply = { viewModel.applyGeneratedPrompt() },
+            onDismiss = { viewModel.closeGeneratePromptDialog() }
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GeneratePromptDialog(
+    uiState: SettingsUiState,
+    onDraftChange: (String) -> Unit,
+    onGenerate: () -> Unit,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val activePersona = TutorPersonaRegistry.getById(uiState.selectedTutorPersonaId)
+    val promptInspirations = listOf(
+        "🎯 High-Yield Exam Prep" to "Focus on high-yield exam concepts with active recall and practice problems.",
+        "🔬 First-Principles Math/Proofs" to "Derive key formulas from first principles with theoretical rigor.",
+        "💡 Analogy-Driven Intuition" to "Use intuitive everyday analogies and avoid unnecessary jargon.",
+        "💻 Practical Code & Systems" to "Provide real-world code examples, architecture trade-offs, and debugging patterns."
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Prompt Architect",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Craft high-impact AI instructions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${activePersona.icon} Focus: ${activePersona.title}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Describe your goals, background, or learning style in plain English:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    promptInspirations.forEach { (label, snippet) ->
+                        val isSelected = uiState.promptIdeaDraft.contains(snippet, ignoreCase = true)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = {
+                                val current = uiState.promptIdeaDraft.trim()
+                                val updated = if (isSelected) {
+                                    current.replace(snippet, "")
+                                        .lines()
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(" ")
+                                        .trim()
+                                } else {
+                                    if (current.isBlank()) snippet else "$current $snippet"
+                                }
+                                onDraftChange(updated)
+                            },
+                            label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                            leadingIcon = if (isSelected) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Selected",
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = uiState.promptIdeaDraft,
+                    onValueChange = onDraftChange,
+                    placeholder = { Text("e.g. Preparing for USMLE exam. Emphasize clinical correlations, differential diagnoses, and end-of-chapter case studies.") },
+                    label = { Text("Your Learning Goals / Style") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                if (uiState.promptGenerationError != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = uiState.promptGenerationError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
+
+                if (uiState.isGeneratingPrompt) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Synthesizing pedagogical prompt...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                uiState.generatedPromptPreview?.let { preview ->
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Text(
+                        text = "GENERATED PROMPT PREVIEW",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = preview,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (uiState.generatedPromptPreview != null) {
+                    OutlinedButton(
+                        onClick = onGenerate,
+                        enabled = !uiState.isGeneratingPrompt,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Re-generate")
+                    }
+                    Button(
+                        onClick = onApply,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Apply")
+                    }
+                } else {
+                    Button(
+                        onClick = onGenerate,
+                        enabled = !uiState.isGeneratingPrompt,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (uiState.isGeneratingPrompt) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Generating...")
+                        } else {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Generate Prompt")
+                        }
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }

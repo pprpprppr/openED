@@ -8,7 +8,8 @@ data class UserPreferences(
     val selectedModel: String = DEFAULT_MODEL,
     val selectionMode: String = "auto",
     val customBaseUrl: String = DEFAULT_CUSTOM_BASE_URL,
-    val customSystemInstructions: String = DEFAULT_SYSTEM_INSTRUCTIONS,
+    val selectedTutorPersona: String = DEFAULT_TUTOR_PERSONA,
+    val customSystemInstructions: String = "",
     val autoBackupEnabled: Boolean = true,
     val lastBackupTimestamp: Long = 0L,
     val backupAccountEmail: String? = null,
@@ -28,6 +29,7 @@ data class UserPreferences(
         const val DEFAULT_MODEL = "gemini-3.8-flash"
         const val DEFAULT_CUSTOM_BASE_URL = "http://localhost:11434/v1"
         val SUPPORTED_MODELS = AiProviderModels.GEMINI_MODELS
+        const val DEFAULT_TUTOR_PERSONA = "ADAPTIVE_POLYMATH"
         const val DEFAULT_LEARNING_LANGUAGE = "English"
         const val DEFAULT_SYNC_PROVIDER = "LOCAL"
         val SUPPORTED_LANGUAGES = listOf("English", "Spanish", "French", "German", "Mandarin", "Hindi", "Arabic", "Portuguese", "Japanese")

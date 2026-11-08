@@ -14,9 +14,12 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.AiProviderModels
 import org.opened.app.core.ai.MultiAiClient
+import org.opened.app.core.ai.TutorPersonaCategory
+import org.opened.app.core.ai.TutorPersonaRegistry
 import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.datastore.UserPreferencesRepository
@@ -42,7 +45,8 @@ class SettingsViewModel @Inject constructor(
     private val backupScheduler: BackupScheduler,
     private val exportManager: ExportManager,
     private val multiAiClient: MultiAiClient,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val aiLearningEngine: AiLearningEngine
 ) : ViewModel() {
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
@@ -115,7 +119,16 @@ class SettingsViewModel @Inject constructor(
                             selectedModel = currentModel,
                             selectionMode = selectionMode,
                             availableModels = if (presets.isNotEmpty()) presets else it.availableModels,
-                            systemInstructions = prefs.customSystemInstructions,
+                            selectedTutorPersonaId = prefs.selectedTutorPersona,
+                            customSystemInstructions = prefs.customSystemInstructions,
+                            systemInstructions = run {
+                                val persona = TutorPersonaRegistry.getById(prefs.selectedTutorPersona)
+                                if (prefs.customSystemInstructions.isNotBlank()) {
+                                    "${persona.instruction}\n\nADDITIONAL USER CUSTOM INSTRUCTIONS:\n${prefs.customSystemInstructions}"
+                                } else {
+                                    persona.instruction
+                                }
+                            },
                             autoBackupEnabled = prefs.autoBackupEnabled,
                             lastBackupTimestamp = prefs.lastBackupTimestamp,
                             googleAccountEmail = prefs.backupAccountEmail,
@@ -366,6 +379,180 @@ class SettingsViewModel @Inject constructor(
                     statusMessage = if (result.isSuccess) result.message else null,
                     errorMessage = if (!result.isSuccess) formatUserFriendlyAiError(result.error ?: result.message) else null
                 )
+            }
+        }
+    }
+
+    fun selectTutorPersona(personaId: String) {
+        _uiState.update { it.copy(selectedTutorPersonaId = personaId) }
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            preferencesRepository.setSelectedTutorPersona(personaId)
+            val persona = TutorPersonaRegistry.getById(personaId)
+            _uiState.update { it.copy(statusMessage = "Tutor persona selected: ${persona.title}") }
+        }
+    }
+
+    fun selectPersonaCategory(category: TutorPersonaCategory) {
+        _uiState.update { it.copy(selectedPersonaCategory = category) }
+    }
+
+    fun setCustomSystemInstructions(instructions: String) {
+        _uiState.update { it.copy(customSystemInstructions = instructions) }
+    }
+
+    fun toggleCustomTemplate(templateText: String) {
+        val snippet = templateText.trim()
+        val current = _uiState.value.customSystemInstructions.trim()
+        val isPresent = current.contains(snippet, ignoreCase = true)
+        val updated = if (isPresent) {
+            current.replace(snippet, "")
+                .lines()
+                .filter { it.isNotBlank() }
+                .joinToString("\n\n")
+                .trim()
+        } else {
+            if (current.isBlank()) {
+                snippet
+            } else {
+                "$current\n\n$snippet"
+            }
+        }
+
+        _uiState.update {
+            it.copy(
+                customSystemInstructions = updated,
+                statusMessage = if (isPresent) "Template removed." else "Template applied & saved."
+            )
+        }
+
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                preferencesRepository.setCustomSystemInstructions(updated)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage) }
+            }
+        }
+    }
+
+    fun saveCustomSystemInstructions() {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                preferencesRepository.setCustomSystemInstructions(_uiState.value.customSystemInstructions)
+                _uiState.update { it.copy(statusMessage = "Custom instructions saved successfully.") }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage) }
+            }
+        }
+    }
+
+    fun clearCustomSystemInstructions() {
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            try {
+                preferencesRepository.setCustomSystemInstructions("")
+                _uiState.update {
+                    it.copy(
+                        customSystemInstructions = "",
+                        statusMessage = "Custom instructions cleared."
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(errorMessage = e.localizedMessage) }
+            }
+        }
+    }
+
+    fun toggleCustomInstructionsExpanded() {
+        _uiState.update { it.copy(isCustomInstructionsExpanded = !it.isCustomInstructionsExpanded) }
+    }
+
+    fun openGeneratePromptDialog(initialNotes: String = "") {
+        val defaultNotes = if (initialNotes.isNotBlank()) {
+            initialNotes
+        } else {
+            _uiState.value.customSystemInstructions
+        }
+        _uiState.update {
+            it.copy(
+                showGeneratePromptDialog = true,
+                promptIdeaDraft = defaultNotes,
+                generatedPromptPreview = null,
+                promptGenerationError = null
+            )
+        }
+    }
+
+    fun closeGeneratePromptDialog() {
+        _uiState.update {
+            it.copy(
+                showGeneratePromptDialog = false,
+                isGeneratingPrompt = false,
+                generatedPromptPreview = null,
+                promptGenerationError = null
+            )
+        }
+    }
+
+    fun setPromptIdeaDraft(draft: String) {
+        _uiState.update { it.copy(promptIdeaDraft = draft) }
+    }
+
+    fun generateSystemInstructionPrompt() {
+        val draft = _uiState.value.promptIdeaDraft.trim()
+        val targetSubject = TutorPersonaRegistry.getById(_uiState.value.selectedTutorPersonaId).title
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
+            val effectiveNotes = if (draft.isNotBlank()) {
+                draft
+            } else {
+                "Be a patient, clear, and rigorous mentor in $targetSubject who uses active recall, practical analogies, and step-by-step examples."
+            }
+            val result = aiLearningEngine.generateSystemInstruction(
+                userNotes = effectiveNotes,
+                targetSubject = targetSubject
+            )
+            result.onSuccess { generatedText ->
+                _uiState.update {
+                    it.copy(
+                        isGeneratingPrompt = false,
+                        generatedPromptPreview = generatedText
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.update {
+                    it.copy(
+                        isGeneratingPrompt = false,
+                        promptGenerationError = formatUserFriendlyAiError(err.localizedMessage ?: "Failed to generate prompt.")
+                    )
+                }
+            }
+        }
+    }
+
+    fun applyGeneratedPrompt() {
+        val generated = _uiState.value.generatedPromptPreview
+        if (!generated.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    customSystemInstructions = generated,
+                    showGeneratePromptDialog = false,
+                    generatedPromptPreview = null,
+                    statusMessage = "AI prompt applied to Custom Instructions! Saved successfully."
+                )
+            }
+            viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+                try {
+                    preferencesRepository.setCustomSystemInstructions(generated)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _uiState.update { it.copy(errorMessage = e.localizedMessage) }
+                }
             }
         }
     }

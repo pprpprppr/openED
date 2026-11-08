@@ -109,6 +109,25 @@
 - **Obsidian Vault Export (.zip):** Exports all courses as nested folders containing `.md` files formatted with standard YAML frontmatter and `[[WikiLinks]]`.
 - **Anki Deck Export (.tsv):** Exports all generated flashcards into a clean tab-separated format ready for immediate import into Anki.
 
+### 14. 🎓 Subject Tutor Personas, Custom Instructions & AI Prompt Architect
+- **13 Subject Pedagogies:** Tailored pedagogical personas across STEM, Humanities, and Social Sciences:
+  - 🧬 **Biology:** Biochemical pathways, molecular biology, genetics, and physiological homeostasis.
+  - 📜 **History:** Historiography, primary source scrutiny, causation, and socio-political dynamics.
+  - 🏛️ **Politics:** Comparative governance, political theory, constitutional law, and international treaties.
+  - 🧪 **Chemistry:** Reaction mechanisms, orbital theory, thermodynamics, and stoichiometry.
+  - 🔭 **Physics:** Feynman intuition, first-principles derivations, and conservation laws.
+  - 📐 **Mathematics:** Formal proofs, lemmas, and visual geometric intuition.
+  - 💻 **Computer Science:** Algorithmic complexity, systems architecture, memory safety, and concurrency.
+  - 📈 **Economics:** Micro/macroequilibriums, econometric models, and monetary policy.
+  - 🧠 **Psychology:** Cognitive architecture, behavioral research, and neural mechanisms.
+  - 🎭 **Philosophy:** Socratic dialogue, epistemology, ethics, and hermeneutics.
+  - 🌱 **Adaptive Polymath:** Interdisciplinary balance (default).
+  - 🚀 **Beginner Friendly:** Analogy-driven, jargon-free explanations.
+  - ⚙️ **Custom System Persona:** Driven exclusively by your personalized system instructions.
+- **Dedicated Custom System Instructions:** Decoupled preference storage allows users to set persistent personalized rules, which blend seamlessly with any active subject persona.
+- **Interactive Quick Templates (Tap to Toggle):** Instant toggleable `FilterChip` templates (e.g. `✨ 3 Takeaways`, `❓ Self-Test Quiz`, `🔬 Case Studies`, `⚡ Socratic Inquirer`, `📐 Step-by-Step Proofs`, `💡 Analogy-Driven`) with visual checkmarks and instant DataStore auto-persistence in both Settings and the Course Creation Wizard.
+- **✨ AI Prompt Architect:** Enter brief, rough notes or exam goals (e.g. *"Preparing for USMLE, emphasize clinical correlations and review questions"*), and AI crafts a polished, high-impact system instruction prompt with live preview and one-tap application.
+
 ---
 
 ## 🏗️ Architecture & Component Design

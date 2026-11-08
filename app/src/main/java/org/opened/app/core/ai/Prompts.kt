@@ -1008,4 +1008,30 @@ REQUIREMENTS FOR THIS TARGETED REMEDIAL MICRO-LESSON:
 6. Use clean GitHub-flavored markdown with bold concepts, callout blocks (> [!TIP]), and crisp formatting.
 """.trimIndent()
     }
+
+    fun generateSystemInstructionPrompt(
+        userGoalOrNotes: String,
+        targetSubject: String? = null
+    ): String {
+        val subjectContext = if (!targetSubject.isNullOrBlank()) {
+            "\nTARGET SUBJECT OR DOMAIN FOCUS:\n\"$targetSubject\"\n"
+        } else {
+            ""
+        }
+        return """
+You are an expert prompt engineer and pedagogical architect for openED, a world-class AI self-learning platform.
+Your task is to take a user's rough learning preference, goals, background, or rough notes, and turn them into a polished, powerful, and precise System Instruction prompt for their AI Tutor.
+
+USER'S DESIRED LEARNING STYLE / GOALS / NOTES:
+"$userGoalOrNotes"
+$subjectContext
+REQUIREMENTS FOR THE GENERATED SYSTEM INSTRUCTION:
+1. Define a clear pedagogical role (e.g., "You are openED, an elite mentor specializing in...").
+2. Establish pedagogical principles tailored to their goal (e.g., balance of theory and practical exercises, use of analogies, step-by-step scaffolding, active recall questions, code or math rigor if applicable).
+3. Specify output formatting rules (e.g., clear section headings, bulleted takeaways, callout boxes, ASCII diagrams or tables where helpful).
+4. Outline tone and interaction style (e.g., encouraging, rigorous, empathetic, Socratic).
+5. Keep it concise, high-impact, and directly usable as a system prompt (between 80 to 200 words).
+6. Do NOT include markdown code fences (```) around the entire output. Do NOT include pleasantries, preambles like "Here is your prompt:", or postambles. Output ONLY the raw system instruction text that can be used directly as a system prompt.
+""".trimIndent()
+    }
 }

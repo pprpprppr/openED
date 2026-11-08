@@ -3,6 +3,8 @@ package org.opened.app.ui.settings
 import androidx.compose.runtime.Immutable
 import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.AiProviderModels
+import org.opened.app.core.ai.TutorPersonaCategory
+import org.opened.app.core.ai.TutorPersonaRegistry
 import org.opened.app.core.ai.provider.ModelSelectionMode
 import org.opened.app.core.datastore.UserPreferences
 
@@ -19,6 +21,15 @@ data class SettingsUiState(
     val isTestingConnection: Boolean = false,
     val connectionTestResult: String? = null,
     val customModelInput: String = "",
+    val selectedTutorPersonaId: String = UserPreferences.DEFAULT_TUTOR_PERSONA,
+    val selectedPersonaCategory: TutorPersonaCategory = TutorPersonaCategory.ALL,
+    val customSystemInstructions: String = "",
+    val isCustomInstructionsExpanded: Boolean = false,
+    val showGeneratePromptDialog: Boolean = false,
+    val isGeneratingPrompt: Boolean = false,
+    val promptIdeaDraft: String = "",
+    val generatedPromptPreview: String? = null,
+    val promptGenerationError: String? = null,
     val systemInstructions: String = UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS,
     val autoBackupEnabled: Boolean = true,
     val lastBackupTimestamp: Long = 0L,

@@ -43,6 +43,44 @@ class AiLearningEngine @Inject constructor(
         return AcademicDomainClassifier.detectAcademicDomain(topic, courseTitle, chapterTitle)
     }
 
+    fun buildSystemInstruction(
+        prefs: org.opened.app.core.datastore.UserPreferences,
+        userLevel: String,
+        domain: AcademicDomain = AcademicDomain.GENERAL_INTERDISCIPLINARY,
+        tutorPersonaOverride: String? = null,
+        customInstructionsOverride: String? = null
+    ): String {
+        val personaId = tutorPersonaOverride ?: prefs.selectedTutorPersona
+        val customInstructions = (customInstructionsOverride ?: prefs.customSystemInstructions).trim()
+        val persona = TutorPersonaRegistry.getById(personaId)
+        val personaInstruction = if (persona.id == "CUSTOM") {
+            customInstructions.ifBlank { TutorPersonaRegistry.ADAPTIVE_POLYMATH.instruction }
+        } else {
+            persona.instruction
+        }
+
+        val combinedInstruction = if (persona.id != "CUSTOM" && customInstructions.isNotBlank() &&
+            customInstructions != org.opened.app.core.datastore.UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS
+        ) {
+            """
+$personaInstruction
+
+ADDITIONAL USER CUSTOM SYSTEM INSTRUCTIONS:
+$customInstructions
+""".trimIndent()
+        } else {
+            personaInstruction
+        }
+
+        return getEffectiveSystemInstruction(
+            baseInstruction = combinedInstruction,
+            userLevel = userLevel,
+            domain = domain,
+            learningLanguage = prefs.learningLanguage,
+            bilingualTerminology = prefs.bilingualTerminologyEnabled
+        )
+    }
+
     private fun getEffectiveSystemInstruction(
         baseInstruction: String,
         userLevel: String,
@@ -87,13 +125,25 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
         return listOf(languageRule, nonCodeRule, beginnerRule, baseInstruction).filter { it.isNotBlank() }.joinToString("\n\n")
     }
 
-    suspend fun generateDiagnosticQuestions(topic: String): Result<List<DiagnosticQuestion>> = withContext(Dispatchers.IO) {
+    suspend fun generateDiagnosticQuestions(
+        topic: String,
+        tutorPersonaOverride: String? = null,
+        customInstructionsOverride: String? = null
+    ): Result<List<DiagnosticQuestion>> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
+            val domain = AcademicDomainClassifier.detectAcademicDomain(topic)
             val prompt = Prompts.diagnosticInterviewPrompt(topic)
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = "INTERMEDIATE",
+                domain = domain,
+                tutorPersonaOverride = tutorPersonaOverride,
+                customInstructionsOverride = customInstructionsOverride
+            )
 
             val rawOutput = multiAiClient.generateContent(
-                systemInstruction = prefs.customSystemInstructions,
+                systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
                 isJson = true
             )
@@ -107,7 +157,9 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
         topic: String,
         userLevel: String,
         answers: Map<String, List<String>>,
-        domainOverride: AcademicDomain? = null
+        domainOverride: AcademicDomain? = null,
+        tutorPersonaOverride: String? = null,
+        customInstructionsOverride: String? = null
     ): Result<SyllabusResponse> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
@@ -119,12 +171,12 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             }
 
             val prompt = Prompts.syllabusGenerationPrompt(topic, userLevel, summaryBuilder.toString(), domain)
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(
-                prefs.customSystemInstructions,
-                userLevel,
-                domain,
-                prefs.learningLanguage,
-                prefs.bilingualTerminologyEnabled
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = userLevel,
+                domain = domain,
+                tutorPersonaOverride = tutorPersonaOverride,
+                customInstructionsOverride = customInstructionsOverride
             )
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
@@ -199,12 +251,10 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
                 domain = domain
             )
 
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(
-                prefs.customSystemInstructions,
-                studyPath.userLevel,
-                domain,
-                prefs.learningLanguage,
-                prefs.bilingualTerminologyEnabled
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = studyPath.userLevel,
+                domain = domain
             )
             val rawOutput = multiAiClient.generateContent(
                 systemInstruction = effectiveSystemInstruction,
@@ -279,12 +329,10 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
         )
         val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: pathWithModules.studyPath.userLevel
         val prefs = preferencesRepository.userPreferencesFlow.first()
-        val effectiveSystemInstruction = getEffectiveSystemInstruction(
-            prefs.customSystemInstructions,
-            effectiveUserLevel,
-            domain,
-            prefs.learningLanguage,
-            prefs.bilingualTerminologyEnabled
+        val effectiveSystemInstruction = buildSystemInstruction(
+            prefs = prefs,
+            userLevel = effectiveUserLevel,
+            domain = domain
         )
         val prompt = Prompts.chapterContentPrompt(
             courseTitle = pathWithModules.studyPath.title,
@@ -362,12 +410,10 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             )
             val effectiveUserLevel = userLevelOverride?.takeIf { it.isNotBlank() } ?: (studyPath?.userLevel ?: "BEGINNER")
             val prefs = preferencesRepository.userPreferencesFlow.first()
-            val effectiveSystemInstruction = getEffectiveSystemInstruction(
-                prefs.customSystemInstructions,
-                effectiveUserLevel,
-                domain,
-                prefs.learningLanguage,
-                prefs.bilingualTerminologyEnabled
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = effectiveUserLevel,
+                domain = domain
             )
 
             val prompt = Prompts.inlineRefinePrompt(
@@ -432,8 +478,14 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
                 domain = domain
             )
 
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = "INTERMEDIATE",
+                domain = domain
+            )
+
             val answer = multiAiClient.generateContent(
-                systemInstruction = prefs.customSystemInstructions,
+                systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
                 isJson = false,
                 taskType = org.opened.app.core.ai.provider.AiTaskType.REFINEMENT_QA
@@ -586,6 +638,32 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             )
             val cleaned = cleanJsonOutput(raw)
             json.decodeFromString(FeynmanEvaluationResponse.serializer(), cleaned)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // AI System Instruction Prompt Architect
+    // -------------------------------------------------------------------------
+
+    suspend fun generateSystemInstruction(
+        userNotes: String,
+        targetSubject: String? = null
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val prompt = Prompts.generateSystemInstructionPrompt(userNotes, targetSubject)
+            val systemInstruction = """
+You are an expert pedagogical prompt engineer. Generate an actionable, concise, and structured system instruction prompt for an AI personal tutor based on the user's requirements. Output ONLY the raw instruction text without commentary or markdown code fences.
+            """.trimIndent()
+            val rawOutput = multiAiClient.generateContent(
+                systemInstruction = systemInstruction,
+                prompt = prompt,
+                isJson = false,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.GENERAL
+            )
+            rawOutput.trim()
+                .removeSurrounding("```markdown", "```")
+                .removeSurrounding("```", "```")
+                .trim()
         }
     }
 }
