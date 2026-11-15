@@ -320,7 +320,7 @@ fun TakeMockTestScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp),
-                        contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp),
+                        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // Question Header: Topic badge + Flag for Review
@@ -457,66 +457,6 @@ fun TakeMockTestScreen(
                                 }
                             }
                         }
-                    }
-
-                    // Inline Bottom Action Navigation Row inside the scrollable column
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedButton(
-                                onClick = { viewModel.prevQuestion() },
-                                enabled = uiState.currentQuestionIndex > 0,
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Prev", maxLines = 1)
-                            }
-
-                            val hasAnswer = (question.userSelectedOption >= 0)
-                            TextButton(
-                                onClick = { viewModel.clearCurrentAnswer() },
-                                enabled = hasAnswer,
-                                modifier = Modifier.weight(0.9f),
-                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Clear", maxLines = 1)
-                            }
-
-                            if (uiState.currentQuestionIndex < uiState.totalQuestions - 1) {
-                                Button(
-                                    onClick = { viewModel.nextQuestion() },
-                                    modifier = Modifier.weight(1.2f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Text("Next", maxLines = 1)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                            } else {
-                                Button(
-                                    onClick = { viewModel.showSubmitConfirmation() },
-                                    modifier = Modifier.weight(1.4f),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Submit Exam", fontWeight = FontWeight.Bold, maxLines = 1)
-                                }
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
