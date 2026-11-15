@@ -358,7 +358,8 @@ fun CourseWorkspaceScreen(
                                 if (currentMarkdown.isNotBlank()) {
                                     RichMarkdownRenderer(
                                         markdown = stripLeadingH1(currentMarkdown, currentChapter.title),
-                                        onChapterClick = { viewModel.navigateToChapterByTitle(it) }
+                                        onChapterClick = { viewModel.navigateToChapterByTitle(it) },
+                                        selectable = false
                                     )
                                 } else {
                                     Box(
@@ -669,6 +670,8 @@ fun CourseWorkspaceScreen(
     }
 }
 
+private val CHAPTER_PREFIX_REGEX = Regex("^Chapter\\s+\\d+[:\\.\\-]?\\s*", RegexOption.IGNORE_CASE)
+
 /**
  * Strips a leading H1 heading from markdown content when it matches the chapter title,
  * preventing duplicate headings since the title is already rendered by the UI header.
@@ -681,8 +684,8 @@ private fun stripLeadingH1(markdown: String, chapterTitle: String): String {
     if (firstLine.startsWith("#") && !firstLine.startsWith("##")) {
         val headingText = firstLine.removePrefix("#").trim()
         // Strip if heading text matches chapter title (case-insensitive, ignoring "Chapter N: " prefix)
-        val normalizedHeading = headingText.replace(Regex("^Chapter\\s+\\d+[:\\.\\-]?\\s*", RegexOption.IGNORE_CASE), "").trim()
-        val normalizedTitle = chapterTitle.replace(Regex("^Chapter\\s+\\d+[:\\.\\-]?\\s*", RegexOption.IGNORE_CASE), "").trim()
+        val normalizedHeading = headingText.replace(CHAPTER_PREFIX_REGEX, "").trim()
+        val normalizedTitle = chapterTitle.replace(CHAPTER_PREFIX_REGEX, "").trim()
         if (normalizedHeading.equals(normalizedTitle, ignoreCase = true) ||
             headingText.equals(chapterTitle, ignoreCase = true) ||
             headingText.startsWith("Chapter", ignoreCase = true)) {

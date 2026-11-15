@@ -243,7 +243,7 @@ class CourseWorkspaceViewModel @Inject constructor(
                     .collect { chunk ->
                         accumulatedText.append(chunk)
                         val now = System.currentTimeMillis()
-                        if (now - lastEmitTime >= 350L) {
+                        if (now - lastEmitTime >= 500L) {
                             lastEmitTime = now
                             val currentText = accumulatedText.toString()
                             _uiState.update { it.copy(streamingContent = currentText) }

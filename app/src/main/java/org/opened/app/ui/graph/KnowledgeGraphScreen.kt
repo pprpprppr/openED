@@ -76,6 +76,13 @@ private data class GraphNode(
     val vy: Float = 0f
 )
 
+private data class MeasuredNodeLabel(
+    val textLayout: androidx.compose.ui.text.TextLayoutResult,
+    val pillWidth: Float,
+    val pillHeight: Float,
+    val pillPadV: Float
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KnowledgeGraphScreen(
@@ -146,17 +153,42 @@ private fun ForceDirectedGraph(
 ) {
     val nodeRadius = 38f
     val textMeasurer = rememberTextMeasurer()
+    val labelStyle = remember {
+        TextStyle(fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+    }
 
     val adjacencyMap = remember(nodes) {
         nodes.associate { n -> n.chapterId to n.outgoingTargetIds }
     }
 
-    // Snapshot list for positions — updates trigger efficient Canvas redraws
+    val nodeIndexMap = remember(nodes) {
+        nodes.mapIndexed { i, n -> n.chapterId to i }.toMap()
+    }
+
+    // Pre-measure node text layouts once. NEVER measure text inside DrawScope/Canvas!
+    val measuredLabels = remember(nodes, textMeasurer) {
+        nodes.associate { n ->
+            val label = n.chapterTitle.take(16).let { if (n.chapterTitle.length > 16) "$it…" else it }
+            val measured = textMeasurer.measure(label, labelStyle)
+            val pillPadH = 8f
+            val pillPadV = 3f
+            val pillWidth = measured.size.width + pillPadH * 2
+            val pillHeight = measured.size.height + pillPadV * 2
+            n.chapterId to MeasuredNodeLabel(
+                textLayout = measured,
+                pillWidth = pillWidth,
+                pillHeight = pillHeight,
+                pillPadV = pillPadV
+            )
+        }
+    }
+
+    // Snapshot list for positions — updates trigger Canvas redraws
     val positions: SnapshotStateList<GraphNode> = remember(nodes) {
         mutableStateListOf<GraphNode>().also { list ->
             nodes.mapIndexed { i, n ->
-                val angle = (i.toFloat() / nodes.size) * 2f * Math.PI.toFloat()
-                val radius = 300f + (i * 73L % 100).toFloat() // deterministic, no Random
+                val angle = (i.toFloat() / nodes.size.coerceAtLeast(1)) * 2f * Math.PI.toFloat()
+                val radius = 300f + (i * 73L % 100).toFloat()
                 list.add(
                     GraphNode(
                         id = n.chapterId,
@@ -171,29 +203,35 @@ private fun ForceDirectedGraph(
         }
     }
 
-    // Run force simulation on Dispatchers.Default, push results back to main thread
+    // Run force simulation efficiently on Dispatchers.Default in coalesced batches
     LaunchedEffect(nodes) {
-        repeat(150) {
-            val newPositions = withContext(Dispatchers.Default) {
-                forceSimulationStepImmutable(positions.toList(), adjacencyMap, nodeRadius)
-            }
-            newPositions.forEachIndexed { i, node ->
-                if (i < positions.size) {
-                    positions[i] = node
+        withContext(Dispatchers.Default) {
+            var currentList = positions.toList()
+            // 4 batches of 15 iterations (60 total) settles the graph cleanly with only 4 UI updates
+            for (batch in 0 until 4) {
+                repeat(15) {
+                    currentList = forceSimulationStepImmutable(currentList, adjacencyMap, nodeIndexMap, nodeRadius)
                 }
+                withContext(Dispatchers.Main) {
+                    currentList.forEachIndexed { i, node ->
+                        if (i < positions.size) {
+                            positions[i] = node
+                        }
+                    }
+                }
+                delay(16L)
             }
-            delay(16L)
         }
     }
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
-    val completedColor = Color(0xFF2E7D32)
-    val pendingColor = Color(0xFF1565C0)
-    val generatingColor = Color(0xFFF57F17)
-    val edgeColor = Color.Gray.copy(alpha = 0.35f)
-    val labelStyle = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+    val completedColor = remember { Color(0xFF2E7D32) }
+    val pendingColor = remember { Color(0xFF1565C0) }
+    val generatingColor = remember { Color(0xFFF57F17) }
+    val edgeColor = remember { Color.Gray.copy(alpha = 0.35f) }
+    val pillBgColor = remember { Color(0xBB000000) }
 
     Box(
         modifier = modifier
@@ -206,7 +244,6 @@ private fun ForceDirectedGraph(
             }
             .pointerInput(positions) {
                 detectTapGestures { tapOffset ->
-                    // Map tap to canvas coordinates
                     val canvasTap = (tapOffset - offset) / scale
                     val tapped = positions.firstOrNull { node ->
                         hypot(canvasTap.x - node.x, canvasTap.y - node.y) <= nodeRadius + 12f
@@ -227,116 +264,110 @@ private fun ForceDirectedGraph(
                 translate(offset.x, offset.y)
                 scale(scale, scale, pivot = Offset.Zero)
             }) {
-                // Build a lookup from the snapshot list
-                val indexById = positions.associateBy { it.id }
+                // Draw edges first (with directional arrowheads)
+                for (node in positions) {
+                    val targets = adjacencyMap[node.id] ?: continue
+                    for (targetId in targets) {
+                        val targetIdx = nodeIndexMap[targetId] ?: continue
+                        val target = positions.getOrNull(targetIdx) ?: continue
 
-            // Draw edges first (with directional arrowheads)
-            for (node in positions) {
-                val targets = adjacencyMap[node.id] ?: continue
-                for (targetId in targets) {
-                    val target = indexById[targetId] ?: continue
+                        val dx = target.x - node.x
+                        val dy = target.y - node.y
+                        val dist = hypot(dx, dy).coerceAtLeast(1f)
+                        val ux = dx / dist
+                        val uy = dy / dist
 
-                    val dx = target.x - node.x
-                    val dy = target.y - node.y
-                    val dist = hypot(dx, dy).coerceAtLeast(1f)
-                    val ux = dx / dist
-                    val uy = dy / dist
+                        // Edge starts/ends at node perimeters
+                        val startX = node.x + ux * nodeRadius
+                        val startY = node.y + uy * nodeRadius
+                        val endX = target.x - ux * (nodeRadius + 8f)
+                        val endY = target.y - uy * (nodeRadius + 8f)
 
-                    // Edge starts/ends at node perimeters
-                    val startX = node.x + ux * nodeRadius
-                    val startY = node.y + uy * nodeRadius
-                    val endX = target.x - ux * (nodeRadius + 8f)
-                    val endY = target.y - uy * (nodeRadius + 8f)
+                        drawLine(
+                            color = edgeColor,
+                            start = Offset(startX, startY),
+                            end = Offset(endX, endY),
+                            strokeWidth = 1.5f
+                        )
 
-                    drawLine(
-                        color = edgeColor,
-                        start = Offset(startX, startY),
-                        end = Offset(endX, endY),
-                        strokeWidth = 1.5f
-                    )
+                        // Arrowhead at target end
+                        val arrowLen = 10f
+                        val arrowAngle = 0.4f
+                        val ax1 = endX - arrowLen * (ux * cos(arrowAngle) - uy * sin(arrowAngle))
+                        val ay1 = endY - arrowLen * (uy * cos(arrowAngle) + ux * sin(arrowAngle))
+                        val ax2 = endX - arrowLen * (ux * cos(-arrowAngle) - uy * sin(-arrowAngle))
+                        val ay2 = endY - arrowLen * (uy * cos(-arrowAngle) + ux * sin(-arrowAngle))
 
-                    // Arrowhead at target end
-                    val arrowLen = 10f
-                    val arrowAngle = 0.4f
-                    val ax1 = endX - arrowLen * (ux * cos(arrowAngle) - uy * sin(arrowAngle))
-                    val ay1 = endY - arrowLen * (uy * cos(arrowAngle) + ux * sin(arrowAngle))
-                    val ax2 = endX - arrowLen * (ux * cos(-arrowAngle) - uy * sin(-arrowAngle))
-                    val ay2 = endY - arrowLen * (uy * cos(-arrowAngle) + ux * sin(-arrowAngle))
-
-                    drawLine(
-                        color = edgeColor,
-                        start = Offset(endX, endY),
-                        end = Offset(ax1, ay1),
-                        strokeWidth = 1.5f
-                    )
-                    drawLine(
-                        color = edgeColor,
-                        start = Offset(endX, endY),
-                        end = Offset(ax2, ay2),
-                        strokeWidth = 1.5f
-                    )
+                        drawLine(
+                            color = edgeColor,
+                            start = Offset(endX, endY),
+                            end = Offset(ax1, ay1),
+                            strokeWidth = 1.5f
+                        )
+                        drawLine(
+                            color = edgeColor,
+                            start = Offset(endX, endY),
+                            end = Offset(ax2, ay2),
+                            strokeWidth = 1.5f
+                        )
+                    }
                 }
-            }
 
-            // Draw nodes with glow halo + pill label
-            for (node in positions) {
-                val nodeColor = when (node.status) {
-                    ChapterStatus.COMPLETED -> completedColor
-                    ChapterStatus.GENERATING -> generatingColor
-                    ChapterStatus.PENDING -> pendingColor
-                }
-                val center = Offset(node.x, node.y)
+                // Draw nodes with glow halo + pre-measured pill label
+                for (node in positions) {
+                    val nodeColor = when (node.status) {
+                        ChapterStatus.COMPLETED -> completedColor
+                        ChapterStatus.GENERATING -> generatingColor
+                        ChapterStatus.PENDING -> pendingColor
+                    }
+                    val center = Offset(node.x, node.y)
 
-                // 1. Outer glow
-                drawCircle(
-                    color = nodeColor.copy(alpha = 0.18f),
-                    radius = nodeRadius + 10f,
-                    center = center
-                )
-                // 2. Mid ring
-                drawCircle(
-                    color = nodeColor.copy(alpha = 0.45f),
-                    radius = nodeRadius + 4f,
-                    center = center
-                )
-                // 3. Main circle
-                drawCircle(
-                    color = nodeColor,
-                    radius = nodeRadius,
-                    center = center
-                )
-                // 4. White inner highlight dot
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.12f),
-                    radius = nodeRadius * 0.6f,
-                    center = center
-                )
-
-                // 5. Translucent pill label below node
-                val label = node.title.take(16).let { if (node.title.length > 16) "$it…" else it }
-                val measured = textMeasurer.measure(label, labelStyle)
-                val pillPadH = 8f
-                val pillPadV = 3f
-                val pillWidth = measured.size.width + pillPadH * 2
-                val pillHeight = measured.size.height + pillPadV * 2
-                val pillTop = node.y + nodeRadius + 4f
-
-                drawRoundRect(
-                    color = Color(0xBB000000),
-                    topLeft = Offset(node.x - pillWidth / 2f, pillTop),
-                    size = Size(pillWidth, pillHeight),
-                    cornerRadius = CornerRadius(9f, 9f)
-                )
-                drawText(
-                    textLayoutResult = measured,
-                    topLeft = Offset(
-                        node.x - measured.size.width / 2f,
-                        pillTop + pillPadV
+                    // 1. Outer glow
+                    drawCircle(
+                        color = nodeColor.copy(alpha = 0.18f),
+                        radius = nodeRadius + 10f,
+                        center = center
                     )
-                )
+                    // 2. Mid ring
+                    drawCircle(
+                        color = nodeColor.copy(alpha = 0.45f),
+                        radius = nodeRadius + 4f,
+                        center = center
+                    )
+                    // 3. Main circle
+                    drawCircle(
+                        color = nodeColor,
+                        radius = nodeRadius,
+                        center = center
+                    )
+                    // 4. White inner highlight dot
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.12f),
+                        radius = nodeRadius * 0.6f,
+                        center = center
+                    )
+
+                    // 5. Translucent pill label below node (zero allocation, using pre-measured text layout)
+                    val measuredInfo = measuredLabels[node.id]
+                    if (measuredInfo != null) {
+                        val pillTop = node.y + nodeRadius + 4f
+                        drawRoundRect(
+                            color = pillBgColor,
+                            topLeft = Offset(node.x - measuredInfo.pillWidth / 2f, pillTop),
+                            size = Size(measuredInfo.pillWidth, measuredInfo.pillHeight),
+                            cornerRadius = CornerRadius(9f, 9f)
+                        )
+                        drawText(
+                            textLayoutResult = measuredInfo.textLayout,
+                            topLeft = Offset(
+                                node.x - measuredInfo.textLayout.size.width / 2f,
+                                pillTop + measuredInfo.pillPadV
+                            )
+                        )
+                    }
+                }
             }
         }
-    }
 
         // Legend — BottomEnd to avoid overlap with other UI elements
         Surface(
@@ -380,6 +411,7 @@ private fun LegendItem(color: Color, label: String) {
 private fun forceSimulationStepImmutable(
     nodes: List<GraphNode>,
     adjacency: Map<String, List<String>>,
+    indexById: Map<String, Int>,
     nodeRadius: Float
 ): List<GraphNode> {
     val minRepulsionDistance = 320f
@@ -391,7 +423,6 @@ private fun forceSimulationStepImmutable(
 
     val vx = FloatArray(nodes.size)
     val vy = FloatArray(nodes.size)
-    val indexById = nodes.mapIndexed { i, n -> n.id to i }.toMap()
 
     // Repulsion between all pairs with strict minimum repulsion distance of 320f
     for (i in nodes.indices) {

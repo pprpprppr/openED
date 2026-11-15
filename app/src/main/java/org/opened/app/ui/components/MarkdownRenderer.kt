@@ -88,7 +88,8 @@ fun RenderingPlaceholderCard(
 fun RichMarkdownRenderer(
     markdown: String,
     onChapterClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectable: Boolean = true
 ) {
     @Suppress("ProduceStateDoesNotAssignValue")
     val nodes by androidx.compose.runtime.produceState<List<MarkdownNode>>(
@@ -115,7 +116,7 @@ fun RichMarkdownRenderer(
         return
     }
 
-    SelectionContainer(modifier = modifier) {
+    val content = @Composable {
         Column(modifier = Modifier.fillMaxWidth()) {
             nodes.forEachIndexed { index, node ->
                 when (node) {
@@ -349,6 +350,16 @@ fun RichMarkdownRenderer(
             }
         }
     }
+
+    if (selectable) {
+        SelectionContainer(modifier = modifier) {
+            content()
+        }
+    } else {
+        Box(modifier = modifier) {
+            content()
+        }
+    }
 }
 
 @Composable
@@ -442,7 +453,22 @@ private fun isTableStart(lines: List<String>, index: Int): Boolean {
            second.startsWith("|") && second.contains("---")
 }
 
-internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
+private val TASK_ITEM_REGEX = Regex("""^[-*]\s+\[([ xX])\]\s+(.*)""")
+private val ORDERED_LIST_REGEX = Regex("""^(\d+)\.\s+(.*)""")
+private val TASK_PREFIX_REGEX = Regex("""^[-*]\s+\[([ xX])\]""")
+private val ORDERED_PREFIX_REGEX = Regex("""^(\d+)\.\s+(.*)""")
+private val DISPLAY_MATH_REGEX = Regex("""(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])""")
+
+private val markdownAstCache = SimpleLruCache<String, List<MarkdownNode>>(64)
+
+internal fun parseMarkdown(raw: String): List<MarkdownNode> {
+    if (raw.isBlank()) return emptyList()
+    return markdownAstCache.getOrPut(raw) {
+        parseMarkdownInternal(raw)
+    }
+}
+
+private fun parseMarkdownInternal(raw: String): List<MarkdownNode> = runCatching {
     val nodes = mutableListOf<MarkdownNode>()
     val lines = raw.lines()
     var i = 0
@@ -618,7 +644,7 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
         }
 
         // Task list item: - [ ] or - [x] or * [ ] or * [x]
-        val taskMatch = Regex("""^[-*]\s+\[([ xX])\]\s+(.*)""").matchEntire(trimmed)
+        val taskMatch = TASK_ITEM_REGEX.matchEntire(trimmed)
         if (taskMatch != null) {
             val isChecked = taskMatch.groupValues[1].equals("x", ignoreCase = true)
             val itemText = taskMatch.groupValues[2]
@@ -636,7 +662,7 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
         }
 
         // Ordered list: 1. 2.
-        val orderedMatch = Regex("""^(\d+)\.\s+(.*)""").matchEntire(trimmed)
+        val orderedMatch = ORDERED_LIST_REGEX.matchEntire(trimmed)
         if (orderedMatch != null) {
             val num = orderedMatch.groupValues[1].toIntOrNull() ?: 1
             val itemText = orderedMatch.groupValues[2]
@@ -659,9 +685,9 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
                 currentTrimmed.startsWith("\\begin{multline")
             ) break
             if (currentTrimmed.startsWith(">")) break
-            if (Regex("""^[-*]\s+\[([ xX])\]""").containsMatchIn(currentTrimmed)) break
+            if (TASK_PREFIX_REGEX.containsMatchIn(currentTrimmed)) break
             if (currentTrimmed.startsWith("- ") || currentTrimmed.startsWith("* ")) break
-            if (Regex("""^(\d+)\.\s+(.*)""").matches(currentTrimmed)) break
+            if (ORDERED_PREFIX_REGEX.matches(currentTrimmed)) break
             if (isTableStart(lines, i)) break
 
             paragraphLines.add(currentTrimmed)
@@ -671,10 +697,9 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
         if (paragraphLines.isNotEmpty()) {
             val paragraphContent = paragraphLines.joinToString(" ").trim()
             if (paragraphContent.isNotBlank()) {
-                val displayMathRegex = Regex("""(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])""")
-                if (displayMathRegex.containsMatchIn(paragraphContent)) {
+                if (DISPLAY_MATH_REGEX.containsMatchIn(paragraphContent)) {
                     var lastIdx = 0
-                    for (match in displayMathRegex.findAll(paragraphContent)) {
+                    for (match in DISPLAY_MATH_REGEX.findAll(paragraphContent)) {
                         if (match.range.first > lastIdx) {
                             val part = paragraphContent.substring(lastIdx, match.range.first).trim()
                             if (part.isNotEmpty()) {

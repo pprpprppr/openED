@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +45,9 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 
+private val VECTOR_REGEX = Regex("""(?:vector:\s*)?\[\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\](?:.*?(?:label:\s*|,\s*)([^,]+))?""", RegexOption.IGNORE_CASE)
+private val BAR_REGEX = Regex("""(?:bar:\s*)?([^,:]+)[,:]\s*(?:value:\s*)?([-\d.]+)\s*(?:unit:\s*([a-zA-Z%]+)|([a-zA-Z%]+))?""", RegexOption.IGNORE_CASE)
+
 private sealed class ParsedChartData {
     data class VectorPlot(val vectors: List<PlottedVector>) : ParsedChartData()
     data class BarChart(val bars: List<PlottedBar>) : ParsedChartData()
@@ -54,6 +58,11 @@ private data class PlottedVector(
     val y: Float,
     val label: String,
     val color: Color
+)
+
+private data class MeasuredPlottedVector(
+    val vector: PlottedVector,
+    val textLayout: TextLayoutResult
 )
 
 private data class PlottedBar(
@@ -86,6 +95,35 @@ fun ChartBlockView(
             ParsedChartData.BarChart(emptyList())
         }
     }
+
+    val measuredVectors = remember(chartData, textMeasurer) {
+        if (chartData is ParsedChartData.VectorPlot) {
+            chartData.vectors.map { vec ->
+                val labelText = "${vec.label} (${vec.x.toInt().takeIf { it.toFloat() == vec.x } ?: vec.x}, ${vec.y.toInt().takeIf { it.toFloat() == vec.y } ?: vec.y})"
+                val layout = textMeasurer.measure(
+                    text = labelText,
+                    style = TextStyle(fontSize = 11.sp, color = vec.color, fontWeight = FontWeight.Bold)
+                )
+                MeasuredPlottedVector(vec, layout)
+            }
+        } else emptyList()
+    }
+
+    val axisXLayout = remember(textMeasurer) {
+        textMeasurer.measure(
+            text = "X",
+            style = TextStyle(fontSize = 11.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
+        )
+    }
+
+    val axisYLayout = remember(textMeasurer) {
+        textMeasurer.measure(
+            text = "Y",
+            style = TextStyle(fontSize = 11.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
+        )
+    }
+
+    val reusableVectorPath = remember { Path() }
 
     Surface(
         modifier = modifier
@@ -144,10 +182,10 @@ fun ChartBlockView(
                             )
                             val scale = (minOf(w, h) * 0.4f) / maxVal.coerceAtLeast(1f)
 
-                            // Draw Grid Lines
+                            // Draw Grid Lines (bounded to avoid runaway allocations)
                             val gridColor = Color(0x2294A3B8)
-                            val step = 1
-                            for (i in -maxVal.toInt()..maxVal.toInt()) {
+                            val safeMaxVal = minOf(maxVal.toInt(), 30)
+                            for (i in -safeMaxVal..safeMaxVal) {
                                 if (i == 0) continue
                                 val gx = centerX + i * scale
                                 val gy = centerY - i * scale
@@ -160,22 +198,19 @@ fun ChartBlockView(
                             drawLine(axisColor, Offset(16f, centerY), Offset(w - 16f, centerY), strokeWidth = 2f)
                             drawLine(axisColor, Offset(centerX, h - 16f), Offset(centerX, 16f), strokeWidth = 2f)
 
-                            // Axis Labels
+                            // Axis Labels (Zero allocation using pre-measured layouts)
                             drawText(
-                                textMeasurer = textMeasurer,
-                                text = "X",
-                                topLeft = Offset(w - 24f, centerY + 4f),
-                                style = TextStyle(fontSize = 11.sp, color = axisColor, fontWeight = FontWeight.Bold)
+                                textLayoutResult = axisXLayout,
+                                topLeft = Offset(w - 24f, centerY + 4f)
                             )
                             drawText(
-                                textMeasurer = textMeasurer,
-                                text = "Y",
-                                topLeft = Offset(centerX + 6f, 8f),
-                                style = TextStyle(fontSize = 11.sp, color = axisColor, fontWeight = FontWeight.Bold)
+                                textLayoutResult = axisYLayout,
+                                topLeft = Offset(centerX + 6f, 8f)
                             )
 
                             // Draw Vectors
-                            for (vec in chartData.vectors) {
+                            for (mv in measuredVectors) {
+                                val vec = mv.vector
                                 val targetX = centerX + vec.x * scale
                                 val targetY = centerY - vec.y * scale
 
@@ -200,26 +235,22 @@ fun ChartBlockView(
                                     (targetY - arrowLen * sin(angle + arrowAngle)).toFloat()
                                 )
 
-                                val path = Path().apply {
-                                    moveTo(targetX, targetY)
-                                    lineTo(p1.x, p1.y)
-                                    lineTo(p2.x, p2.y)
-                                    close()
-                                }
-                                drawPath(path, color = vec.color)
+                                reusableVectorPath.reset()
+                                reusableVectorPath.moveTo(targetX, targetY)
+                                reusableVectorPath.lineTo(p1.x, p1.y)
+                                reusableVectorPath.lineTo(p2.x, p2.y)
+                                reusableVectorPath.close()
+                                drawPath(reusableVectorPath, color = vec.color)
                                 drawCircle(vec.color, radius = 3.5f, center = Offset(targetX, targetY))
 
-                                // Vector Label
-                                val labelText = "${vec.label} (${vec.x.toInt().takeIf { it.toFloat() == vec.x } ?: vec.x}, ${vec.y.toInt().takeIf { it.toFloat() == vec.y } ?: vec.y})"
+                                // Vector Label (Zero allocation using pre-measured layout)
                                 val textOffset = Offset(
                                     targetX + (if (vec.x >= 0) 8f else -80f),
                                     targetY + (if (vec.y >= 0) -22f else 6f)
                                 )
                                 drawText(
-                                    textMeasurer = textMeasurer,
-                                    text = labelText,
-                                    topLeft = textOffset,
-                                    style = TextStyle(fontSize = 11.sp, color = vec.color, fontWeight = FontWeight.Bold)
+                                    textLayoutResult = mv.textLayout,
+                                    topLeft = textOffset
                                 )
                             }
                         }
@@ -329,10 +360,9 @@ private fun parseChartCode(code: String): ParsedChartData {
     val hasVector = lines.any { it.contains("vector", ignoreCase = true) || it.contains("basis", ignoreCase = true) }
     if (hasVector) {
         val vectors = mutableListOf<PlottedVector>()
-        val vectorRegex = Regex("""(?:vector:\s*)?\[\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\](?:.*?(?:label:\s*|,\s*)([^,]+))?""", RegexOption.IGNORE_CASE)
 
         for ((idx, line) in lines.withIndex()) {
-            val match = vectorRegex.find(line)
+            val match = VECTOR_REGEX.find(line)
             if (match != null) {
                 val x = match.groupValues[1].toFloatOrNull() ?: 0f
                 val y = match.groupValues[2].toFloatOrNull() ?: 0f
@@ -347,11 +377,10 @@ private fun parseChartCode(code: String): ParsedChartData {
 
     // Default to comparison bar chart
     val bars = mutableListOf<PlottedBar>()
-    val barRegex = Regex("""(?:bar:\s*)?([^,:]+)[,:]\s*(?:value:\s*)?([-\d.]+)\s*(?:unit:\s*([a-zA-Z%]+)|([a-zA-Z%]+))?""", RegexOption.IGNORE_CASE)
 
     for (line in lines) {
         if (line.startsWith("type:", ignoreCase = true)) continue
-        val match = barRegex.find(line)
+        val match = BAR_REGEX.find(line)
         if (match != null) {
             val label = match.groupValues[1].trim()
             val value = match.groupValues[2].toFloatOrNull() ?: 0f

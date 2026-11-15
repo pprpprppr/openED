@@ -265,7 +265,7 @@ class SecureApiKeyStorage internal constructor(
         _activeApiKey.value = null
         _activeModel.value = AiProvider.GEMINI.defaultModel
         try {
-            loadPrefs().edit().clear().apply()
+            loadPrefs().edit()?.clear()?.apply()
         } catch (_: Throwable) {}
         getOrCreateSecretKey()
     }
@@ -354,10 +354,8 @@ class SecureApiKeyStorage internal constructor(
             _activeApiKey.value = cleanKey.ifBlank { null }
         }
 
-        scope.launch(Dispatchers.IO) {
-            val encrypted = encrypt(cleanKey)
-            loadPrefs().edit().putString(prefKey, encrypted).apply()
-        }
+        val encrypted = encrypt(cleanKey)
+        loadPrefs().edit()?.putString(prefKey, encrypted)?.apply()
     }
 
     fun clearApiKeyForProvider(provider: AiProvider) {
@@ -368,9 +366,7 @@ class SecureApiKeyStorage internal constructor(
             _activeApiKey.value = null
         }
 
-        scope.launch(Dispatchers.IO) {
-            loadPrefs().edit().remove(prefKey).apply()
-        }
+        loadPrefs().edit()?.remove(prefKey)?.apply()
     }
 
     fun hasApiKeyForProvider(provider: AiProvider): Boolean {
@@ -425,10 +421,8 @@ class SecureApiKeyStorage internal constructor(
             _activeModel.value = cleanModel.ifBlank { AiProvider.GEMINI.defaultModel }
         }
 
-        scope.launch(Dispatchers.IO) {
-            val encrypted = encrypt(cleanModel)
-            loadPrefs().edit().putString(prefKey, encrypted).apply()
-        }
+        val encrypted = encrypt(cleanModel)
+        loadPrefs().edit()?.putString(prefKey, encrypted)?.apply()
     }
 
     // -------------------------------------------------------------------------
@@ -453,10 +447,8 @@ class SecureApiKeyStorage internal constructor(
     fun saveCustomBaseUrl(url: String) {
         val cleanUrl = sanitizeCustomBaseUrl(url)
         memoryCache[KEY_CUSTOM_BASE_URL] = cleanUrl
-        scope.launch(Dispatchers.IO) {
-            val encrypted = encrypt(cleanUrl)
-            loadPrefs().edit().putString(KEY_CUSTOM_BASE_URL, encrypted).apply()
-        }
+        val encrypted = encrypt(cleanUrl)
+        loadPrefs().edit()?.putString(KEY_CUSTOM_BASE_URL, encrypted)?.apply()
     }
 
     // -------------------------------------------------------------------------

@@ -79,10 +79,15 @@ private data class ParsedDiagramNode(
     val centerY: Float get() = y + height / 2f
 }
 
+private val BR_TAG_REGEX = Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE)
+private val ARROW_REGEX = Regex("""([A-Za-z0-9_-]+)(?:\[(.*?)\])?\s*-->\s*(?:\|(.*?)\|\s*)?([A-Za-z0-9_-]+)(?:\[(.*?)\])?""")
+private val SINGLE_NODE_REGEX = Regex("""^([A-Za-z0-9_-]+)\[(.*?)\]$""")
+
 private data class ParsedDiagramEdge(
     val fromId: String,
     val toId: String,
-    val label: String? = null
+    val label: String? = null,
+    var textLayout: TextLayoutResult? = null
 )
 
 private data class DiagramLayoutResult(
@@ -99,7 +104,7 @@ private fun cleanNodeLabel(raw: String): String {
             text = text.substring(1, text.length - 1).trim()
         }
     }
-    text = text.replace(Regex("""<br\s*/?>""", RegexOption.IGNORE_CASE), "\n")
+    text = text.replace(BR_TAG_REGEX, "\n")
     text = text.replace("&quot;", "\"")
         .replace("&amp;", "&")
         .replace("&lt;", "<")
@@ -215,6 +220,8 @@ fun DiagramBlockView(
 
                 var zoomScale by remember(diagramCode, autoScale) { mutableFloatStateOf(autoScale) }
                 var panOffset by remember(diagramCode, defaultPanOffset) { mutableStateOf(defaultPanOffset) }
+                val nodeMap = remember(nodes) { nodes.associateBy { it.id } }
+                val arrowPath = remember { Path() }
 
                 Box(
                     modifier = Modifier
@@ -264,19 +271,19 @@ fun DiagramBlockView(
                             translate(panOffset.x, panOffset.y)
                             scale(zoomScale, zoomScale, pivot = Offset.Zero)
                         }) {
-                            // Draw lightweight coordinate dot grid in world space
+                            // Draw lightweight coordinate dot grid in world space (bounded to avoid runaway loops)
                             val dotSpacing = 48f
+                            val maxGridW = minOf(graphWidth, 2400f)
+                            val maxGridH = minOf(graphHeight, 2400f)
                             var gx = 0f
-                            while (gx <= graphWidth) {
+                            while (gx <= maxGridW) {
                                 var gy = 0f
-                                while (gy <= graphHeight) {
+                                while (gy <= maxGridH) {
                                     drawCircle(gridColor, radius = 1.2f, center = Offset(gx, gy))
                                     gy += dotSpacing
                                 }
                                 gx += dotSpacing
                             }
-
-                            val nodeMap = nodes.associateBy { it.id }
 
                             // Draw Edges with Arrows
                             for (edge in edges) {
@@ -312,22 +319,16 @@ fun DiagramBlockView(
                                     (arrowTarget.y - arrowLen * sin(angle + arrowAngle)).toFloat()
                                 )
 
-                                val arrowPath = Path().apply {
-                                    moveTo(arrowTarget.x, arrowTarget.y)
-                                    lineTo(p1.x, p1.y)
-                                    lineTo(p2.x, p2.y)
-                                    close()
-                                }
+                                arrowPath.reset()
+                                arrowPath.moveTo(arrowTarget.x, arrowTarget.y)
+                                arrowPath.lineTo(p1.x, p1.y)
+                                arrowPath.lineTo(p2.x, p2.y)
+                                arrowPath.close()
                                 drawPath(arrowPath, color = edgeColor)
 
-                                if (!edge.label.isNullOrBlank()) {
+                                edge.textLayout?.let { labelResult ->
                                     val midX = (fromCenter.x + arrowTarget.x) / 2f
                                     val midY = (fromCenter.y + arrowTarget.y) / 2f
-                                    val cleanEdgeLabel = cleanNodeLabel(edge.label)
-                                    val labelResult = textMeasurer.measure(
-                                        text = cleanEdgeLabel,
-                                        style = TextStyle(fontSize = 11.sp, color = Color(0xFFFBBF24), fontWeight = FontWeight.SemiBold)
-                                    )
                                     drawRoundRect(
                                         color = Color(0xDD1E293B),
                                         topLeft = Offset(midX - labelResult.size.width / 2f - 4f, midY - labelResult.size.height / 2f - 2f),
@@ -428,11 +429,8 @@ private fun layoutDiagram(
     val nodesMap = mutableMapOf<String, ParsedDiagramNode>()
     val edges = mutableListOf<ParsedDiagramEdge>()
 
-    val arrowRegex = Regex("""([A-Za-z0-9_-]+)(?:\[(.*?)\])?\s*-->\s*(?:\|(.*?)\|\s*)?([A-Za-z0-9_-]+)(?:\[(.*?)\])?""")
-    val singleNodeRegex = Regex("""^([A-Za-z0-9_-]+)\[(.*?)\]$""")
-
     for (line in lines) {
-        val arrowMatch = arrowRegex.find(line)
+        val arrowMatch = ARROW_REGEX.find(line)
         if (arrowMatch != null) {
             val fromId = arrowMatch.groupValues[1]
             val fromLabel = arrowMatch.groupValues[2].ifBlank { fromId }
@@ -456,7 +454,7 @@ private fun layoutDiagram(
             continue
         }
 
-        val singleMatch = singleNodeRegex.find(line)
+        val singleMatch = SINGLE_NODE_REGEX.find(line)
         if (singleMatch != null) {
             val id = singleMatch.groupValues[1]
             val label = singleMatch.groupValues[2]
@@ -478,6 +476,18 @@ private fun layoutDiagram(
         node.textLayout = textLayout
         node.width = (textLayout.size.width + 44f).coerceAtLeast(130f)
         node.height = (textLayout.size.height + 36f).coerceAtLeast(56f)
+    }
+
+    // Pre-measure all edge labels ahead of time to eliminate Skia JNI allocations in Canvas onDraw
+    val edgeLabelStyle = TextStyle(fontSize = 11.sp, color = Color(0xFFFBBF24), fontWeight = FontWeight.SemiBold)
+    for (edge in edges) {
+        if (!edge.label.isNullOrBlank()) {
+            val cleanEdgeLabel = cleanNodeLabel(edge.label)
+            edge.textLayout = textMeasurer.measure(
+                text = cleanEdgeLabel,
+                style = edgeLabelStyle
+            )
+        }
     }
 
     // 2. Compute node layers (BFS / topological levels)

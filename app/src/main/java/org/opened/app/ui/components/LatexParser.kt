@@ -113,6 +113,25 @@ object LatexParser {
     private val SPOKEN_SUBN_REGEX = Regex("""_\{([^}]+)\}""")
     private val SPOKEN_COMMANDS_REGEX = Regex("""\\[a-zA-Z]+""")
 
+    // Pre-compiled Hat and Vector regexes for zero-allocation inline math parsing
+    private val HAT_I_REGEX = Regex("""\\hat\{i\}|\\hat\{ı\}|\\hat\s+i""")
+    private val HAT_J_REGEX = Regex("""\\hat\{j\}|\\hat\s+j""")
+    private val HAT_K_REGEX = Regex("""\\hat\{k\}|\\hat\s+k""")
+    private val HAT_X_REGEX = Regex("""\\hat\{x\}|\\hat\s+x""")
+    private val HAT_Y_REGEX = Regex("""\\hat\{y\}|\\hat\s+y""")
+    private val HAT_Z_REGEX = Regex("""\\hat\{z\}|\\hat\s+z""")
+    private val HAT_W_REGEX = Regex("""\\hat\{w\}|\\hat\s+w""")
+    private val HAT_THETA_REGEX = Regex("""\\hat\{theta\}|\\hat\\theta""")
+    private val VEC_V_REGEX = Regex("""\\vec\{v\}|\\vec\s+v""")
+    private val VEC_U_REGEX = Regex("""\\vec\{u\}|\\vec\s+u""")
+    private val VEC_W_REGEX = Regex("""\\vec\{w\}|\\vec\s+w""")
+    private val VEC_X_REGEX = Regex("""\\vec\{x\}|\\vec\s+x""")
+    private val VEC_Y_REGEX = Regex("""\\vec\{y\}|\\vec\s+y""")
+    private val VEC_I_REGEX = Regex("""\\vec\{i\}|\\vec\s+i""")
+    private val VEC_J_REGEX = Regex("""\\vec\{j\}|\\vec\s+j""")
+
+    private val cleanInlineLatexCache = SimpleLruCache<String, String>(1024)
+
     private val SUPERSCRIPTS = mapOf(
         '•' to '•', '●' to '●', '·' to '·',
         '0' to '⁰', '1' to '¹', '2' to '²', '3' to '³', '4' to '⁴',
@@ -215,6 +234,13 @@ object LatexParser {
      * stripping stray braces, converting vectors/sets, and never letting raw LaTeX leaks occur.
      */
     fun cleanInlineLatex(raw: String): String {
+        if (raw.isBlank()) return ""
+        return cleanInlineLatexCache.getOrPut(raw) {
+            cleanInlineLatexInternal(raw)
+        }
+    }
+
+    private fun cleanInlineLatexInternal(raw: String): String {
         val leadingSpace = raw.takeWhile { it.isWhitespace() }
         val trailingSpace = raw.takeLastWhile { it.isWhitespace() }
 
@@ -272,22 +298,22 @@ object LatexParser {
         text = replaceInlineMatrices(text)
 
         // 8. Hat and vector accents
-        text = text.replace(Regex("""\\hat\{i\}|\\hat\{ı\}|\\hat\s+i"""), "î")
-            .replace(Regex("""\\hat\{j\}|\\hat\s+j"""), "ĵ")
-            .replace(Regex("""\\hat\{k\}|\\hat\s+k"""), "k̂")
-            .replace(Regex("""\\hat\{x\}|\\hat\s+x"""), "x̂")
-            .replace(Regex("""\\hat\{y\}|\\hat\s+y"""), "ŷ")
-            .replace(Regex("""\\hat\{z\}|\\hat\s+z"""), "ẑ")
-            .replace(Regex("""\\hat\{w\}|\\hat\s+w"""), "ŵ")
-            .replace(Regex("""\\hat\{theta\}|\\hat\\theta"""), "θ̂")
+        text = text.replace(HAT_I_REGEX, "î")
+            .replace(HAT_J_REGEX, "ĵ")
+            .replace(HAT_K_REGEX, "k̂")
+            .replace(HAT_X_REGEX, "x̂")
+            .replace(HAT_Y_REGEX, "ŷ")
+            .replace(HAT_Z_REGEX, "ẑ")
+            .replace(HAT_W_REGEX, "ŵ")
+            .replace(HAT_THETA_REGEX, "θ̂")
             .replace(HAT_ACCENTS_REGEX) { "${it.groupValues[1]}̂" }
-            .replace(Regex("""\\vec\{v\}|\\vec\s+v"""), "v⃗")
-            .replace(Regex("""\\vec\{u\}|\\vec\s+u"""), "u⃗")
-            .replace(Regex("""\\vec\{w\}|\\vec\s+w"""), "w⃗")
-            .replace(Regex("""\\vec\{x\}|\\vec\s+x"""), "x⃗")
-            .replace(Regex("""\\vec\{y\}|\\vec\s+y"""), "y⃗")
-            .replace(Regex("""\\vec\{i\}|\\vec\s+i"""), "i⃗")
-            .replace(Regex("""\\vec\{j\}|\\vec\s+j"""), "j⃗")
+            .replace(VEC_V_REGEX, "v⃗")
+            .replace(VEC_U_REGEX, "u⃗")
+            .replace(VEC_W_REGEX, "w⃗")
+            .replace(VEC_X_REGEX, "x⃗")
+            .replace(VEC_Y_REGEX, "y⃗")
+            .replace(VEC_I_REGEX, "i⃗")
+            .replace(VEC_J_REGEX, "j⃗")
             .replace(VEC_ACCENTS_REGEX) { "${it.groupValues[1]}⃗" }
 
         // 9. Blackboard bold sets
