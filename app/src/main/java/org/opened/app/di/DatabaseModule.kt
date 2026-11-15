@@ -16,6 +16,7 @@ import org.opened.app.core.database.dao.ChapterRevisionDao
 import org.opened.app.core.database.dao.DocumentDao
 import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
+import org.opened.app.core.database.dao.MockTestDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
 import org.opened.app.core.database.dao.SyncTombstoneDao
@@ -38,7 +39,8 @@ object DatabaseModule {
             .addMigrations(
                 OpenEDDatabase.MIGRATION_1_2,
                 OpenEDDatabase.MIGRATION_2_3,
-                OpenEDDatabase.MIGRATION_3_4
+                OpenEDDatabase.MIGRATION_3_4,
+                OpenEDDatabase.MIGRATION_4_5
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -55,6 +57,7 @@ object DatabaseModule {
     @Provides fun provideAdaptiveLearningDao(database: OpenEDDatabase): AdaptiveLearningDao = database.adaptiveLearningDao()
     @Provides fun provideDocumentDao(database: OpenEDDatabase): DocumentDao = database.documentDao()
     @Provides fun provideSyncTombstoneDao(database: OpenEDDatabase): SyncTombstoneDao = database.syncTombstoneDao()
+    @Provides fun provideMockTestDao(database: OpenEDDatabase): MockTestDao = database.mockTestDao()
 
     @Provides
     @Singleton

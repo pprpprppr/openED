@@ -13,6 +13,7 @@ import org.opened.app.core.database.dao.ChapterRevisionDao
 import org.opened.app.core.database.dao.DocumentDao
 import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
+import org.opened.app.core.database.dao.MockTestDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
 import org.opened.app.core.database.dao.SyncTombstoneDao
@@ -26,6 +27,8 @@ import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.entity.LearningObjectiveEntity
 import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.database.entity.MistakeRecordEntity
+import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
@@ -46,9 +49,11 @@ import org.opened.app.core.database.entity.SyncTombstoneEntity
         RemedialLessonEntity::class,
         DocumentEntity::class,
         DocumentChunkEntity::class,
-        SyncTombstoneEntity::class
+        SyncTombstoneEntity::class,
+        MockTestEntity::class,
+        MockTestQuestionEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -64,6 +69,7 @@ abstract class OpenEDDatabase : RoomDatabase() {
     abstract fun adaptiveLearningDao(): AdaptiveLearningDao
     abstract fun documentDao(): DocumentDao
     abstract fun syncTombstoneDao(): SyncTombstoneDao
+    abstract fun mockTestDao(): MockTestDao
 
     companion object {
         const val DATABASE_NAME = "opened_database.db"
@@ -246,6 +252,55 @@ abstract class OpenEDDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_flashcards_state` ON `flashcards` (`state`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_learning_objectives_status` ON `learning_objectives` (`status`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_remedial_lessons_isCompleted` ON `remedial_lessons` (`isCompleted`)")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Create mock_tests table
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `mock_tests` (
+                        `id` TEXT NOT NULL,
+                        `pathId` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `examCategory` TEXT NOT NULL,
+                        `targetExamName` TEXT NOT NULL,
+                        `totalQuestions` INTEGER NOT NULL,
+                        `timeLimitMinutes` INTEGER NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `score` INTEGER NOT NULL DEFAULT 0,
+                        `totalCorrect` INTEGER NOT NULL DEFAULT 0,
+                        `totalAnswered` INTEGER NOT NULL DEFAULT 0,
+                        `timeSpentSeconds` INTEGER NOT NULL DEFAULT 0,
+                        `completedAt` INTEGER NOT NULL DEFAULT 0,
+                        `createdAt` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`pathId`) REFERENCES `study_paths`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_tests_pathId` ON `mock_tests` (`pathId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_tests_status` ON `mock_tests` (`status`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_tests_createdAt` ON `mock_tests` (`createdAt`)")
+
+                // 2. Create mock_test_questions table
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `mock_test_questions` (
+                        `id` TEXT NOT NULL,
+                        `testId` TEXT NOT NULL,
+                        `questionIndex` INTEGER NOT NULL,
+                        `topic` TEXT NOT NULL,
+                        `questionText` TEXT NOT NULL,
+                        `optionsJson` TEXT NOT NULL,
+                        `correctOptionIndex` INTEGER NOT NULL,
+                        `explanation` TEXT NOT NULL,
+                        `userSelectedOption` INTEGER NOT NULL DEFAULT -1,
+                        `isFlagged` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`testId`) REFERENCES `mock_tests`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )"""
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId` ON `mock_test_questions` (`testId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId_questionIndex` ON `mock_test_questions` (`testId`, `questionIndex`)")
             }
         }
     }

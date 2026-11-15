@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
@@ -88,6 +89,7 @@ fun HomeScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToFlashcards: () -> Unit = {},
     onNavigateToGraph: () -> Unit = {},
+    onNavigateToMockTests: (String) -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -327,6 +329,9 @@ fun HomeScreen(
                         },
                         onDeleteCourse = { pathId ->
                             viewModel.deleteStudyPath(pathId)
+                        },
+                        onMockTestsClick = { pathId ->
+                            onNavigateToMockTests(pathId)
                         }
                     )
                 }
@@ -345,7 +350,8 @@ fun HomeScreen(
 private fun CourseLibraryList(
     studyPaths: List<StudyPathWithModules>,
     onCourseClick: (StudyPathWithModules) -> Unit,
-    onDeleteCourse: (String) -> Unit
+    onDeleteCourse: (String) -> Unit,
+    onMockTestsClick: (String) -> Unit = {}
 ) {
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -366,7 +372,8 @@ private fun CourseLibraryList(
             StudyPathCard(
                 pathWithModules = pathWithModules,
                 onClick = { onCourseClick(pathWithModules) },
-                onDelete = { onDeleteCourse(pathWithModules.studyPath.id) }
+                onDelete = { onDeleteCourse(pathWithModules.studyPath.id) },
+                onMockTestsClick = { onMockTestsClick(pathWithModules.studyPath.id) }
             )
         }
     }
@@ -376,7 +383,8 @@ private fun CourseLibraryList(
 private fun StudyPathCard(
     pathWithModules: StudyPathWithModules,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onMockTestsClick: () -> Unit = {}
 ) {
     val path = pathWithModules.studyPath
     var showMenu by remember { mutableStateOf(false) }
@@ -462,6 +470,16 @@ private fun StudyPathCard(
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
+                            text = { Text("Exam Prep & Mock Tests") },
+                            leadingIcon = {
+                                Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            onClick = {
+                                showMenu = false
+                                onMockTestsClick()
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Delete Course") },
                             leadingIcon = {
                                 Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -527,6 +545,32 @@ private fun StudyPathCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.clickable { onMockTestsClick() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Assignment,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Exam Prep",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
                 Text(
                     text = "Updated $formattedDate",
                     style = MaterialTheme.typography.labelSmall,

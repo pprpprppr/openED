@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
@@ -95,6 +96,7 @@ fun CourseWorkspaceScreen(
     pathId: String,
     initialChapterId: String?,
     onNavigateBack: () -> Unit,
+    onNavigateToMockTests: () -> Unit = {},
     viewModel: CourseWorkspaceViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -135,6 +137,10 @@ fun CourseWorkspaceScreen(
                 },
                 onExpandCourse = {
                     viewModel.expandCourseSyllabus()
+                },
+                onNavigateToMockTests = {
+                    scope.launch { drawerState.close() }
+                    onNavigateToMockTests()
                 }
             )
         }
@@ -212,6 +218,15 @@ fun CourseWorkspaceScreen(
                                 )
                             }
 
+                            // Exam Prep & Mock Tests
+                            IconButton(onClick = onNavigateToMockTests) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Assignment,
+                                    contentDescription = "Exam Prep & Mock Tests",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
                             // MoreVert overflow menu containing History, Socratic Q&A, Refresh
                             Box {
                                 IconButton(onClick = { showOverflowMenu = true }) {
@@ -221,6 +236,16 @@ fun CourseWorkspaceScreen(
                                     expanded = showOverflowMenu,
                                     onDismissRequest = { showOverflowMenu = false }
                                 ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Exam Prep & Mock Tests") },
+                                        leadingIcon = {
+                                            Icon(imageVector = Icons.AutoMirrored.Filled.Assignment, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            showOverflowMenu = false
+                                            onNavigateToMockTests()
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Interactive Lab") },
                                         leadingIcon = {

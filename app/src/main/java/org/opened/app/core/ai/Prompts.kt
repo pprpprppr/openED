@@ -1034,4 +1034,106 @@ REQUIREMENTS FOR THE GENERATED SYSTEM INSTRUCTION:
 6. Do NOT include markdown code fences (```) around the entire output. Do NOT include pleasantries, preambles like "Here is your prompt:", or postambles. Output ONLY the raw system instruction text that can be used directly as a system prompt.
 """.trimIndent()
     }
+
+    fun examMockTestBatchPrompt(
+        courseTitle: String,
+        courseTopic: String,
+        examCategory: String,
+        targetExamName: String,
+        batchTopicsSummary: String,
+        batchNumber: Int,
+        totalBatches: Int,
+        questionCount: Int,
+        startQuestionNumber: Int
+    ): String {
+        val examGuideline = when (examCategory.uppercase()) {
+            "ENTRANCE" -> """
+EXAM STYLE GUIDELINE: ENTRANCE EXAM RIGOR (e.g., JEE Advanced/Mains, NEET, GRE, GATE, MCAT, CAT):
+- Emphasize deep conceptual mastery, derivation logic, multi-step calculation, and common cognitive traps.
+- In STEM/Quantitative questions, format all equations, variables, and formulas using clean standard LaTeX: inline ${'$'}x^2 + y^2 = r^2${'$'} or block $$\\int_0^\\infty e^{-x} dx$$.
+- Include realistic distractors: calculate the common numerical errors (sign flips, missed units, wrong formulas) and use those as options.
+- Avoid trivial recall questions; test the ability to synthesize concepts and apply formulas under time pressure.
+"""
+            "COMPETITIVE" -> """
+EXAM STYLE GUIDELINE: COMPETITIVE CIVIL SERVICES & RECRUITMENT (e.g., UPSC, SSC CGL, Banking/IBPS, State PSC):
+- Include multi-statement evaluation questions:
+  "Consider the following statements:
+   1. [Statement 1]
+   2. [Statement 2]
+   3. [Statement 3]
+   Which of the statements given above is/are correct?
+   (A) 1 only  (B) 2 and 3 only  (C) 1 and 3 only  (D) 1, 2 and 3"
+- Include Assertion-Reason questions ("Assertion (A): ... Reason (R): ... Both A and R are true and R is the correct explanation...").
+- Probe policy implications, constitutional articles, analytical reasoning, and data interpretation.
+"""
+            "CERTIFICATION" -> """
+EXAM STYLE GUIDELINE: INDUSTRY PROFESSIONAL CERTIFICATION (e.g., AWS Solutions Architect, GCP PCA, Azure, CISSP, CompTIA Security+, CKA):
+- Present realistic enterprise production scenarios:
+  "A media streaming company is hosting an application on... Requirement: achieve high availability across multiple availability zones with minimum operational overhead and lowest cost..."
+- Use exact real-world terminology, architectures, CLI tools, IAM policies, and protocols.
+- Distractors must be valid real-world services or patterns that are suboptimal (e.g., too expensive, introduces downtime, or requires custom scripting when an automated service exists).
+"""
+            "UNIVERSITY" -> """
+EXAM STYLE GUIDELINE: UNIVERSITY & COLLEGE EXAMS (Midterms, Finals, AP, IB):
+- Test core theorems, foundational principles, comparative analysis, and edge case problem solving.
+- Ensure rigorous academic vocabulary, accurate nomenclature, and clear scientific/mathematical notation.
+"""
+            else -> """
+EXAM STYLE GUIDELINE: COMPREHENSIVE OBJECTIVE MASTERY:
+- Blend conceptual understanding, scenario analysis, and practical problem solving.
+- Distractors must be plausible alternatives that require sound reasoning to eliminate.
+"""
+        }
+
+        val examNameClause = if (targetExamName.isNotBlank()) {
+            "Targeting the official standard and difficulty of: \"$targetExamName\"."
+        } else {
+            "Targeting standard high-stakes testing benchmarks."
+        }
+
+        return """
+You are a senior exam paper setter and psychometric testing architect creating an authentic, high-yield Mock Exam for openED.
+Course Title: "$courseTitle"
+Course Topic: "$courseTopic"
+Exam Category: $examCategory ($examNameClause)
+
+THIS GENERATION IS BATCH $batchNumber OF $totalBatches.
+In this batch, generate EXACTLY $questionCount multiple-choice questions (numbered Question $startQuestionNumber to ${startQuestionNumber + questionCount - 1}).
+
+SYLLABUS / TOPICS ASSIGNED TO THIS BATCH:
+$batchTopicsSummary
+
+$examGuideline
+
+CRITICAL PEDAGOGICAL REQUIREMENTS:
+1. Cover the topics listed above thoroughly without repeating previous questions.
+2. Every question must be realistic, rigorous, and representative of what appears in real high-stakes exams.
+3. Each question must have EXACTLY 4 options (indices 0, 1, 2, 3).
+4. For all math formulas, chemical reactions, or code snippets, use appropriate LaTeX math (${'$'}...${'$'} or $${'$'}...$${'$'}) or Markdown code blocks.
+5. In the "explanation", provide a comprehensive pedagogical breakdown:
+   - Clearly state why the correct option is right with the step-by-step logic, formula, or scenario analysis.
+   - Specifically explain why the remaining 3 distractors are incorrect or suboptimal.
+6. The "correctIndex" MUST be an integer between 0 and 3 corresponding to the correct option in "options".
+
+RESPOND ONLY WITH A VALID JSON OBJECT MATCHING THIS EXACT SCHEMA:
+{
+  "questions": [
+    {
+      "topic": "Specific Topic Name",
+      "question": "Question text with clear scenario or premise...",
+      "options": [
+        "First option text",
+        "Second option text",
+        "Third option text",
+        "Fourth option text"
+      ],
+      "correctIndex": 0,
+      "explanation": "Detailed step-by-step reasoning explaining why the correct choice is right and dissecting each incorrect alternative."
+    }
+  ]
+}
+
+Do not include any intro, outro, or markdown code fence backticks around the json. Return pure, valid JSON only.
+""".trimIndent()
+    }
 }

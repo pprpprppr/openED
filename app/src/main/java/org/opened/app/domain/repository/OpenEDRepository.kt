@@ -10,6 +10,8 @@ import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.entity.LearningObjectiveEntity
 import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.database.entity.MistakeRecordEntity
+import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
@@ -17,6 +19,7 @@ import org.opened.app.core.database.entity.SyncTombstoneEntity
 import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.database.model.ChapterWithDetails
+import org.opened.app.core.database.model.MockTestWithQuestions
 import org.opened.app.core.database.model.SearchResultItem
 import org.opened.app.core.database.model.StudyPathWithModules
 import org.opened.app.core.drive.BackupBundle
@@ -94,6 +97,17 @@ interface OpenEDRepository {
 
     // --- Knowledge Graph ---
     suspend fun getAllChapterLinkNodes(): List<ChapterLinkNode>
+
+    // --- Exam Prep & Mock Tests ---
+    fun getMockTestsForPathFlow(pathId: String): Flow<List<MockTestEntity>>
+    suspend fun getMockTestById(id: String): MockTestEntity?
+    suspend fun getMockTestWithQuestions(id: String): MockTestWithQuestions?
+    fun getMockTestWithQuestionsFlow(id: String): Flow<MockTestWithQuestions?>
+    suspend fun saveMockTestWithQuestions(test: MockTestEntity, questions: List<MockTestQuestionEntity>)
+    suspend fun updateMockTest(test: MockTestEntity)
+    suspend fun answerMockTestQuestion(questionId: String, selectedOptionIndex: Int)
+    suspend fun toggleQuestionFlag(questionId: String, isFlagged: Boolean)
+    suspend fun deleteMockTest(id: String)
 
     // --- Backup/Restore ---
     suspend fun exportDatabase(): BackupBundle

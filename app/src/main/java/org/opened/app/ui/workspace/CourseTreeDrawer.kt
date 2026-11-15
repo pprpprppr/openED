@@ -19,12 +19,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,7 +60,8 @@ fun CourseTreeDrawer(
     onChapterSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     isExpandingCourse: Boolean = false,
-    onExpandCourse: () -> Unit = {}
+    onExpandCourse: () -> Unit = {},
+    onNavigateToMockTests: () -> Unit = {}
 ) {
     if (pathWithModules == null) return
 
@@ -167,6 +170,24 @@ fun CourseTreeDrawer(
 
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onNavigateToMockTests,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Assignment,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Exam Prep & Mock Tests",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = onExpandCourse,
                         enabled = !isExpandingCourse,

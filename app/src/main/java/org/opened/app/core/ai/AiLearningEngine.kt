@@ -11,7 +11,11 @@ import kotlinx.serialization.json.Json
 import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.ChapterRevisionEntity
+import org.opened.app.core.database.entity.ExamCategory
 import org.opened.app.core.database.entity.FlashcardEntity
+import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.MockTestQuestionEntity
+import org.opened.app.core.database.entity.MockTestStatus
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.StudyPathEntity
 import org.opened.app.core.database.model.ChapterStatus
@@ -664,6 +668,158 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 .removeSurrounding("```markdown", "```")
                 .removeSurrounding("```", "```")
                 .trim()
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Exam Prep & Mock Test Generator
+    // -------------------------------------------------------------------------
+
+    suspend fun generateMockTestBatch(
+        courseTitle: String,
+        courseTopic: String,
+        examCategory: ExamCategory,
+        targetExamName: String,
+        batchTopicsSummary: String,
+        batchNumber: Int,
+        totalBatches: Int,
+        questionCount: Int,
+        startQuestionNumber: Int
+    ): Result<List<MockTestQuestionItem>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val prefs = preferencesRepository.userPreferencesFlow.first()
+            val prompt = Prompts.examMockTestBatchPrompt(
+                courseTitle = courseTitle,
+                courseTopic = courseTopic,
+                examCategory = examCategory.name,
+                targetExamName = targetExamName,
+                batchTopicsSummary = batchTopicsSummary,
+                batchNumber = batchNumber,
+                totalBatches = totalBatches,
+                questionCount = questionCount,
+                startQuestionNumber = startQuestionNumber
+            )
+            val raw = multiAiClient.generateContent(
+                systemInstruction = prefs.customSystemInstructions,
+                prompt = prompt,
+                isJson = true,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
+            )
+            val cleaned = cleanJsonOutput(raw)
+            val response = json.decodeFromString(MockTestBatchResponse.serializer(), cleaned)
+            response.questions
+        }
+    }
+
+    suspend fun generateFullMockTest(
+        pathId: String,
+        title: String,
+        examCategory: ExamCategory,
+        targetExamName: String,
+        totalQuestions: Int,
+        timeLimitMinutes: Int,
+        onProgress: suspend (currentBatch: Int, totalBatches: Int, questionsGenerated: Int) -> Unit = { _, _, _ -> }
+    ): Result<MockTestEntity> = withContext(Dispatchers.IO) {
+        runCatching {
+            val pathWithModules = requireNotNull(repository.getStudyPathWithModules(pathId)) {
+                "Course not found for pathId: $pathId"
+            }
+            val course = pathWithModules.studyPath
+            val modulesWithChapters = pathWithModules.modules
+
+            // Collect all topics/chapters for syllabus distribution
+            val topicList = mutableListOf<String>()
+            for (moduleWithChapters in modulesWithChapters) {
+                val mod = moduleWithChapters.module
+                val chapTitles = moduleWithChapters.chapters.joinToString(", ") { it.title }
+                topicList.add("Module: ${mod.title} (Chapters: $chapTitles)")
+            }
+            if (topicList.isEmpty()) {
+                topicList.add("Course Overview: ${course.title} - ${course.topic}")
+            }
+
+            // Calculate batches: batch size 10 questions (or smaller if totalQuestions <= 10)
+            val batchSize = if (totalQuestions <= 10) totalQuestions else 10
+            val totalBatches = ((totalQuestions + batchSize - 1) / batchSize).coerceAtLeast(1)
+
+            val allQuestions = mutableListOf<MockTestQuestionEntity>()
+            val testId = UUID.randomUUID().toString()
+
+            var remainingQuestions = totalQuestions
+            var currentStartIndex = 1
+
+            for (batchIdx in 0 until totalBatches) {
+                val currentBatchCount = if (remainingQuestions >= batchSize) batchSize else remainingQuestions
+                if (currentBatchCount <= 0) break
+
+                // Determine topics slice for this batch
+                val startTopicIdx = (batchIdx * topicList.size) / totalBatches
+                val endTopicIdx = (((batchIdx + 1) * topicList.size) / totalBatches).coerceAtLeast(startTopicIdx + 1).coerceAtMost(topicList.size)
+                val batchTopics = topicList.subList(startTopicIdx, endTopicIdx).joinToString("\n- ", prefix = "- ")
+
+                onProgress(batchIdx + 1, totalBatches, allQuestions.size)
+
+                val batchResult = generateMockTestBatch(
+                    courseTitle = course.title,
+                    courseTopic = course.topic,
+                    examCategory = examCategory,
+                    targetExamName = targetExamName,
+                    batchTopicsSummary = batchTopics,
+                    batchNumber = batchIdx + 1,
+                    totalBatches = totalBatches,
+                    questionCount = currentBatchCount,
+                    startQuestionNumber = currentStartIndex
+                ).getOrThrow()
+
+                for (item in batchResult) {
+                    val qEntity = MockTestQuestionEntity(
+                        id = UUID.randomUUID().toString(),
+                        testId = testId,
+                        questionIndex = allQuestions.size,
+                        topic = item.topic.ifBlank { "General ${course.topic}" },
+                        questionText = item.question,
+                        optionsJson = MockTestQuestionEntity.createOptionsJson(item.options),
+                        correctOptionIndex = item.correctIndex.coerceIn(0, (item.options.size - 1).coerceAtLeast(0)),
+                        explanation = item.explanation,
+                        userSelectedOption = -1,
+                        isFlagged = false
+                    )
+                    allQuestions.add(qEntity)
+                }
+
+                currentStartIndex += currentBatchCount
+                remainingQuestions -= currentBatchCount
+            }
+
+            val finalTimeLimit = if (timeLimitMinutes > 0) {
+                timeLimitMinutes
+            } else {
+                (allQuestions.size * examCategory.defaultTimePerQuestionMinutes).toInt().coerceAtLeast(10)
+            }
+
+            val finalTitle = title.ifBlank {
+                if (targetExamName.isNotBlank()) "$targetExamName Mock Test" else "${examCategory.displayName} Mock Test"
+            }
+
+            val finalTestEntity = MockTestEntity(
+                id = testId,
+                pathId = pathId,
+                title = finalTitle,
+                examCategory = examCategory,
+                targetExamName = targetExamName,
+                totalQuestions = allQuestions.size,
+                timeLimitMinutes = finalTimeLimit,
+                status = MockTestStatus.NOT_STARTED,
+                score = 0,
+                totalCorrect = 0,
+                totalAnswered = 0,
+                timeSpentSeconds = 0,
+                completedAt = 0L,
+                createdAt = System.currentTimeMillis()
+            )
+
+            repository.saveMockTestWithQuestions(finalTestEntity, allQuestions)
+            finalTestEntity
         }
     }
 }

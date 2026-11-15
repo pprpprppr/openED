@@ -13,6 +13,7 @@ import org.opened.app.core.database.dao.ChapterRevisionDao
 import org.opened.app.core.database.dao.DocumentDao
 import org.opened.app.core.database.dao.FlashcardDao
 import org.opened.app.core.database.dao.MasteryQuizDao
+import org.opened.app.core.database.dao.MockTestDao
 import org.opened.app.core.database.dao.ModuleDao
 import org.opened.app.core.database.dao.StudyPathDao
 import org.opened.app.core.database.dao.SyncTombstoneDao
@@ -26,6 +27,8 @@ import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.entity.LearningObjectiveEntity
 import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.database.entity.MistakeRecordEntity
+import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
@@ -33,6 +36,7 @@ import org.opened.app.core.database.entity.SyncTombstoneEntity
 import org.opened.app.core.database.model.ChapterLinkNode
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.database.model.ChapterWithDetails
+import org.opened.app.core.database.model.MockTestWithQuestions
 import org.opened.app.core.database.model.SearchResultItem
 import org.opened.app.core.database.model.SearchResultType
 import org.opened.app.core.database.model.StudyPathWithModules
@@ -54,7 +58,8 @@ class OpenEDRepositoryImpl @Inject constructor(
     private val masteryQuizDao: MasteryQuizDao,
     private val adaptiveLearningDao: AdaptiveLearningDao,
     private val documentDao: DocumentDao,
-    private val syncTombstoneDao: SyncTombstoneDao
+    private val syncTombstoneDao: SyncTombstoneDao,
+    private val mockTestDao: MockTestDao
 ) : OpenEDRepository {
 
     override fun getAllStudyPathsFlow(): Flow<List<StudyPathWithModules>> {
@@ -435,7 +440,9 @@ class OpenEDRepositoryImpl @Inject constructor(
                 remedials = adaptiveLearningDao.getAllRemedials(),
                 documents = documentDao.getAllDocumentsSync(),
                 documentChunks = documentDao.getAllChunksSync(),
-                tombstones = syncTombstoneDao.getAllTombstones()
+                tombstones = syncTombstoneDao.getAllTombstones(),
+                mockTests = mockTestDao.getAllMockTests(),
+                mockTestQuestions = mockTestDao.getAllMockTestQuestions()
             )
         }
     }
@@ -473,6 +480,12 @@ class OpenEDRepositoryImpl @Inject constructor(
                     if (bundle.documents.isNotEmpty()) bundle.documents.forEach { documentDao.insertDocument(it) }
                     if (bundle.documentChunks.isNotEmpty()) documentDao.insertChunks(bundle.documentChunks)
                     if (bundle.tombstones.isNotEmpty()) syncTombstoneDao.insertTombstones(bundle.tombstones)
+                    if (bundle.mockTests.isNotEmpty()) {
+                        bundle.mockTests.forEach { mockTestDao.insertMockTest(it) }
+                    }
+                    if (bundle.mockTestQuestions.isNotEmpty()) {
+                        mockTestDao.insertQuestions(bundle.mockTestQuestions)
+                    }
                 } else {
                     // Record-level merge with conflict resolution & tombstone preservation
                     // 1. Merge incoming tombstones
@@ -557,6 +570,14 @@ class OpenEDRepositoryImpl @Inject constructor(
                     }
                     if (bundle.documentChunks.isNotEmpty()) {
                         documentDao.insertChunks(bundle.documentChunks)
+                    }
+
+                    // 8. Merge mock tests & questions
+                    if (bundle.mockTests.isNotEmpty()) {
+                        bundle.mockTests.forEach { mockTestDao.insertMockTest(it) }
+                    }
+                    if (bundle.mockTestQuestions.isNotEmpty()) {
+                        mockTestDao.insertQuestions(bundle.mockTestQuestions)
                     }
                 }
             }
@@ -703,6 +724,71 @@ class OpenEDRepositoryImpl @Inject constructor(
                     deletedAt = System.currentTimeMillis()
                 )
             )
+        }
+    }
+
+    // --- Exam Prep & Mock Tests ---
+    override fun getMockTestsForPathFlow(pathId: String): Flow<List<MockTestEntity>> {
+        return mockTestDao.getMockTestsForPathFlow(pathId)
+    }
+
+    override suspend fun getMockTestById(id: String): MockTestEntity? {
+        return withContext(Dispatchers.IO) {
+            mockTestDao.getMockTestById(id)
+        }
+    }
+
+    override suspend fun getMockTestWithQuestions(id: String): MockTestWithQuestions? {
+        return withContext(Dispatchers.IO) {
+            mockTestDao.getMockTestWithQuestions(id)
+        }
+    }
+
+    override fun getMockTestWithQuestionsFlow(id: String): Flow<MockTestWithQuestions?> {
+        return mockTestDao.getMockTestWithQuestionsFlow(id)
+    }
+
+    override suspend fun saveMockTestWithQuestions(test: MockTestEntity, questions: List<MockTestQuestionEntity>) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                mockTestDao.insertMockTest(test)
+                if (questions.isNotEmpty()) {
+                    mockTestDao.insertQuestions(questions)
+                }
+            }
+        }
+    }
+
+    override suspend fun updateMockTest(test: MockTestEntity) {
+        withContext(Dispatchers.IO) {
+            mockTestDao.updateMockTest(test)
+        }
+    }
+
+    override suspend fun answerMockTestQuestion(questionId: String, selectedOptionIndex: Int) {
+        withContext(Dispatchers.IO) {
+            mockTestDao.updateQuestionAnswer(questionId, selectedOptionIndex)
+        }
+    }
+
+    override suspend fun toggleQuestionFlag(questionId: String, isFlagged: Boolean) {
+        withContext(Dispatchers.IO) {
+            mockTestDao.updateQuestionFlag(questionId, isFlagged)
+        }
+    }
+
+    override suspend fun deleteMockTest(id: String) {
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                mockTestDao.deleteMockTest(id)
+                syncTombstoneDao.insertTombstone(
+                    SyncTombstoneEntity(
+                        entityType = "MOCK_TEST",
+                        entityId = id,
+                        deletedAt = System.currentTimeMillis()
+                    )
+                )
+            }
         }
     }
 }

@@ -10,6 +10,9 @@ import androidx.navigation.navArgument
 import org.opened.app.ui.flashcards.FlashcardReviewScreen
 import org.opened.app.ui.graph.KnowledgeGraphScreen
 import org.opened.app.ui.home.HomeScreen
+import org.opened.app.ui.mocktest.MockTestListScreen
+import org.opened.app.ui.mocktest.MockTestResultScreen
+import org.opened.app.ui.mocktest.TakeMockTestScreen
 import org.opened.app.ui.settings.SettingsScreen
 import org.opened.app.ui.wizard.DiagnosticWizardScreen
 import org.opened.app.ui.workspace.CourseWorkspaceScreen
@@ -32,7 +35,10 @@ fun OpenEDNavHost(
                 },
                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
                 onNavigateToFlashcards = { navController.navigate(Screen.FlashcardReview.route) },
-                onNavigateToGraph = { navController.navigate(Screen.KnowledgeGraph.route) }
+                onNavigateToGraph = { navController.navigate(Screen.KnowledgeGraph.route) },
+                onNavigateToMockTests = { pathId ->
+                    navController.navigate(Screen.MockTestList.createRoute(pathId))
+                }
             )
         }
 
@@ -63,7 +69,59 @@ fun OpenEDNavHost(
             CourseWorkspaceScreen(
                 pathId = pathId,
                 initialChapterId = chapterId,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToMockTests = {
+                    navController.navigate(Screen.MockTestList.createRoute(pathId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.MockTestList.route,
+            arguments = listOf(navArgument("pathId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val pathId = backStackEntry.arguments?.getString("pathId").orEmpty()
+            MockTestListScreen(
+                pathId = pathId,
+                onNavigateBack = { navController.popBackStack() },
+                onTakeTest = { testId ->
+                    navController.navigate(Screen.TakeMockTest.createRoute(testId))
+                },
+                onViewResult = { testId ->
+                    navController.navigate(Screen.MockTestResult.createRoute(testId))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.TakeMockTest.route,
+            arguments = listOf(navArgument("testId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val testId = backStackEntry.arguments?.getString("testId").orEmpty()
+            TakeMockTestScreen(
+                testId = testId,
+                onNavigateBack = { navController.popBackStack() },
+                onTestSubmitted = { completedTestId ->
+                    navController.navigate(Screen.MockTestResult.createRoute(completedTestId)) {
+                        popUpTo(Screen.TakeMockTest.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Screen.MockTestResult.route,
+            arguments = listOf(navArgument("testId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val testId = backStackEntry.arguments?.getString("testId").orEmpty()
+            MockTestResultScreen(
+                testId = testId,
+                onNavigateBack = { navController.popBackStack() },
+                onRetakeTest = { retakeTestId ->
+                    navController.navigate(Screen.TakeMockTest.createRoute(retakeTestId)) {
+                        popUpTo(Screen.MockTestResult.route) { inclusive = true }
+                    }
+                }
             )
         }
 

@@ -39,3 +39,19 @@ data class FeynmanEvaluationResponse(
     val missingConcepts: List<String> = emptyList(),
     val refinedExplanation: String = ""
 )
+
+// ---- Mock Test Batch Generation ----
+
+@Serializable
+data class MockTestBatchResponse(
+    val questions: List<MockTestQuestionItem> = emptyList()
+)
+
+@Serializable
+data class MockTestQuestionItem(
+    val topic: String = "",
+    val question: String = "",
+    val options: List<String> = emptyList(),
+    val correctIndex: Int = 0,
+    val explanation: String = ""
+)

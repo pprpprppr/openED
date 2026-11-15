@@ -11,6 +11,8 @@ import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.core.database.entity.LearningObjectiveEntity
 import org.opened.app.core.database.entity.MasteryQuizEntity
 import org.opened.app.core.database.entity.MistakeRecordEntity
+import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.core.database.entity.ModuleEntity
 import org.opened.app.core.database.entity.RemedialLessonEntity
 import org.opened.app.core.database.entity.StudyPathEntity
@@ -18,9 +20,9 @@ import org.opened.app.core.database.entity.SyncTombstoneEntity
 
 @Serializable
 data class BackupBundle(
-    val version: Int = 2,
+    val version: Int = 3,
     val exportedAt: Long = System.currentTimeMillis(),
-    val appVersion: String = "1.0.0",
+    val appVersion: String = "1.5.0",
     val studyPaths: List<StudyPathEntity> = emptyList(),
     val modules: List<ModuleEntity> = emptyList(),
     val chapters: List<ChapterEntity> = emptyList(),
@@ -37,5 +39,8 @@ data class BackupBundle(
     val documents: List<DocumentEntity> = emptyList(),
     val documentChunks: List<DocumentChunkEntity> = emptyList(),
     // Phase 9: Sync Architecture
-    val tombstones: List<SyncTombstoneEntity> = emptyList()
+    val tombstones: List<SyncTombstoneEntity> = emptyList(),
+    // Exam Prep & Mock Tests
+    val mockTests: List<MockTestEntity> = emptyList(),
+    val mockTestQuestions: List<MockTestQuestionEntity> = emptyList()
 )

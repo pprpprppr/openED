@@ -1,0 +1,66 @@
+package org.opened.app.core.database.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.MockTestQuestionEntity
+import org.opened.app.core.database.model.MockTestWithQuestions
+
+@Dao
+interface MockTestDao {
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMockTest(test: MockTestEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQuestions(questions: List<MockTestQuestionEntity>)
+
+    @Update
+    suspend fun updateMockTest(test: MockTestEntity)
+
+    @Update
+    suspend fun updateQuestion(question: MockTestQuestionEntity)
+
+    @Query("SELECT * FROM mock_tests WHERE pathId = :pathId ORDER BY createdAt DESC")
+    fun getMockTestsForPathFlow(pathId: String): Flow<List<MockTestEntity>>
+
+    @Query("SELECT * FROM mock_tests WHERE pathId = :pathId ORDER BY createdAt DESC")
+    suspend fun getMockTestsForPath(pathId: String): List<MockTestEntity>
+
+    @Query("SELECT * FROM mock_tests WHERE id = :id LIMIT 1")
+    suspend fun getMockTestById(id: String): MockTestEntity?
+
+    @Transaction
+    @Query("SELECT * FROM mock_tests WHERE id = :id LIMIT 1")
+    suspend fun getMockTestWithQuestions(id: String): MockTestWithQuestions?
+
+    @Transaction
+    @Query("SELECT * FROM mock_tests WHERE id = :id LIMIT 1")
+    fun getMockTestWithQuestionsFlow(id: String): Flow<MockTestWithQuestions?>
+
+    @Query("SELECT * FROM mock_test_questions WHERE testId = :testId ORDER BY questionIndex ASC")
+    suspend fun getQuestionsForTest(testId: String): List<MockTestQuestionEntity>
+
+    @Query("UPDATE mock_test_questions SET userSelectedOption = :userSelectedOption WHERE id = :questionId")
+    suspend fun updateQuestionAnswer(questionId: String, userSelectedOption: Int)
+
+    @Query("UPDATE mock_test_questions SET isFlagged = :isFlagged WHERE id = :questionId")
+    suspend fun updateQuestionFlag(questionId: String, isFlagged: Boolean)
+
+    @Query("DELETE FROM mock_tests WHERE id = :id")
+    suspend fun deleteMockTest(id: String)
+
+    @Query("DELETE FROM mock_tests WHERE pathId = :pathId")
+    suspend fun deleteMockTestsForPath(pathId: String)
+
+    @Query("SELECT * FROM mock_tests")
+    suspend fun getAllMockTests(): List<MockTestEntity>
+
+    @Query("SELECT * FROM mock_test_questions")
+    suspend fun getAllMockTestQuestions(): List<MockTestQuestionEntity>
+}

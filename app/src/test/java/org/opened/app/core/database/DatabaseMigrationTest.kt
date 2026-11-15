@@ -20,6 +20,19 @@ class DatabaseMigrationTest {
     }
 
     @Test
+    fun testMigration4To5ExecutesExpectedSql() {
+        val statements = mutableListOf<String>()
+        val db = createRecordingDatabase(statements)
+        OpenEDDatabase.MIGRATION_4_5.migrate(db)
+
+        val fullScript = statements.joinToString("\n")
+        assertTrue("Expected mock_tests table creation", fullScript.contains("CREATE TABLE IF NOT EXISTS `mock_tests`"))
+        assertTrue("Expected mock_test_questions table creation", fullScript.contains("CREATE TABLE IF NOT EXISTS `mock_test_questions`"))
+        assertTrue("Expected index_mock_tests_pathId", fullScript.contains("CREATE INDEX IF NOT EXISTS `index_mock_tests_pathId`"))
+        assertTrue("Expected index_mock_test_questions_testId", fullScript.contains("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId`"))
+    }
+
+    @Test
     fun testMigration3To4ExecutesExpectedSql() {
         val statements = mutableListOf<String>()
         val db = createRecordingDatabase(statements)
