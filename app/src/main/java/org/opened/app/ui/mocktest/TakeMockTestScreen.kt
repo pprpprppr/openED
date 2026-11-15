@@ -452,7 +452,8 @@ fun TakeMockTestScreen(
                                     RichMarkdownRenderer(
                                         markdown = optionText,
                                         onChapterClick = {},
-                                        selectable = false
+                                        selectable = false,
+                                        isClickableCard = true
                                     )
                                 }
                             }

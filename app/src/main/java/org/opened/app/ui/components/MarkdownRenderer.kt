@@ -89,7 +89,8 @@ fun RichMarkdownRenderer(
     markdown: String,
     onChapterClick: (String) -> Unit,
     modifier: Modifier = Modifier,
-    selectable: Boolean = true
+    selectable: Boolean = true,
+    isClickableCard: Boolean = false
 ) {
     @Suppress("ProduceStateDoesNotAssignValue")
     val nodes by androidx.compose.runtime.produceState<List<MarkdownNode>>(
@@ -122,43 +123,61 @@ fun RichMarkdownRenderer(
                 when (node) {
                     is MarkdownNode.Heading -> {
                         Spacer(modifier = Modifier.height(if (index == 0) 8.dp else 20.dp))
-                        when (node.level) {
-                            1 -> InteractiveMarkdownText(
+                        if (hasMathContent(node.text)) {
+                            val headFontSize = when (node.level) {
+                                1 -> 24.sp
+                                2 -> 20.sp
+                                3 -> 18.sp
+                                else -> 16.sp
+                            }
+                            KaTeXRichTextView(
                                 text = node.text,
                                 onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.headlineLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
+                                isClickableCard = isClickableCard,
+                                fontSize = headFontSize,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                selectable = selectable && !isClickableCard,
                                 modifier = Modifier.padding(bottom = 6.dp)
                             )
-                            2 -> InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                            3 -> InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                            else -> InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
+                        } else {
+                            when (node.level) {
+                                1 -> InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                2 -> InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                                3 -> InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                else -> InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                            }
                         }
                     }
 
@@ -216,11 +235,21 @@ fun RichMarkdownRenderer(
                             type = node.type,
                             customTitle = node.title,
                             content = {
-                                InteractiveMarkdownText(
-                                    text = node.content,
-                                    onChapterClick = onChapterClick,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                if (hasMathContent(node.content)) {
+                                    KaTeXRichTextView(
+                                        text = node.content,
+                                        onChapterClick = onChapterClick,
+                                        isClickableCard = isClickableCard,
+                                        fontSize = 15.sp,
+                                        selectable = selectable && !isClickableCard
+                                    )
+                                } else {
+                                    InteractiveMarkdownText(
+                                        text = node.content,
+                                        onChapterClick = onChapterClick,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
                             }
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -236,13 +265,25 @@ fun RichMarkdownRenderer(
                                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            if (hasMathContent(node.text)) {
+                                KaTeXRichTextView(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    isClickableCard = isClickableCard,
+                                    fontSize = 15.sp,
+                                    selectable = selectable && !isClickableCard,
+                                    modifier = Modifier.weight(1f)
                                 )
-                            )
+                            } else {
+                                InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -272,12 +313,23 @@ fun RichMarkdownRenderer(
                                         .background(MaterialTheme.colorScheme.primary)
                                 )
                             }
-                            InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
-                            )
+                            if (hasMathContent(node.text)) {
+                                KaTeXRichTextView(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    isClickableCard = isClickableCard,
+                                    fontSize = 16.sp,
+                                    selectable = selectable && !isClickableCard,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
 
@@ -313,27 +365,49 @@ fun RichMarkdownRenderer(
                                 }
                             }
                             Spacer(modifier = Modifier.width(10.dp))
-                            InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    color = if (node.checked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
-                                    textDecoration = if (node.checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else androidx.compose.ui.text.style.TextDecoration.None
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
+                            if (hasMathContent(node.text)) {
+                                KaTeXRichTextView(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    isClickableCard = isClickableCard,
+                                    fontSize = 16.sp,
+                                    selectable = selectable && !isClickableCard,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            } else {
+                                InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        color = if (node.checked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
+                                        textDecoration = if (node.checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else androidx.compose.ui.text.style.TextDecoration.None
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(3.dp))
                     }
 
                     is MarkdownNode.Paragraph -> {
                         if (node.text.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            InteractiveMarkdownText(
-                                text = node.text,
-                                onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (hasMathContent(node.text)) {
+                                KaTeXRichTextView(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    isClickableCard = isClickableCard,
+                                    fontSize = 16.sp,
+                                    selectable = selectable && !isClickableCard,
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                )
+                            } else {
+                                InteractiveMarkdownText(
+                                    text = node.text,
+                                    onChapterClick = onChapterClick,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                         }
                     }
@@ -428,11 +502,19 @@ fun TableBlockView(
                                     .width(150.dp)
                                     .padding(horizontal = 6.dp)
                             ) {
-                                InteractiveMarkdownText(
-                                    text = cellText,
-                                    onChapterClick = onChapterClick,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                if (hasMathContent(cellText)) {
+                                    KaTeXRichTextView(
+                                        text = cellText,
+                                        onChapterClick = onChapterClick,
+                                        fontSize = 14.sp
+                                    )
+                                } else {
+                                    InteractiveMarkdownText(
+                                        text = cellText,
+                                        onChapterClick = onChapterClick,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
                             }
                         }
                     }

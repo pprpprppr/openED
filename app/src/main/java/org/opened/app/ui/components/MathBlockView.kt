@@ -209,11 +209,16 @@ fun MathBlockView(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
                         .padding(vertical = 8.dp, horizontal = 4.dp),
-                    contentAlignment = Alignment.CenterStart
+                    contentAlignment = Alignment.Center
                 ) {
-                    Math2DRenderer(node = mathAst, baseFontSize = 18.sp)
+                    KaTeXMathView(
+                        latex = mathExpression,
+                        isDisplayMode = true,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }

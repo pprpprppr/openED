@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.opened.app.core.database.entity.FlashcardEntity
 import org.opened.app.ui.components.InteractiveMarkdownText
+import org.opened.app.ui.components.RichMarkdownRenderer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,14 +239,11 @@ fun FlashcardDeckBottomSheet(
                                         .fillMaxWidth(),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = currentCard.front,
-                                        style = MaterialTheme.typography.titleMedium.copy(
-                                            fontSize = 17.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        ),
-                                        textAlign = TextAlign.Center,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                    RichMarkdownRenderer(
+                                        markdown = currentCard.front,
+                                        onChapterClick = onChapterClick,
+                                        selectable = false,
+                                        isClickableCard = true
                                     )
                                 }
                             }
@@ -281,14 +279,11 @@ fun FlashcardDeckBottomSheet(
                                         .fillMaxWidth(),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    InteractiveMarkdownText(
-                                        text = currentCard.back,
+                                    RichMarkdownRenderer(
+                                        markdown = currentCard.back,
                                         onChapterClick = onChapterClick,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Normal,
-                                            lineHeight = 22.sp
-                                        )
+                                        selectable = false,
+                                        isClickableCard = true
                                     )
                                 }
                             }
