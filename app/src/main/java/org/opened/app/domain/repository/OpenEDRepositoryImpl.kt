@@ -76,6 +76,12 @@ class OpenEDRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun saveStudyPath(path: StudyPathEntity) {
+        withContext(Dispatchers.IO) {
+            studyPathDao.insert(path)
+        }
+    }
+
     override suspend fun saveStudyPathWithModules(
         path: StudyPathEntity,
         modulesWithChapters: List<Pair<ModuleEntity, List<ChapterEntity>>>

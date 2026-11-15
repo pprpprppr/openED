@@ -1044,7 +1044,8 @@ REQUIREMENTS FOR THE GENERATED SYSTEM INSTRUCTION:
         batchNumber: Int,
         totalBatches: Int,
         questionCount: Int,
-        startQuestionNumber: Int
+        startQuestionNumber: Int,
+        customPrompt: String = ""
     ): String {
         val examGuideline = when (examCategory.uppercase()) {
             "ENTRANCE" -> """
@@ -1091,6 +1092,16 @@ EXAM STYLE GUIDELINE: COMPREHENSIVE OBJECTIVE MASTERY:
             "Targeting standard high-stakes testing benchmarks."
         }
 
+        val customInstructionClause = if (customPrompt.isNotBlank()) {
+            """
+ADDITIONAL CUSTOM USER INSTRUCTIONS / FOCUS AREAS:
+$customPrompt
+- Strictly prioritize and incorporate the above user instructions into the formulation of questions and distractors.
+"""
+        } else {
+            ""
+        }
+
         return """
 You are a senior exam paper setter and psychometric testing architect creating an authentic, high-yield Mock Exam for openED.
 Course Title: "$courseTitle"
@@ -1104,6 +1115,7 @@ SYLLABUS / TOPICS ASSIGNED TO THIS BATCH:
 $batchTopicsSummary
 
 $examGuideline
+$customInstructionClause
 
 CRITICAL PEDAGOGICAL REQUIREMENTS:
 1. Cover the topics listed above thoroughly without repeating previous questions.

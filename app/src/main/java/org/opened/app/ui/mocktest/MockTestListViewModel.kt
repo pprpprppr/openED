@@ -12,8 +12,10 @@ import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.database.entity.ExamCategory
 import org.opened.app.core.database.entity.MockTestEntity
+import org.opened.app.core.database.entity.StudyPathEntity
 import org.opened.app.core.database.model.StudyPathWithModules
 import org.opened.app.domain.repository.OpenEDRepository
+import java.util.UUID
 import javax.inject.Inject
 
 data class MockTestListUiState(
@@ -114,12 +116,10 @@ class MockTestListViewModel @Inject constructor(
         questionCount: Int,
         timeLimitMinutes: Int,
         customTitle: String,
-        targetPathId: String? = null
+        targetPathId: String? = null,
+        customCourseName: String = "",
+        customPrompt: String = ""
     ) {
-        val effectivePathId = targetPathId ?: _uiState.value.pathId.ifBlank {
-            _uiState.value.selectedCourseFilter ?: _uiState.value.availableCourses.firstOrNull()?.studyPath?.id
-        } ?: return
-
         _uiState.update {
             it.copy(
                 showCreateDialog = false,
@@ -132,44 +132,103 @@ class MockTestListViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val result = aiLearningEngine.generateFullMockTest(
-                pathId = effectivePathId,
-                title = customTitle.ifBlank { "$targetExamName Practice Mock Test" },
-                examCategory = examCategory,
-                targetExamName = targetExamName,
-                totalQuestions = questionCount,
-                timeLimitMinutes = timeLimitMinutes,
-                onProgress = { currentBatch, totalBatches, questionsGenerated ->
-                    _uiState.update { state ->
-                        state.copy(
-                            currentBatch = currentBatch,
-                            totalBatches = totalBatches,
-                            generationProgressText = "Generating Part $currentBatch of $totalBatches ($questionsGenerated questions ready)..."
-                        )
-                    }
-                }
-            )
+            try {
+                var effectivePathId = targetPathId
 
-            result.fold(
-                onSuccess = {
-                    _uiState.update {
-                        it.copy(
-                            isGenerating = false,
-                            generationProgressText = "",
-                            errorMessage = null
-                        )
+                // Resolve or create custom target course if provided
+                if (effectivePathId.isNullOrBlank() && customCourseName.isNotBlank()) {
+                    val trimmedCourse = customCourseName.trim()
+                    val existing = _uiState.value.availableCourses.find {
+                        it.studyPath.topic.equals(trimmedCourse, ignoreCase = true) ||
+                        it.studyPath.title.equals(trimmedCourse, ignoreCase = true)
                     }
-                },
-                onFailure = { error ->
-                    _uiState.update {
-                        it.copy(
-                            isGenerating = false,
-                            generationProgressText = "",
-                            errorMessage = error.localizedMessage ?: "Failed to generate mock test"
+                    if (existing != null) {
+                        effectivePathId = existing.studyPath.id
+                    } else {
+                        val newId = UUID.randomUUID().toString()
+                        val newPath = StudyPathEntity(
+                            id = newId,
+                            title = trimmedCourse,
+                            topic = trimmedCourse,
+                            userLevel = "EXAM_PREP",
+                            learningGoalsJson = "[]",
+                            createdAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
                         )
+                        repository.saveStudyPath(newPath)
+                        effectivePathId = newId
                     }
                 }
-            )
+
+                if (effectivePathId.isNullOrBlank()) {
+                    effectivePathId = _uiState.value.pathId.ifBlank {
+                        _uiState.value.selectedCourseFilter ?: _uiState.value.availableCourses.firstOrNull()?.studyPath?.id
+                    }
+                }
+
+                if (effectivePathId.isNullOrBlank()) {
+                    _uiState.update {
+                        it.copy(
+                            isGenerating = false,
+                            errorMessage = "Please enter or select a target course for this mock test."
+                        )
+                    }
+                    return@launch
+                }
+
+                val finalTitle = customTitle.ifBlank {
+                    if (targetExamName.isNotBlank()) "$targetExamName Practice Mock Test"
+                    else "${customCourseName.ifBlank { "Course" }} ${examCategory.displayName.split(" ")[0]} Exam"
+                }
+
+                val result = aiLearningEngine.generateFullMockTest(
+                    pathId = effectivePathId,
+                    title = finalTitle,
+                    examCategory = examCategory,
+                    targetExamName = targetExamName,
+                    totalQuestions = questionCount,
+                    timeLimitMinutes = timeLimitMinutes,
+                    customPrompt = customPrompt,
+                    onProgress = { currentBatch, totalBatches, questionsGenerated ->
+                        _uiState.update { state ->
+                            state.copy(
+                                currentBatch = currentBatch,
+                                totalBatches = totalBatches,
+                                generationProgressText = "Generating Part $currentBatch of $totalBatches ($questionsGenerated questions ready)..."
+                            )
+                        }
+                    }
+                )
+
+                result.fold(
+                    onSuccess = {
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                generationProgressText = "",
+                                errorMessage = null
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                generationProgressText = "",
+                                errorMessage = error.localizedMessage ?: "Failed to generate mock test"
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        generationProgressText = "",
+                        errorMessage = e.localizedMessage ?: "Failed to generate mock test"
+                    )
+                }
+            }
         }
     }
 

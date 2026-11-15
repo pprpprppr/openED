@@ -28,6 +28,7 @@ interface OpenEDRepository {
     fun getAllStudyPathsFlow(): Flow<List<StudyPathWithModules>>
     fun getStudyPathWithModulesFlow(pathId: String): Flow<StudyPathWithModules?>
     suspend fun getStudyPathWithModules(pathId: String): StudyPathWithModules?
+    suspend fun saveStudyPath(path: StudyPathEntity)
     suspend fun saveStudyPathWithModules(
         path: StudyPathEntity,
         modulesWithChapters: List<Pair<ModuleEntity, List<ChapterEntity>>>

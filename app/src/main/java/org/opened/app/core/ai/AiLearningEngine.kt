@@ -684,7 +684,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
         batchNumber: Int,
         totalBatches: Int,
         questionCount: Int,
-        startQuestionNumber: Int
+        startQuestionNumber: Int,
+        customPrompt: String = ""
     ): Result<List<MockTestQuestionItem>> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
@@ -697,7 +698,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 batchNumber = batchNumber,
                 totalBatches = totalBatches,
                 questionCount = questionCount,
-                startQuestionNumber = startQuestionNumber
+                startQuestionNumber = startQuestionNumber,
+                customPrompt = customPrompt
             )
             val raw = multiAiClient.generateContent(
                 systemInstruction = prefs.customSystemInstructions,
@@ -718,6 +720,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
         targetExamName: String,
         totalQuestions: Int,
         timeLimitMinutes: Int,
+        customPrompt: String = "",
         onProgress: suspend (currentBatch: Int, totalBatches: Int, questionsGenerated: Int) -> Unit = { _, _, _ -> }
     ): Result<MockTestEntity> = withContext(Dispatchers.IO) {
         runCatching {
@@ -735,7 +738,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 topicList.add("Module: ${mod.title} (Chapters: $chapTitles)")
             }
             if (topicList.isEmpty()) {
-                topicList.add("Course Overview: ${course.title} - ${course.topic}")
+                topicList.add("Core Syllabus & Domain Topics: ${course.title} (${course.topic})")
             }
 
             // Calculate batches: batch size 10 questions (or smaller if totalQuestions <= 10)
@@ -753,9 +756,14 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 if (currentBatchCount <= 0) break
 
                 // Determine topics slice for this batch
-                val startTopicIdx = (batchIdx * topicList.size) / totalBatches
-                val endTopicIdx = (((batchIdx + 1) * topicList.size) / totalBatches).coerceAtLeast(startTopicIdx + 1).coerceAtMost(topicList.size)
-                val batchTopics = topicList.subList(startTopicIdx, endTopicIdx).joinToString("\n- ", prefix = "- ")
+                val batchTopics = if (topicList.size <= 1) {
+                    val baseTopic = topicList.firstOrNull() ?: "${course.title} (${course.topic})"
+                    "- $baseTopic (Comprehensive High-Yield Focus - Part ${batchIdx + 1} of $totalBatches)"
+                } else {
+                    val startTopicIdx = (batchIdx * topicList.size) / totalBatches
+                    val endTopicIdx = (((batchIdx + 1) * topicList.size) / totalBatches).coerceAtLeast(startTopicIdx + 1).coerceAtMost(topicList.size)
+                    topicList.subList(startTopicIdx, endTopicIdx).joinToString("\n- ", prefix = "- ")
+                }
 
                 onProgress(batchIdx + 1, totalBatches, allQuestions.size)
 
@@ -768,7 +776,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                     batchNumber = batchIdx + 1,
                     totalBatches = totalBatches,
                     questionCount = currentBatchCount,
-                    startQuestionNumber = currentStartIndex
+                    startQuestionNumber = currentStartIndex,
+                    customPrompt = customPrompt
                 ).getOrThrow()
 
                 for (item in batchResult) {

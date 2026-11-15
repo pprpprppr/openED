@@ -23,13 +23,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -37,6 +40,7 @@ import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -73,6 +77,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -323,14 +328,16 @@ fun MockTestListScreen(
                     availableCourses = uiState.availableCourses,
                     initialCourseId = uiState.pathId.ifBlank { uiState.selectedCourseFilter },
                     onDismiss = { viewModel.dismissCreateDialog() },
-                    onConfirm = { category, targetExam, count, timeLimit, customTitle, selectedCourseId ->
+                    onConfirm = { category, targetExam, count, timeLimit, customTitle, selectedCourseId, customCourse, customPrompt ->
                         viewModel.createMockTest(
                             examCategory = category,
                             targetExamName = targetExam,
                             questionCount = count,
                             timeLimitMinutes = timeLimit,
                             customTitle = customTitle,
-                            targetPathId = selectedCourseId
+                            targetPathId = selectedCourseId,
+                            customCourseName = customCourse,
+                            customPrompt = customPrompt
                         )
                     }
                 )
@@ -848,17 +855,39 @@ private fun CreateMockTestDialog(
     availableCourses: List<StudyPathWithModules> = emptyList(),
     initialCourseId: String? = null,
     onDismiss: () -> Unit,
-    onConfirm: (ExamCategory, String, Int, Int, String, String?) -> Unit
+    onConfirm: (
+        category: ExamCategory,
+        targetExam: String,
+        questionCount: Int,
+        timeLimit: Int,
+        customTitle: String,
+        selectedCourseId: String?,
+        customCourseName: String,
+        customPrompt: String
+    ) -> Unit
 ) {
+    val initialCourse = remember(initialCourseId, availableCourses) {
+        if (!initialCourseId.isNullOrBlank()) {
+            availableCourses.find { it.studyPath.id == initialCourseId }
+        } else {
+            availableCourses.firstOrNull()
+        }
+    }
+
+    var targetCourseText by remember {
+        mutableStateOf(initialCourse?.studyPath?.topic.orEmpty())
+    }
+    var selectedCourseId by remember {
+        mutableStateOf(initialCourse?.studyPath?.id.orEmpty())
+    }
     var selectedCategory by remember { mutableStateOf(ExamCategory.ENTRANCE) }
     var targetExamName by remember { mutableStateOf("") }
     var customTitle by remember { mutableStateOf("") }
+    var customPrompt by remember { mutableStateOf("") }
     var questionCount by remember { mutableIntStateOf(10) }
+    var isCustomQuestionCount by remember { mutableStateOf(false) }
+    var customQuestionCountInput by remember { mutableStateOf("") }
     var timeLimitMinutes by remember { mutableIntStateOf(20) }
-
-    var selectedCourseId by remember {
-        mutableStateOf(initialCourseId ?: availableCourses.firstOrNull()?.studyPath?.id.orEmpty())
-    }
 
     val quickExamRecommendations = remember(selectedCategory) {
         when (selectedCategory) {
@@ -874,6 +903,8 @@ private fun CreateMockTestDialog(
         questionCount = count
         timeLimitMinutes = (count * selectedCategory.defaultTimePerQuestionMinutes).toInt().coerceAtLeast(10)
     }
+
+    val isFormValid = targetCourseText.isNotBlank() && questionCount > 0
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -897,24 +928,78 @@ private fun CreateMockTestDialog(
                     fontWeight = FontWeight.Bold
                 )
 
-                // Course Selector (if multiple courses available)
-                if (availableCourses.size > 1) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // 1. Target Course / Subject Input
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "TARGET COURSE",
+                            text = "TARGET COURSE / SUBJECT",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
+                        )
+                        if (selectedCourseId.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "Enrolled Course",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = targetCourseText,
+                        onValueChange = { input ->
+                            targetCourseText = input
+                            val matched = availableCourses.find { it.studyPath.topic.equals(input.trim(), ignoreCase = true) }
+                            selectedCourseId = matched?.studyPath?.id.orEmpty()
+                        },
+                        placeholder = { Text("e.g. Quantum Computing, Organic Chemistry, AWS Architecture...") },
+                        leadingIcon = {
+                            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(20.dp))
+                        },
+                        trailingIcon = {
+                            if (targetCourseText.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    targetCourseText = ""
+                                    selectedCourseId = ""
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    // Suggestion chips for enrolled study paths
+                    if (availableCourses.isNotEmpty()) {
+                        Text(
+                            text = "Or pick from your study paths:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             availableCourses.forEach { course ->
-                                val isSelected = selectedCourseId == course.studyPath.id
+                                val isSelected = selectedCourseId == course.studyPath.id || targetCourseText.equals(course.studyPath.topic, ignoreCase = true)
                                 FilterChip(
                                     selected = isSelected,
-                                    onClick = { selectedCourseId = course.studyPath.id },
+                                    onClick = {
+                                        selectedCourseId = course.studyPath.id
+                                        targetCourseText = course.studyPath.topic
+                                    },
                                     label = { Text(course.studyPath.topic) },
                                     leadingIcon = if (isSelected) {
                                         { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
@@ -925,7 +1010,7 @@ private fun CreateMockTestDialog(
                     }
                 }
 
-                // Exam Category Selector
+                // 2. Exam Category Selector
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "EXAM CATEGORY",
@@ -951,7 +1036,7 @@ private fun CreateMockTestDialog(
                     }
                 }
 
-                // Target Exam Name
+                // 3. Target Exam Standard
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "TARGET EXAM STANDARD",
@@ -989,7 +1074,7 @@ private fun CreateMockTestDialog(
                     }
                 }
 
-                // Question Count Selector
+                // 4. Question Count Selector (with Custom count support)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "NUMBER OF QUESTIONS",
@@ -997,18 +1082,54 @@ private fun CreateMockTestDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Row(
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf(5, 10, 15, 20, 30, 50).forEach { count ->
                             FilterChip(
-                                selected = questionCount == count,
-                                onClick = { updateQuestionCount(count) },
+                                selected = !isCustomQuestionCount && questionCount == count,
+                                onClick = {
+                                    isCustomQuestionCount = false
+                                    updateQuestionCount(count)
+                                },
                                 label = { Text("$count Qs") }
                             )
                         }
+                        FilterChip(
+                            selected = isCustomQuestionCount,
+                            onClick = {
+                                isCustomQuestionCount = true
+                                if (customQuestionCountInput.isBlank()) {
+                                    customQuestionCountInput = questionCount.toString()
+                                }
+                            },
+                            label = { Text("Custom") },
+                            leadingIcon = if (isCustomQuestionCount) {
+                                { Icon(Icons.Default.Tune, null, modifier = Modifier.size(16.dp)) }
+                            } else null
+                        )
                     }
+
+                    if (isCustomQuestionCount) {
+                        OutlinedTextField(
+                            value = customQuestionCountInput,
+                            onValueChange = { input ->
+                                customQuestionCountInput = input.filter { it.isDigit() }.take(3)
+                                val parsed = customQuestionCountInput.toIntOrNull()
+                                if (parsed != null && parsed > 0) {
+                                    val clamped = parsed.coerceIn(1, 100)
+                                    updateQuestionCount(clamped)
+                                }
+                            },
+                            label = { Text("Custom Question Count (1 - 100)") },
+                            placeholder = { Text("e.g. 25, 45, 75, 100") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
                     if (questionCount > 15) {
                         Text(
                             text = "Tests with >15 questions are partitioned into batches and automatically combined for comprehensive coverage.",
@@ -1018,7 +1139,7 @@ private fun CreateMockTestDialog(
                     }
                 }
 
-                // Time Limit
+                // 5. Time Limit
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "TIME LIMIT: $timeLimitMinutes MINUTES",
@@ -1054,7 +1175,47 @@ private fun CreateMockTestDialog(
                     }
                 }
 
-                // Custom Title (Optional)
+                // 6. Custom Prompt / Focus Areas (Optional)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "CUSTOM PROMPT / FOCUS AREAS (OPTIONAL)",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = customPrompt,
+                        onValueChange = { customPrompt = it },
+                        placeholder = {
+                            Text("e.g. Focus on practical scenarios, include tricky assertion-reason statements, emphasize Section 3 edge cases...")
+                        },
+                        minLines = 2,
+                        maxLines = 4,
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        trailingIcon = {
+                            if (customPrompt.isNotEmpty()) {
+                                IconButton(onClick = { customPrompt = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        text = "Optional focus instructions passed directly to the AI question generator.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // 7. Custom Title (Optional)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "CUSTOM TITLE (OPTIONAL)",
@@ -1066,7 +1227,8 @@ private fun CreateMockTestDialog(
                         value = customTitle,
                         onValueChange = { customTitle = it },
                         placeholder = {
-                            val defaultTitle = if (targetExamName.isNotBlank()) "$targetExamName Practice Exam" else "${selectedCategory.displayName.split(" ")[0]} Mock Test"
+                            val defaultTitle = if (targetExamName.isNotBlank()) "$targetExamName Practice Exam"
+                            else "${targetCourseText.ifBlank { "Course" }} ${selectedCategory.displayName.split(" ")[0]} Mock Test"
                             Text(defaultTitle)
                         },
                         singleLine = true,
@@ -1092,9 +1254,12 @@ private fun CreateMockTestDialog(
                                 questionCount,
                                 timeLimitMinutes,
                                 customTitle.trim(),
-                                selectedCourseId.ifBlank { null }
+                                selectedCourseId.ifBlank { null },
+                                targetCourseText.trim(),
+                                customPrompt.trim()
                             )
                         },
+                        enabled = isFormValid,
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text("Generate Test")
