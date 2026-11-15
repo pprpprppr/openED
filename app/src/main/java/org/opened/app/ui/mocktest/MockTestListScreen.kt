@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,14 +28,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -81,6 +83,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.opened.app.core.database.entity.ExamCategory
 import org.opened.app.core.database.entity.MockTestEntity
 import org.opened.app.core.database.entity.MockTestStatus
+import org.opened.app.core.database.model.StudyPathWithModules
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -88,10 +91,11 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MockTestListScreen(
-    pathId: String,
-    onNavigateBack: () -> Unit,
+    pathId: String = "",
+    onNavigateBack: () -> Unit = {},
     onTakeTest: (String) -> Unit,
     onViewResult: (String) -> Unit,
+    isTab: Boolean = false,
     viewModel: MockTestListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,51 +112,60 @@ fun MockTestListScreen(
         }
     }
 
+    val completedTests = remember(uiState.allMockTests) {
+        uiState.allMockTests.filter { it.status == MockTestStatus.COMPLETED }
+    }
+    val avgScore = remember(completedTests) {
+        if (completedTests.isNotEmpty()) completedTests.map { it.score }.average().toInt() else 0
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                title = {
-                    Column {
-                        Text(
-                            text = "Exam Prep & Mock Tests",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        uiState.course?.studyPath?.title?.let { courseTitle ->
-                            Text(
-                                text = courseTitle,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+            if (!isTab) {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back"
                             )
                         }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { viewModel.openCreateDialog() }) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = "Create Mock Test")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    },
+                    title = {
+                        Column {
+                            Text(
+                                text = "Exam Prep & Mock Tests",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            uiState.course?.studyPath?.title?.let { courseTitle ->
+                                Text(
+                                    text = courseTitle,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { viewModel.openCreateDialog() }) {
+                            Icon(imageVector = Icons.Default.Add, contentDescription = "Create Mock Test")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
                 )
-            )
+            }
         }
     ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(if (isTab) PaddingValues(0.dp) else innerPadding)
         ) {
             LazyColumn(
                 modifier = Modifier
@@ -161,12 +174,110 @@ fun MockTestListScreen(
                 contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Header Banner
+                // Header Banner with Quick Stats
                 item {
                     ExamPrepHeaderBanner(
-                        courseTitle = uiState.course?.studyPath?.title ?: "This Course",
+                        courseTitle = uiState.course?.studyPath?.title ?: "All Courses",
+                        totalTests = uiState.allMockTests.size,
+                        completedTests = completedTests.size,
+                        avgScore = avgScore,
                         onCreateTestClick = { viewModel.openCreateDialog() }
                     )
+                }
+
+                // Category Filter Chips
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "EXAM CATEGORY",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                item {
+                                    val isSelected = uiState.selectedCategory == null
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { viewModel.filterByCategory(null) },
+                                        label = { Text("All Exams (${uiState.allMockTests.size})") },
+                                        leadingIcon = if (isSelected) {
+                                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                        } else null
+                                    )
+                                }
+                                items(ExamCategory.values()) { category ->
+                                    val isSelected = uiState.selectedCategory == category
+                                    val count = uiState.allMockTests.count { it.examCategory == category }
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { viewModel.filterByCategory(category) },
+                                        label = { Text("${category.displayName.split(" ")[0]} ($count)") },
+                                        leadingIcon = if (isSelected) {
+                                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                        } else null
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Course Filter Chips (when in global mode with multiple courses)
+                if (uiState.availableCourses.size > 1 && pathId.isBlank()) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "FILTER BY COURSE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    letterSpacing = 1.sp
+                                )
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        val isSelected = uiState.selectedCourseFilter == null
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { viewModel.filterByCourse(null) },
+                                            label = { Text("All Courses") },
+                                            leadingIcon = if (isSelected) {
+                                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                            } else null
+                                        )
+                                    }
+                                    items(uiState.availableCourses, key = { it.studyPath.id }) { course ->
+                                        val isSelected = uiState.selectedCourseFilter == course.studyPath.id
+                                        FilterChip(
+                                            selected = isSelected,
+                                            onClick = { viewModel.filterByCourse(course.studyPath.id) },
+                                            label = { Text(course.studyPath.topic) },
+                                            leadingIcon = if (isSelected) {
+                                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                            } else null
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 // Tests List Header
@@ -179,7 +290,7 @@ fun MockTestListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "GENERATED MOCK TESTS (${uiState.mockTests.size})",
+                            text = "MOCK TESTS (${uiState.mockTests.size})",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -194,8 +305,10 @@ fun MockTestListScreen(
                     }
                 } else {
                     items(uiState.mockTests, key = { it.id }) { test ->
+                        val matchedCourse = uiState.availableCourses.find { it.studyPath.id == test.pathId }
                         MockTestCard(
                             test = test,
+                            courseName = matchedCourse?.studyPath?.topic,
                             onTakeTest = { onTakeTest(test.id) },
                             onViewResult = { onViewResult(test.id) },
                             onDelete = { viewModel.deleteMockTest(test.id) }
@@ -207,11 +320,18 @@ fun MockTestListScreen(
             // Create Mock Test Dialog
             if (uiState.showCreateDialog) {
                 CreateMockTestDialog(
-                    courseTopic = uiState.course?.studyPath?.topic.orEmpty(),
-                    courseTitle = uiState.course?.studyPath?.title.orEmpty(),
+                    availableCourses = uiState.availableCourses,
+                    initialCourseId = uiState.pathId.ifBlank { uiState.selectedCourseFilter },
                     onDismiss = { viewModel.dismissCreateDialog() },
-                    onConfirm = { category, targetExam, count, timeLimit, customTitle ->
-                        viewModel.createMockTest(category, targetExam, count, timeLimit, customTitle)
+                    onConfirm = { category, targetExam, count, timeLimit, customTitle, selectedCourseId ->
+                        viewModel.createMockTest(
+                            examCategory = category,
+                            targetExamName = targetExam,
+                            questionCount = count,
+                            timeLimitMinutes = timeLimit,
+                            customTitle = customTitle,
+                            targetPathId = selectedCourseId
+                        )
                     }
                 )
             }
@@ -231,6 +351,9 @@ fun MockTestListScreen(
 @Composable
 private fun ExamPrepHeaderBanner(
     courseTitle: String,
+    totalTests: Int,
+    completedTests: Int,
+    avgScore: Int,
     onCreateTestClick: () -> Unit
 ) {
     ElevatedCard(
@@ -244,7 +367,7 @@ private fun ExamPrepHeaderBanner(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -253,20 +376,20 @@ private fun ExamPrepHeaderBanner(
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(38.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.Default.Psychology,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
                 Column {
                     Text(
-                        text = "Authentic High-Stakes Mock Exams",
+                        text = "Exam Prep & Mock Test Studio",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -285,6 +408,83 @@ private fun ExamPrepHeaderBanner(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            // Performance Summary Pills
+            if (totalTests > 0) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = totalTests.toString(),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Total Tests",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = completedTests.toString(),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                            Text(
+                                text = "Completed",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (completedTests > 0) "$avgScore%" else "—",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (avgScore >= 70) Color(0xFF10B981) else MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Avg Score",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
 
             Button(
                 onClick = onCreateTestClick,
@@ -328,7 +528,7 @@ private fun EmptyMockTestsCard(onCreateClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(
-                text = "Add your first mock test with 10 to 100 realistic multiple-choice questions to assess your mastery under timed exam conditions.",
+                text = "Add your first mock test with 5 to 50 realistic multiple-choice questions to assess your mastery under timed exam conditions.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -348,6 +548,7 @@ private fun EmptyMockTestsCard(onCreateClick: () -> Unit) {
 @Composable
 private fun MockTestCard(
     test: MockTestEntity,
+    courseName: String? = null,
     onTakeTest: () -> Unit,
     onViewResult: () -> Unit,
     onDelete: () -> Unit
@@ -373,7 +574,7 @@ private fun MockTestCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Header Row: Category Badge, Exam Name, Menu
+            // Header Row: Category Badge, Exam Name, Course Name, Menu
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -382,30 +583,30 @@ private fun MockTestCard(
                 Row(
                     modifier = Modifier.weight(1f, fill = false),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = when (test.examCategory) {
-                            ExamCategory.ENTRANCE -> MaterialTheme.colorScheme.errorContainer
-                            ExamCategory.COMPETITIVE -> MaterialTheme.colorScheme.tertiaryContainer
-                            ExamCategory.CERTIFICATION -> MaterialTheme.colorScheme.primaryContainer
-                            ExamCategory.UNIVERSITY -> MaterialTheme.colorScheme.secondaryContainer
+                            ExamCategory.ENTRANCE -> Color(0xFF8B5CF6).copy(alpha = 0.2f)
+                            ExamCategory.COMPETITIVE -> Color(0xFFF59E0B).copy(alpha = 0.2f)
+                            ExamCategory.CERTIFICATION -> Color(0xFF06B6D4).copy(alpha = 0.2f)
+                            ExamCategory.UNIVERSITY -> Color(0xFF3B82F6).copy(alpha = 0.2f)
                             ExamCategory.GENERAL -> MaterialTheme.colorScheme.surfaceVariant
                         }
                     ) {
                         Text(
-                            text = test.examCategory.name,
+                            text = test.examCategory.displayName.replace(" Exam", ""),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = when (test.examCategory) {
-                                ExamCategory.ENTRANCE -> MaterialTheme.colorScheme.onErrorContainer
-                                ExamCategory.COMPETITIVE -> MaterialTheme.colorScheme.onTertiaryContainer
-                                ExamCategory.CERTIFICATION -> MaterialTheme.colorScheme.onPrimaryContainer
-                                ExamCategory.UNIVERSITY -> MaterialTheme.colorScheme.onSecondaryContainer
+                                ExamCategory.ENTRANCE -> Color(0xFF7C3AED)
+                                ExamCategory.COMPETITIVE -> Color(0xFFD97706)
+                                ExamCategory.CERTIFICATION -> Color(0xFF0891B2)
+                                ExamCategory.UNIVERSITY -> Color(0xFF2563EB)
                                 ExamCategory.GENERAL -> MaterialTheme.colorScheme.onSurfaceVariant
                             },
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                         )
                     }
 
@@ -420,8 +621,35 @@ private fun MockTestCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
+                        }
+                    }
+
+                    if (!courseName.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(10.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = courseName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
@@ -455,22 +683,29 @@ private fun MockTestCard(
                 }
             }
 
-            // Test Title
+            // Title
             Text(
                 text = test.title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
 
-            // Details: Questions, Duration, Created Date
+            // Metadata Row: Questions, Time limit, Date
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.Assignment, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Assignment,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "${test.totalQuestions} Questions",
                         style = MaterialTheme.typography.bodySmall,
@@ -478,10 +713,16 @@ private fun MockTestCard(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(imageVector = Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Timer,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${test.timeLimitMinutes} Mins",
+                        text = "${test.timeLimitMinutes} mins",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -489,12 +730,12 @@ private fun MockTestCard(
 
                 Text(
                     text = formattedDate,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Status & Actions
+            // Action / Status Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -604,16 +845,20 @@ private fun MockTestCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CreateMockTestDialog(
-    courseTopic: String,
-    courseTitle: String,
+    availableCourses: List<StudyPathWithModules> = emptyList(),
+    initialCourseId: String? = null,
     onDismiss: () -> Unit,
-    onConfirm: (ExamCategory, String, Int, Int, String) -> Unit
+    onConfirm: (ExamCategory, String, Int, Int, String, String?) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf(ExamCategory.ENTRANCE) }
     var targetExamName by remember { mutableStateOf("") }
     var customTitle by remember { mutableStateOf("") }
     var questionCount by remember { mutableIntStateOf(10) }
     var timeLimitMinutes by remember { mutableIntStateOf(20) }
+
+    var selectedCourseId by remember {
+        mutableStateOf(initialCourseId ?: availableCourses.firstOrNull()?.studyPath?.id.orEmpty())
+    }
 
     val quickExamRecommendations = remember(selectedCategory) {
         when (selectedCategory) {
@@ -625,7 +870,6 @@ private fun CreateMockTestDialog(
         }
     }
 
-    // Auto-update time limit when question count changes
     fun updateQuestionCount(count: Int) {
         questionCount = count
         timeLimitMinutes = (count * selectedCategory.defaultTimePerQuestionMinutes).toInt().coerceAtLeast(10)
@@ -652,6 +896,34 @@ private fun CreateMockTestDialog(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
+
+                // Course Selector (if multiple courses available)
+                if (availableCourses.size > 1) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "TARGET COURSE",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            availableCourses.forEach { course ->
+                                val isSelected = selectedCourseId == course.studyPath.id
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedCourseId = course.studyPath.id },
+                                    label = { Text(course.studyPath.topic) },
+                                    leadingIcon = if (isSelected) {
+                                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                                    } else null
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Exam Category Selector
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -700,16 +972,16 @@ private fun CreateMockTestDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        quickExamRecommendations.take(4).forEach { exam ->
+                        quickExamRecommendations.forEach { recExam ->
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (targetExamName == exam) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.clickable { targetExamName = exam }
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.clickable { targetExamName = recExam }
                             ) {
                                 Text(
-                                    text = exam,
+                                    text = recExam,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = if (targetExamName == exam) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                 )
                             }
@@ -725,21 +997,21 @@ private fun CreateMockTestDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    FlowRow(
+                    Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        listOf(10 to "1 Part", 25 to "3 Parts", 50 to "5 Parts", 100 to "10 Parts").forEach { (count, parts) ->
+                        listOf(5, 10, 15, 20, 30, 50).forEach { count ->
                             FilterChip(
                                 selected = questionCount == count,
                                 onClick = { updateQuestionCount(count) },
-                                label = { Text("$count Qs ($parts)") }
+                                label = { Text("$count Qs") }
                             )
                         }
                     }
-                    if (questionCount > 10) {
+                    if (questionCount > 15) {
                         Text(
-                            text = "💡 High question counts are split into parts to prevent AI truncation and ensure full syllabus coverage.",
+                            text = "Tests with >15 questions are partitioned into batches and automatically combined for comprehensive coverage.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -819,7 +1091,8 @@ private fun CreateMockTestDialog(
                                 targetExamName.trim(),
                                 questionCount,
                                 timeLimitMinutes,
-                                customTitle.trim()
+                                customTitle.trim(),
+                                selectedCourseId.ifBlank { null }
                             )
                         },
                         shape = RoundedCornerShape(12.dp)

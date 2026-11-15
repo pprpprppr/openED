@@ -728,6 +728,10 @@ class OpenEDRepositoryImpl @Inject constructor(
     }
 
     // --- Exam Prep & Mock Tests ---
+    override fun getAllMockTestsFlow(): Flow<List<MockTestEntity>> {
+        return mockTestDao.getAllMockTestsFlow()
+    }
+
     override fun getMockTestsForPathFlow(pathId: String): Flow<List<MockTestEntity>> {
         return mockTestDao.getMockTestsForPathFlow(pathId)
     }

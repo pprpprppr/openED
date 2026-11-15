@@ -32,6 +32,9 @@ interface MockTestDao {
     @Query("SELECT * FROM mock_tests WHERE pathId = :pathId ORDER BY createdAt DESC")
     suspend fun getMockTestsForPath(pathId: String): List<MockTestEntity>
 
+    @Query("SELECT * FROM mock_tests ORDER BY createdAt DESC")
+    fun getAllMockTestsFlow(): Flow<List<MockTestEntity>>
+
     @Query("SELECT * FROM mock_tests WHERE id = :id LIMIT 1")
     suspend fun getMockTestById(id: String): MockTestEntity?
 
@@ -58,7 +61,7 @@ interface MockTestDao {
     @Query("DELETE FROM mock_tests WHERE pathId = :pathId")
     suspend fun deleteMockTestsForPath(pathId: String)
 
-    @Query("SELECT * FROM mock_tests")
+    @Query("SELECT * FROM mock_tests ORDER BY createdAt DESC")
     suspend fun getAllMockTests(): List<MockTestEntity>
 
     @Query("SELECT * FROM mock_test_questions")

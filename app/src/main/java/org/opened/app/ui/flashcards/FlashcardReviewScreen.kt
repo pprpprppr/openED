@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,7 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -50,40 +51,44 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FlashcardReviewScreen(
-    onNavigateBack: () -> Unit,
+    onNavigateBack: () -> Unit = {},
+    isTab: Boolean = false,
     viewModel: FlashcardReviewViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Flashcard Review") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+            if (!isTab) {
+                TopAppBar(
+                    title = { Text("Flashcard Review") },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background
+                    )
                 )
-            )
+            }
         }
     ) { padding ->
+        val effectivePadding = if (isTab) PaddingValues(0.dp) else padding
         when {
             state.isLoading -> Box(
-                Modifier.fillMaxSize().padding(padding),
+                Modifier.fillMaxSize().padding(effectivePadding),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator() }
 
             state.dueCards.isEmpty() -> NothingDueView(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize().padding(effectivePadding),
                 onBack = onNavigateBack
             )
 
             state.isSessionComplete -> SessionCompleteView(
                 totalReviewed = state.totalReviewed,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize().padding(effectivePadding),
                 onRestart = viewModel::restartSession,
                 onBack = onNavigateBack
             )
@@ -95,7 +100,7 @@ fun FlashcardReviewScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding)
+                        .padding(effectivePadding)
                         .padding(horizontal = 20.dp)
                 ) {
                     // Progress

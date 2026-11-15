@@ -38,6 +38,12 @@ fun OpenEDNavHost(
                 onNavigateToGraph = { navController.navigate(Screen.KnowledgeGraph.route) },
                 onNavigateToMockTests = { pathId ->
                     navController.navigate(Screen.MockTestList.createRoute(pathId))
+                },
+                onTakeMockTest = { testId ->
+                    navController.navigate(Screen.TakeMockTest.createRoute(testId))
+                },
+                onViewMockTestResult = { testId ->
+                    navController.navigate(Screen.MockTestResult.createRoute(testId))
                 }
             )
         }

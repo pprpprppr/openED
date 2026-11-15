@@ -99,6 +99,7 @@ interface OpenEDRepository {
     suspend fun getAllChapterLinkNodes(): List<ChapterLinkNode>
 
     // --- Exam Prep & Mock Tests ---
+    fun getAllMockTestsFlow(): Flow<List<MockTestEntity>>
     fun getMockTestsForPathFlow(pathId: String): Flow<List<MockTestEntity>>
     suspend fun getMockTestById(id: String): MockTestEntity?
     suspend fun getMockTestWithQuestions(id: String): MockTestWithQuestions?

@@ -19,7 +19,11 @@ import javax.inject.Inject
 data class MockTestListUiState(
     val pathId: String = "",
     val course: StudyPathWithModules? = null,
+    val availableCourses: List<StudyPathWithModules> = emptyList(),
+    val allMockTests: List<MockTestEntity> = emptyList(),
     val mockTests: List<MockTestEntity> = emptyList(),
+    val selectedCategory: ExamCategory? = null,
+    val selectedCourseFilter: String? = null,
     val isLoading: Boolean = false,
     val isGenerating: Boolean = false,
     val generationProgressText: String = "",
@@ -38,15 +42,61 @@ class MockTestListViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(MockTestListUiState())
     val uiState: StateFlow<MockTestListUiState> = _uiState.asStateFlow()
 
-    fun loadMockTests(pathId: String) {
+    fun loadMockTests(pathId: String = "") {
         _uiState.update { it.copy(pathId = pathId, isLoading = true) }
         viewModelScope.launch {
-            val course = repository.getStudyPathWithModules(pathId)
-            _uiState.update { it.copy(course = course, isLoading = false) }
+            repository.getAllStudyPathsFlow().collectLatest { allCourses ->
+                val specificCourse = if (pathId.isNotBlank()) allCourses.find { it.studyPath.id == pathId } else null
 
-            repository.getMockTestsForPathFlow(pathId).collectLatest { tests ->
-                _uiState.update { it.copy(mockTests = tests) }
+                val testsFlow = if (pathId.isNotBlank()) {
+                    repository.getMockTestsForPathFlow(pathId)
+                } else {
+                    repository.getAllMockTestsFlow()
+                }
+
+                testsFlow.collectLatest { tests ->
+                    _uiState.update { state ->
+                        val filtered = applyFilters(tests, state.selectedCategory, state.selectedCourseFilter)
+                        state.copy(
+                            course = specificCourse,
+                            availableCourses = allCourses,
+                            allMockTests = tests,
+                            mockTests = filtered,
+                            isLoading = false
+                        )
+                    }
+                }
             }
+        }
+    }
+
+    fun filterByCategory(category: ExamCategory?) {
+        _uiState.update { state ->
+            state.copy(
+                selectedCategory = category,
+                mockTests = applyFilters(state.allMockTests, category, state.selectedCourseFilter)
+            )
+        }
+    }
+
+    fun filterByCourse(pathId: String?) {
+        _uiState.update { state ->
+            state.copy(
+                selectedCourseFilter = pathId,
+                mockTests = applyFilters(state.allMockTests, state.selectedCategory, pathId)
+            )
+        }
+    }
+
+    private fun applyFilters(
+        tests: List<MockTestEntity>,
+        category: ExamCategory?,
+        courseFilter: String?
+    ): List<MockTestEntity> {
+        return tests.filter { test ->
+            val matchesCategory = category == null || test.examCategory == category
+            val matchesCourse = courseFilter == null || test.pathId == courseFilter
+            matchesCategory && matchesCourse
         }
     }
 
@@ -63,10 +113,12 @@ class MockTestListViewModel @Inject constructor(
         targetExamName: String,
         questionCount: Int,
         timeLimitMinutes: Int,
-        customTitle: String
+        customTitle: String,
+        targetPathId: String? = null
     ) {
-        val pathId = _uiState.value.pathId
-        if (pathId.isBlank()) return
+        val effectivePathId = targetPathId ?: _uiState.value.pathId.ifBlank {
+            _uiState.value.selectedCourseFilter ?: _uiState.value.availableCourses.firstOrNull()?.studyPath?.id
+        } ?: return
 
         _uiState.update {
             it.copy(
@@ -81,8 +133,8 @@ class MockTestListViewModel @Inject constructor(
 
         viewModelScope.launch {
             val result = aiLearningEngine.generateFullMockTest(
-                pathId = pathId,
-                title = customTitle,
+                pathId = effectivePathId,
+                title = customTitle.ifBlank { "$targetExamName Practice Mock Test" },
                 examCategory = examCategory,
                 targetExamName = targetExamName,
                 totalQuestions = questionCount,
