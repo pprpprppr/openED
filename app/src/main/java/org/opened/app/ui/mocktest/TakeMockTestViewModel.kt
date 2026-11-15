@@ -25,6 +25,7 @@ data class TakeMockTestUiState(
     val currentQuestionIndex: Int = 0,
     val remainingSeconds: Int = 0,
     val isTimerRunning: Boolean = false,
+    val isLoading: Boolean = true,
     val showPalette: Boolean = false,
     val showSubmitConfirmDialog: Boolean = false,
     val isSubmitting: Boolean = false,
@@ -54,35 +55,79 @@ class TakeMockTestViewModel @Inject constructor(
     private var timerJob: Job? = null
 
     fun loadTest(testId: String) {
-        _uiState.update { it.copy(testId = testId) }
+        if (_uiState.value.testId == testId && _uiState.value.testWithQuestions != null) {
+            return
+        }
+
+        _uiState.update { it.copy(testId = testId, isLoading = true, errorMessage = null) }
 
         viewModelScope.launch {
-            repository.getMockTestWithQuestionsFlow(testId).collectLatest { twq ->
-                if (twq == null) return@collectLatest
-
-                val test = twq.test
-                val timeLimitSec = test.timeLimitMinutes * 60
-                val initialRemaining = if (test.timeSpentSeconds > 0) {
-                    (timeLimitSec - test.timeSpentSeconds).coerceAtLeast(0)
-                } else {
-                    timeLimitSec
+            try {
+                // Immediate direct load for instantaneous response
+                var directTwq = repository.getMockTestWithQuestions(testId)
+                if (directTwq == null) {
+                    val directTest = repository.getMockTestById(testId)
+                    if (directTest != null) {
+                        val questions = repository.getQuestionsForTest(testId)
+                        directTwq = MockTestWithQuestions(directTest, questions)
+                    }
                 }
 
-                _uiState.update { state ->
-                    state.copy(
-                        testWithQuestions = twq,
-                        remainingSeconds = if (state.remainingSeconds > 0) state.remainingSeconds else initialRemaining
+                if (directTwq != null) {
+                    applyTestLoaded(directTwq)
+                }
+
+                // Continuous Flow collection for live updates
+                repository.getMockTestWithQuestionsFlow(testId).collect { flowTwq ->
+                    val effectiveTwq = flowTwq ?: directTwq
+                    if (effectiveTwq != null) {
+                        applyTestLoaded(effectiveTwq)
+                    } else if (directTwq == null) {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessage = "Mock exam not found. It may have been deleted."
+                            )
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = e.localizedMessage ?: "Failed to load mock exam."
                     )
                 }
-
-                if (test.status == MockTestStatus.NOT_STARTED) {
-                    repository.updateMockTest(test.copy(status = MockTestStatus.IN_PROGRESS))
-                }
-
-                if (timerJob == null && test.status != MockTestStatus.COMPLETED) {
-                    startTimer()
-                }
             }
+        }
+    }
+
+    private suspend fun applyTestLoaded(twq: MockTestWithQuestions) {
+        val test = twq.test
+        val sortedQuestions = twq.questions.sortedBy { it.questionIndex }
+        val timeLimitSec = (test.timeLimitMinutes.coerceAtLeast(1)) * 60
+        val initialRemaining = if (test.timeSpentSeconds > 0) {
+            (timeLimitSec - test.timeSpentSeconds).coerceAtLeast(0)
+        } else {
+            timeLimitSec
+        }
+
+        _uiState.update { state ->
+            val curRemaining = if (state.remainingSeconds > 0) state.remainingSeconds else initialRemaining
+            state.copy(
+                testWithQuestions = twq.copy(questions = sortedQuestions),
+                remainingSeconds = curRemaining,
+                isLoading = false,
+                errorMessage = if (sortedQuestions.isEmpty()) "This mock exam has no questions generated yet." else null
+            )
+        }
+
+        if (test.status == MockTestStatus.NOT_STARTED) {
+            repository.updateMockTest(test.copy(status = MockTestStatus.IN_PROGRESS))
+        }
+
+        if (timerJob == null && test.status != MockTestStatus.COMPLETED && sortedQuestions.isNotEmpty()) {
+            startTimer()
         }
     }
 

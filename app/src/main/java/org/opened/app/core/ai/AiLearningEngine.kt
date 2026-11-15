@@ -708,8 +708,16 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
             )
             val cleaned = cleanJsonOutput(raw)
-            val response = json.decodeFromString(MockTestBatchResponse.serializer(), cleaned)
-            response.questions
+            val questions = try {
+                json.decodeFromString(MockTestBatchResponse.serializer(), cleaned).questions
+            } catch (e: Exception) {
+                try {
+                    json.decodeFromString<List<MockTestQuestionItem>>(cleaned)
+                } catch (_: Exception) {
+                    throw e
+                }
+            }
+            questions
         }
     }
 

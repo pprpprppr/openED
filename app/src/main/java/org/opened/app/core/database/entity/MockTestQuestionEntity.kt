@@ -41,9 +41,10 @@ data class MockTestQuestionEntity(
     @delegate:Ignore
     val optionsList: List<String> by lazy {
         try {
-            Json.decodeFromString<List<String>>(optionsJson)
+            val parsed = Json.decodeFromString<List<String>>(optionsJson)
+            if (parsed.isNotEmpty()) parsed else listOf("Option A", "Option B", "Option C", "Option D")
         } catch (e: Exception) {
-            emptyList()
+            listOf("Option A", "Option B", "Option C", "Option D")
         }
     }
 

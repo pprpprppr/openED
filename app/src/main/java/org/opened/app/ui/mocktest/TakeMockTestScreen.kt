@@ -68,6 +68,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -105,33 +106,44 @@ fun TakeMockTestScreen(
                     }
                 },
                 title = {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = 6.dp)
+                    ) {
                         Text(
-                            text = "Question ${uiState.currentQuestionIndex + 1} of ${uiState.totalQuestions}",
+                            text = if (uiState.totalQuestions > 0) "Question ${uiState.currentQuestionIndex + 1} of ${uiState.totalQuestions}" else "Mock Exam",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
-                        uiState.testWithQuestions?.test?.title?.let { title ->
+                        val courseTitle = uiState.testWithQuestions?.test?.title
+                        if (!courseTitle.isNullOrBlank()) {
                             Text(
-                                text = title,
+                                text = courseTitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 },
                 actions = {
-                    // Timer Chip
-                    ExamTimerChip(remainingSeconds = uiState.remainingSeconds)
+                    if (uiState.currentQuestion != null) {
+                        // Timer Chip
+                        ExamTimerChip(remainingSeconds = uiState.remainingSeconds)
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
 
-                    // Question Palette Toggle
-                    IconButton(onClick = { viewModel.openPalette() }) {
-                        Icon(
-                            imageVector = Icons.Default.GridView,
-                            contentDescription = "Question Palette"
-                        )
+                        // Question Palette Toggle
+                        IconButton(onClick = { viewModel.openPalette() }) {
+                            Icon(
+                                imageVector = Icons.Default.GridView,
+                                contentDescription = "Question Palette"
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -140,15 +152,17 @@ fun TakeMockTestScreen(
             )
         },
         bottomBar = {
-            ExamBottomNavigation(
-                currentIndex = uiState.currentQuestionIndex,
-                totalQuestions = uiState.totalQuestions,
-                hasSelectedOption = (uiState.currentQuestion?.userSelectedOption ?: -1) >= 0,
-                onPrev = { viewModel.prevQuestion() },
-                onNext = { viewModel.nextQuestion() },
-                onClear = { viewModel.clearCurrentAnswer() },
-                onSubmit = { viewModel.showSubmitConfirmation() }
-            )
+            if (uiState.currentQuestion != null) {
+                ExamBottomNavigation(
+                    currentIndex = uiState.currentQuestionIndex,
+                    totalQuestions = uiState.totalQuestions,
+                    hasSelectedOption = (uiState.currentQuestion?.userSelectedOption ?: -1) >= 0,
+                    onPrev = { viewModel.prevQuestion() },
+                    onNext = { viewModel.nextQuestion() },
+                    onClear = { viewModel.clearCurrentAnswer() },
+                    onSubmit = { viewModel.showSubmitConfirmation() }
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -158,64 +172,131 @@ fun TakeMockTestScreen(
         ) {
             val question = uiState.currentQuestion
 
-            if (question == null) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Question Header: Topic badge + Flag for Review
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+            when {
+                uiState.isLoading && question == null && uiState.errorMessage == null -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.padding(24.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = question.topic,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
+                            CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
+                            Text(
+                                text = "Loading Mock Exam...",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Preparing questions, formula renderers, and timer.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
 
-                            OutlinedButton(
-                                onClick = { viewModel.toggleFlag() },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = if (question.isFlagged) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (question.isFlagged) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant
-                                ),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                uiState.errorMessage != null || (uiState.testWithQuestions != null && uiState.totalQuestions == 0) -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (question.isFlagged) Icons.Default.Flag else Icons.Default.OutlinedFlag,
+                                    imageVector = Icons.Default.Close,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.error
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (question.isFlagged) "Flagged" else "Flag",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = "Unable to Start Exam",
+                                    style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
+                                Text(
+                                    text = uiState.errorMessage ?: "This mock exam does not contain any questions. Please generate a new mock test.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                                Button(
+                                    onClick = onNavigateBack,
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Back to Exam Prep")
+                                }
                             }
                         }
                     }
+                }
+
+                question != null -> {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Question Header: Topic badge + Flag for Review
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    Text(
+                                        text = question.topic,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                OutlinedButton(
+                                    onClick = { viewModel.toggleFlag() },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = if (question.isFlagged) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (question.isFlagged) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (question.isFlagged) Icons.Default.Flag else Icons.Default.OutlinedFlag,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (question.isFlagged) "Flagged" else "Flag",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
 
                     // Question Text with 2D Math LaTeX Render Engine
                     item {
@@ -293,6 +374,7 @@ fun TakeMockTestScreen(
                     }
                 }
             }
+        }
 
             // Question Palette Bottom Sheet
             if (uiState.showPalette) {
@@ -448,48 +530,56 @@ private fun ExamBottomNavigation(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Previous Button
             OutlinedButton(
                 onClick = onPrev,
                 enabled = currentIndex > 0,
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(10.dp)
             ) {
                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Prev")
+                Text("Prev", maxLines = 1)
             }
 
             // Clear Button
             TextButton(
                 onClick = onClear,
-                enabled = hasSelectedOption
+                enabled = hasSelectedOption,
+                modifier = Modifier.weight(0.9f),
+                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
             ) {
                 Icon(imageVector = Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Clear")
+                Text("Clear", maxLines = 1)
             }
 
             // Next or Submit Button
             if (currentIndex < totalQuestions - 1) {
                 Button(
                     onClick = onNext,
+                    modifier = Modifier.weight(1.2f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Next")
+                    Text("Next", maxLines = 1)
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
             } else {
                 Button(
                     onClick = onSubmit,
+                    modifier = Modifier.weight(1.4f),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Submit Test", fontWeight = FontWeight.Bold)
+                    Text("Submit", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         }

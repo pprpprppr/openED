@@ -69,8 +69,18 @@ class MockTestResultViewModel @Inject constructor(
     fun loadResult(testId: String) {
         _uiState.update { it.copy(testId = testId, isLoading = true) }
         viewModelScope.launch {
-            repository.getMockTestWithQuestionsFlow(testId).collectLatest { twq ->
-                _uiState.update { it.copy(testWithQuestions = twq, isLoading = false) }
+            val directTwq = repository.getMockTestWithQuestions(testId)
+            if (directTwq != null) {
+                val sorted = directTwq.copy(questions = directTwq.questions.sortedBy { it.questionIndex })
+                _uiState.update { it.copy(testWithQuestions = sorted, isLoading = false) }
+            }
+            repository.getMockTestWithQuestionsFlow(testId).collect { twq ->
+                if (twq != null) {
+                    val sorted = twq.copy(questions = twq.questions.sortedBy { it.questionIndex })
+                    _uiState.update { it.copy(testWithQuestions = sorted, isLoading = false) }
+                } else if (directTwq == null) {
+                    _uiState.update { it.copy(isLoading = false) }
+                }
             }
         }
     }
