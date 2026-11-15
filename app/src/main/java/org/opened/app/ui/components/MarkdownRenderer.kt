@@ -17,8 +17,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,6 +48,7 @@ sealed class MarkdownNode {
     data class Callout(val type: CalloutType, val title: String?, val content: String) : MarkdownNode()
     data class Quote(val text: String) : MarkdownNode()
     data class ListItem(val ordered: Boolean, val number: Int, val text: String) : MarkdownNode()
+    data class TaskItem(val checked: Boolean, val text: String) : MarkdownNode()
     data class Paragraph(val text: String) : MarkdownNode()
     object Divider : MarkdownNode()
 }
@@ -276,6 +280,51 @@ fun RichMarkdownRenderer(
                         }
                     }
 
+                    is MarkdownNode.TaskItem -> {
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 6.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .clip(RoundedCornerShape(5.dp))
+                                    .background(
+                                        if (node.checked) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+                                    )
+                                    .border(
+                                        width = 1.5.dp,
+                                        color = if (node.checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                        shape = RoundedCornerShape(5.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (node.checked) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Completed",
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            InteractiveMarkdownText(
+                                text = node.text,
+                                onChapterClick = onChapterClick,
+                                style = MaterialTheme.typography.bodyLarge.copy(
+                                    color = if (node.checked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
+                                    textDecoration = if (node.checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else androidx.compose.ui.text.style.TextDecoration.None
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(3.dp))
+                    }
+
                     is MarkdownNode.Paragraph -> {
                         if (node.text.isNotBlank()) {
                             Spacer(modifier = Modifier.height(8.dp))
@@ -434,8 +483,35 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
             when (language.lowercase()) {
                 "mermaid", "diagram" -> nodes.add(MarkdownNode.Diagram(content, isComplete = closed))
                 "chart", "plot" -> nodes.add(MarkdownNode.Chart(content, isComplete = closed))
+                "math", "latex", "tex" -> nodes.add(MarkdownNode.Math(content, isComplete = closed))
                 else -> nodes.add(MarkdownNode.Code(language = language, content = content, isComplete = closed))
             }
+            continue
+        }
+
+        // LaTeX environment: \begin{equation}, \begin{align}, \begin{gather}, \begin{aligned}
+        if (trimmed.startsWith("\\begin{equation") || trimmed.startsWith("\\begin{align") ||
+            trimmed.startsWith("\\begin{gather") || trimmed.startsWith("\\begin{aligned") ||
+            trimmed.startsWith("\\begin{multline")
+        ) {
+            val mathLines = mutableListOf<String>()
+            mathLines.add(line)
+            i++
+            var closed = false
+            while (i < lines.size) {
+                val cur = lines[i]
+                mathLines.add(cur)
+                if (cur.contains("\\end{equation") || cur.contains("\\end{align") ||
+                    cur.contains("\\end{gather") || cur.contains("\\end{aligned") ||
+                    cur.contains("\\end{multline")
+                ) {
+                    closed = true
+                    i++
+                    break
+                }
+                i++
+            }
+            nodes.add(MarkdownNode.Math(mathLines.joinToString("\n").trim(), isComplete = closed))
             continue
         }
 
@@ -494,7 +570,14 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
             val calloutType = try {
                 CalloutType.valueOf(typeStr)
             } catch (e: Exception) {
-                CalloutType.NOTE
+                when (typeStr) {
+                    "INFO" -> CalloutType.NOTE
+                    "EXAMPLE", "HINT" -> CalloutType.TIP
+                    "QUESTION", "FAQ" -> CalloutType.NOTE
+                    "SUMMARY", "KEY" -> CalloutType.IMPORTANT
+                    "DANGER", "CRITICAL" -> CalloutType.CAUTION
+                    else -> CalloutType.NOTE
+                }
             }
 
             val bodyLines = mutableListOf<String>()
@@ -534,6 +617,16 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
             continue
         }
 
+        // Task list item: - [ ] or - [x] or * [ ] or * [x]
+        val taskMatch = Regex("""^[-*]\s+\[([ xX])\]\s+(.*)""").matchEntire(trimmed)
+        if (taskMatch != null) {
+            val isChecked = taskMatch.groupValues[1].equals("x", ignoreCase = true)
+            val itemText = taskMatch.groupValues[2]
+            nodes.add(MarkdownNode.TaskItem(checked = isChecked, text = itemText))
+            i++
+            continue
+        }
+
         // Unordered list: - or *
         if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
             val itemText = trimmed.substring(2).trim()
@@ -561,7 +654,12 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
             if (currentTrimmed.startsWith("#")) break
             if (currentTrimmed.startsWith("```")) break
             if (currentTrimmed.startsWith("$$") || currentTrimmed.startsWith("\\[")) break
+            if (currentTrimmed.startsWith("\\begin{equation") || currentTrimmed.startsWith("\\begin{align") ||
+                currentTrimmed.startsWith("\\begin{gather") || currentTrimmed.startsWith("\\begin{aligned") ||
+                currentTrimmed.startsWith("\\begin{multline")
+            ) break
             if (currentTrimmed.startsWith(">")) break
+            if (Regex("""^[-*]\s+\[([ xX])\]""").containsMatchIn(currentTrimmed)) break
             if (currentTrimmed.startsWith("- ") || currentTrimmed.startsWith("* ")) break
             if (Regex("""^(\d+)\.\s+(.*)""").matches(currentTrimmed)) break
             if (isTableStart(lines, i)) break
@@ -573,7 +671,34 @@ internal fun parseMarkdown(raw: String): List<MarkdownNode> = runCatching {
         if (paragraphLines.isNotEmpty()) {
             val paragraphContent = paragraphLines.joinToString(" ").trim()
             if (paragraphContent.isNotBlank()) {
-                nodes.add(MarkdownNode.Paragraph(paragraphContent))
+                val displayMathRegex = Regex("""(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\])""")
+                if (displayMathRegex.containsMatchIn(paragraphContent)) {
+                    var lastIdx = 0
+                    for (match in displayMathRegex.findAll(paragraphContent)) {
+                        if (match.range.first > lastIdx) {
+                            val part = paragraphContent.substring(lastIdx, match.range.first).trim()
+                            if (part.isNotEmpty()) {
+                                nodes.add(MarkdownNode.Paragraph(part))
+                            }
+                        }
+                        val mathContent = match.value
+                            .removePrefix("$$").removeSuffix("$$")
+                            .removePrefix("\\[").removeSuffix("\\]")
+                            .trim()
+                        if (mathContent.isNotEmpty()) {
+                            nodes.add(MarkdownNode.Math(mathContent, isComplete = true))
+                        }
+                        lastIdx = match.range.last + 1
+                    }
+                    if (lastIdx < paragraphContent.length) {
+                        val remaining = paragraphContent.substring(lastIdx).trim()
+                        if (remaining.isNotEmpty()) {
+                            nodes.add(MarkdownNode.Paragraph(remaining))
+                        }
+                    }
+                } else {
+                    nodes.add(MarkdownNode.Paragraph(paragraphContent))
+                }
             }
         }
 

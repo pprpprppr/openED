@@ -97,11 +97,13 @@ object MarkdownStripper {
             match.groupValues[1]
         }
 
-        // 11. Bold / Italic
+        // 11. Bold / Italic / Strikethrough
         text = text.replace(BOLD_ITALIC_STARS_REGEX) { match -> match.groupValues[1] }
         text = text.replace(BOLD_ITALIC_UNDERSCORES_REGEX) { match -> match.groupValues[1] }
+        text = text.replace(Regex("""~~([^~]+)~~""")) { match -> match.groupValues[1] }
 
-        // 12. List bullets & numbered lists
+        // 12. List bullets, task lists & numbered lists
+        text = text.replace(Regex("""^\s*[-*+]\s+\[([ xX])\]\s+""", RegexOption.MULTILINE), "")
         text = text.replace(Regex("""^\s*[-*+]\s+""", RegexOption.MULTILINE), "")
         text = text.replace(Regex("""^\s*\d+\.\s+""", RegexOption.MULTILINE), "")
 

@@ -197,6 +197,74 @@ class LatexParserTest {
         assertEquals(" the list ", cleaned)
     }
 
+    @Test
+    fun testParseBinomialCoefficient() {
+        val latex = """\binom{n}{k}"""
+        val node = LatexParser.parseDisplayMath(latex)
+        assertTrue("Node should be Binomial", node is Math2DNode.Binomial)
+        val binom = node as Math2DNode.Binomial
+        assertEquals("n", (binom.top as Math2DNode.Text).content)
+        assertEquals("k", (binom.bottom as Math2DNode.Text).content)
+    }
+
+    @Test
+    fun testParsePowerAndSubscript() {
+        val powerLatex = """x^2"""
+        val powerNode = LatexParser.parseDisplayMath(powerLatex)
+        assertTrue("Node should be Power", powerNode is Math2DNode.Power)
+        val power = powerNode as Math2DNode.Power
+        assertEquals("x", (power.base as Math2DNode.Text).content)
+        assertEquals("2", (power.exponent as Math2DNode.Text).content)
+
+        val subLatex = """x_i"""
+        val subNode = LatexParser.parseDisplayMath(subLatex)
+        assertTrue("Node should be Subscript", subNode is Math2DNode.Subscript)
+        val sub = subNode as Math2DNode.Subscript
+        assertEquals("x", (sub.base as Math2DNode.Text).content)
+        assertEquals("i", (sub.subscript as Math2DNode.Text).content)
+    }
+
+    @Test
+    fun testParseSubSup() {
+        val latex = """x_{i}^{2}"""
+        val node = LatexParser.parseDisplayMath(latex)
+        assertTrue("Node should be SubSup", node is Math2DNode.SubSup)
+        val subSup = node as Math2DNode.SubSup
+        assertEquals("x", (subSup.base as Math2DNode.Text).content)
+        assertEquals("i", (subSup.subscript as Math2DNode.Text).content)
+        assertEquals("2", (subSup.superscript as Math2DNode.Text).content)
+    }
+
+    @Test
+    fun testParseNthRoot() {
+        val latex = """\sqrt[3]{8}"""
+        val node = LatexParser.parseDisplayMath(latex)
+        assertTrue("Node should be Sqrt", node is Math2DNode.Sqrt)
+        val sqrt = node as Math2DNode.Sqrt
+        assertEquals("8", (sqrt.inner as Math2DNode.Text).content)
+        assertTrue("Root index should be present", sqrt.rootIndex != null)
+        assertEquals("3", (sqrt.rootIndex as Math2DNode.Text).content)
+    }
+
+    @Test
+    fun testParseAlignedEquations() {
+        val latex = """\begin{aligned} a &= b + c \\ d &= e \end{aligned}"""
+        val node = LatexParser.parseDisplayMath(latex)
+        assertTrue("Node should be AlignedEquations", node is Math2DNode.AlignedEquations)
+        val aligned = node as Math2DNode.AlignedEquations
+        assertEquals(2, aligned.lines.size)
+    }
+
+    @Test
+    fun testChemicalReactionCleaning() {
+        val chem = """\ce{2H2 + O2 -> 2H2O}"""
+        val cleaned = LatexParser.cleanInlineLatex(chem)
+        assertTrue("Should contain right arrow", cleaned.contains("→"))
+        assertTrue("Should contain H₂", cleaned.contains("H₂"))
+        assertTrue("Should contain O₂", cleaned.contains("O₂"))
+        assertTrue("Should contain H₂O", cleaned.contains("H₂O"))
+    }
+
     @Test(timeout = 2000L)
     fun testLatexParserCompletesOn10000CharHalfStreamedWithUnclosedBracesUnder100ms() {
         val sb = StringBuilder()

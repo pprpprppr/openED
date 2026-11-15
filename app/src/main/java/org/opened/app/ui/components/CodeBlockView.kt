@@ -119,15 +119,34 @@ fun CodeBlockView(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(scrollState)
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
-                Text(
-                    text = highlightedText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    lineHeight = 22.sp,
-                    softWrap = false
-                )
+                val lines = code.lines()
+                Row {
+                    if (lines.size > 1) {
+                        Column(
+                            modifier = Modifier.padding(end = 12.dp),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            lines.indices.forEach { idx ->
+                                Text(
+                                    text = "${idx + 1}",
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 12.sp,
+                                    lineHeight = 22.sp,
+                                    color = Color(0xFF8B949E).copy(alpha = 0.5f)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = highlightedText,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 13.sp,
+                        lineHeight = 22.sp,
+                        softWrap = false
+                    )
+                }
             }
         }
     }
@@ -140,12 +159,24 @@ private fun highlightSyntax(code: String, language: String): AnnotatedString {
         "catch", "finally", "throw", "null", "true", "false", "this", "super",
         "def", "async", "await", "fn", "let", "mut", "pub", "struct", "enum",
         "impl", "match", "const", "static", "void", "int", "char", "float",
-        "double", "bool", "typedef", "sizeof", "include", "define", "pragma"
+        "double", "bool", "typedef", "sizeof", "include", "define", "pragma",
+        "elif", "except", "with", "yield", "lambda", "pass", "from", "global",
+        "function", "typeof", "instanceof", "new", "delete", "switch", "case",
+        "default", "break", "continue", "goto", "trait", "type", "where",
+        // SQL keywords (lowercase)
+        "select", "from", "where", "insert", "update", "delete", "join", "inner",
+        "left", "right", "group", "by", "order", "having", "limit", "create",
+        "table", "drop", "alter", "primary", "key", "distinct", "union",
+        // SQL keywords (uppercase)
+        "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "JOIN", "INNER",
+        "LEFT", "RIGHT", "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "CREATE",
+        "TABLE", "DROP", "ALTER", "PRIMARY", "KEY", "DISTINCT", "UNION"
     )
 
     val types = setOf(
         "Int", "Long", "Float", "Double", "Boolean", "String", "List", "Map", "Set",
-        "Flow", "CoroutineScope", "Result", "Unit", "Any", "Array", "Byte", "Short"
+        "Flow", "CoroutineScope", "Result", "Unit", "Any", "Array", "Byte", "Short",
+        "Vec", "Option", "Some", "None", "Ok", "Err", "Box", "Rc", "Arc", "Promise"
     )
 
     return buildAnnotatedString {

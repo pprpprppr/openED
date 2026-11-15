@@ -136,6 +136,71 @@ class MarkdownRendererTest {
         }
     }
 
+    @Test
+    fun testMathCodeFenceParsedAsMathNode() {
+        val markdown = """
+            ```math
+            \int_{0}^{1} x^2 dx = \frac{1}{3}
+            ```
+        """.trimIndent()
+        val nodes = parseMarkdown(markdown)
+        assertEquals(1, nodes.size)
+        assertTrue("Node should be Math", nodes.first() is MarkdownNode.Math)
+        val mathNode = nodes.first() as MarkdownNode.Math
+        assertTrue("Math expression should contain integral", mathNode.expression.contains("\\int"))
+        assertTrue("Math block should be closed", mathNode.isComplete)
+    }
+
+    @Test
+    fun testLatexEnvironmentParsedAsMathNode() {
+        val markdown = """
+            \begin{equation}
+            E = mc^2
+            \end{equation}
+        """.trimIndent()
+        val nodes = parseMarkdown(markdown)
+        assertEquals(1, nodes.size)
+        assertTrue("Node should be Math", nodes.first() is MarkdownNode.Math)
+        val mathNode = nodes.first() as MarkdownNode.Math
+        assertTrue("Expression should contain equation", mathNode.expression.contains("E = mc^2"))
+        assertTrue("Block should be complete", mathNode.isComplete)
+    }
+
+    @Test
+    fun testTaskListItemsParsedCorrectly() {
+        val markdown = """
+            - [ ] Task incomplete
+            - [x] Task complete
+            * [X] Task also complete
+        """.trimIndent()
+        val nodes = parseMarkdown(markdown)
+        assertEquals(3, nodes.size)
+        assertTrue(nodes[0] is MarkdownNode.TaskItem)
+        assertEquals(false, (nodes[0] as MarkdownNode.TaskItem).checked)
+        assertEquals("Task incomplete", (nodes[0] as MarkdownNode.TaskItem).text)
+
+        assertTrue(nodes[1] is MarkdownNode.TaskItem)
+        assertEquals(true, (nodes[1] as MarkdownNode.TaskItem).checked)
+        assertEquals("Task complete", (nodes[1] as MarkdownNode.TaskItem).text)
+
+        assertTrue(nodes[2] is MarkdownNode.TaskItem)
+        assertEquals(true, (nodes[2] as MarkdownNode.TaskItem).checked)
+        assertEquals("Task also complete", (nodes[2] as MarkdownNode.TaskItem).text)
+    }
+
+    @Test
+    fun testParagraphWithDisplayMathSplitsCorrectly() {
+        val markdown = "Before the equation \$\$E = mc^2\$\$ after the equation."
+        val nodes = parseMarkdown(markdown)
+        assertEquals(3, nodes.size)
+        assertTrue("First node should be Paragraph", nodes[0] is MarkdownNode.Paragraph)
+        assertEquals("Before the equation", (nodes[0] as MarkdownNode.Paragraph).text)
+        assertTrue("Second node should be Math", nodes[1] is MarkdownNode.Math)
+        assertEquals("E = mc^2", (nodes[1] as MarkdownNode.Math).expression)
+        assertTrue("Third node should be Paragraph", nodes[2] is MarkdownNode.Paragraph)
+        assertEquals("after the equation.", (nodes[2] as MarkdownNode.Paragraph).text)
+    }
+
     @Test(timeout = 2000L)
     fun testParseMarkdownPerformanceOn10000CharHalfStreamedWithUnclosedBraces() {
         val sb = StringBuilder()

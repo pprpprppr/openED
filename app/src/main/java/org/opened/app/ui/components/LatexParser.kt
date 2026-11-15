@@ -1,7 +1,7 @@
 package org.opened.app.ui.components
 
 sealed class Math2DNode {
-    data class Text(val content: String) : Math2DNode()
+    data class Text(val content: String, val isVariable: Boolean = false) : Math2DNode()
     data class Matrix(
         val rows: List<List<Math2DNode>>,
         val bracketType: BracketType = BracketType.SQUARE
@@ -17,7 +17,33 @@ sealed class Math2DNode {
         val expression: Math2DNode? = null
     ) : Math2DNode()
     data class Sqrt(
-        val inner: Math2DNode
+        val inner: Math2DNode,
+        val rootIndex: Math2DNode? = null
+    ) : Math2DNode()
+    data class Power(
+        val base: Math2DNode,
+        val exponent: Math2DNode
+    ) : Math2DNode()
+    data class Subscript(
+        val base: Math2DNode,
+        val subscript: Math2DNode
+    ) : Math2DNode()
+    data class SubSup(
+        val base: Math2DNode,
+        val subscript: Math2DNode,
+        val superscript: Math2DNode
+    ) : Math2DNode()
+    data class Delimited(
+        val leftDelim: String,
+        val content: Math2DNode,
+        val rightDelim: String
+    ) : Math2DNode()
+    data class Binomial(
+        val top: Math2DNode,
+        val bottom: Math2DNode
+    ) : Math2DNode()
+    data class AlignedEquations(
+        val lines: List<List<Math2DNode>>
     ) : Math2DNode()
     data class Row(
         val children: List<Math2DNode>
@@ -64,11 +90,21 @@ object LatexParser {
     private val CHEM_DIGITS_REGEX = Regex("""([A-Za-z\)])([0-9]+)""")
 
     private val INLINE_MATRIX_REGEX = Regex("""\\begin\{(bmatrix|pmatrix|matrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
-    private val DISPLAY_MATRIX_REGEX = Regex("""\\begin\{(bmatrix|pmatrix|vmatrix|matrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
-    private val BIG_OP_REGEX = Regex("""\\(sum|prod|int|lim)(?:_\{?([^{}\n^]+)\}?)?(?:\^\{?([^{}\n_]+)\}?)?""")
+    private val DISPLAY_MATRIX_REGEX = Regex("""\\begin\{(bmatrix|pmatrix|vmatrix|matrix|Bmatrix|Vmatrix)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
+    private val ALIGNED_ENV_REGEX = Regex("""\\begin\{(aligned|align\*?|gather\*?|multline\*?)\}(.*?)\\end\{\1\}""", RegexOption.DOT_MATCHES_ALL)
+    private val BINOM_REGEX = Regex("""\\binom\{([^{}]+)\}\{([^{}]+)\}""")
+    private val FRAC_COMMAND_REGEX = Regex("""\\(?:frac|dfrac|tfrac)\{([^{}]+)\}\{([^{}]+)\}""")
+    private val SQRT_COMMAND_REGEX = Regex("""\\sqrt(?:\[([^\]]+)\])?\{([^{}]+)\}""")
+    private val DELIMITED_REGEX = Regex("""\\left([\(\[\{|\|])(.*?)\\right([\)\]\}|\|])""")
+    private val SUB_SUP_REGEX = Regex("""([a-zA-Z0-9\)\]\}]+)_\{([^{}]+)\}\^\{([^{}]+)\}""")
+    private val SUP_SUB_REGEX = Regex("""([a-zA-Z0-9\)\]\}]+)\^\{([^{}]+)\}_\{([^{}]+)\}""")
+    private val POWER_REGEX = Regex("""([a-zA-Z0-9\)\]\}]+)(?:\^\{([^{}]+)\}|\^([0-9a-zA-Z•●·]))""")
+    private val SUBSCRIPT_REGEX = Regex("""([a-zA-Z0-9\)\]\}]+)(?:_\{([^{}]+)\}|_([0-9a-zA-Z]))""")
+    private val BIG_OP_REGEX = Regex("""\\(sum|prod|coprod|int|iint|iiint|oint|lim)(?:_\{?([^{}\n^]+)\}?)?(?:\^\{?([^{}\n_]+)\}?)?""")
 
-    private val SPOKEN_FRAC_REGEX = Regex("""\\frac\{([^}]+)\}\{([^}]+)\}""")
-    private val SPOKEN_SQRT_REGEX = Regex("""\\sqrt\{([^}]+)\}""")
+    private val SPOKEN_FRAC_REGEX = Regex("""\\(?:frac|dfrac|tfrac)\{([^}]+)\}\{([^}]+)\}""")
+    private val SPOKEN_BINOM_REGEX = Regex("""\\binom\{([^}]+)\}\{([^}]+)\}""")
+    private val SPOKEN_SQRT_REGEX = Regex("""\\sqrt(?:\[([^\]]+)\])?\{([^}]+)\}""")
     private val SPOKEN_SUM_REGEX = Regex("""\\sum_\{([^}]+)\}\^\{([^}]+)\}""")
     private val SPOKEN_INT_REGEX = Regex("""\\int_\{([^}]+)\}\^\{([^}]+)\}""")
     private val SPOKEN_POW2_REGEX = Regex("""\^2\b""")
@@ -442,6 +478,12 @@ object LatexParser {
      * Parses a display math LaTeX string into a 2D structured AST for Compose rendering.
      */
     fun parseDisplayMath(raw: String): Math2DNode {
+        return parseDisplayMathInternal(raw, depth = 0)
+    }
+
+    private fun parseDisplayMathInternal(raw: String, depth: Int): Math2DNode {
+        if (depth > 20) return Math2DNode.Text(cleanInlineLatex(raw))
+
         val clean = raw.trim()
             .removePrefix("$$").removeSuffix("$$")
             .removePrefix("\\[").removeSuffix("\\]")
@@ -450,20 +492,41 @@ object LatexParser {
 
         if (clean.isBlank()) return Math2DNode.Text("")
 
-        // Check for standalone or embedded matrix
+        // 1. Aligned equations environment \begin{aligned} ... \end{aligned} or \begin{align*} ... \end{align*}
+        val alignedMatch = ALIGNED_ENV_REGEX.find(clean)
+        if (alignedMatch != null) {
+            val content = alignedMatch.groupValues[2].trim()
+            val rawLines = content.split("\\\\").map { it.trim() }.filter { it.isNotEmpty() }
+            val lines = rawLines.map { line ->
+                line.split("&").map { cell ->
+                    parseDisplayMathInternal(cell.trim(), depth + 1)
+                }
+            }
+            val alignedNode = Math2DNode.AlignedEquations(lines)
+            val prefix = clean.substring(0, alignedMatch.range.first).trim()
+            val suffix = clean.substring(alignedMatch.range.last + 1).trim()
+            if (prefix.isEmpty() && suffix.isEmpty()) return alignedNode
+            val nodes = mutableListOf<Math2DNode>()
+            if (prefix.isNotEmpty() && prefix != clean) nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            nodes.add(alignedNode)
+            if (suffix.isNotEmpty() && suffix != clean) nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 2. Standalone or embedded matrix
         val matrixMatch = DISPLAY_MATRIX_REGEX.find(clean)
         if (matrixMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, matrixMatch.range.first).trim()
             if (prefix.isNotEmpty() && prefix != clean) {
-                nodes.add(parseDisplayMath(prefix))
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
             }
 
             val typeStr = matrixMatch.groupValues[1]
             val bracketType = when (typeStr) {
-                "bmatrix" -> BracketType.SQUARE
+                "bmatrix", "Bmatrix" -> BracketType.SQUARE
                 "pmatrix" -> BracketType.ROUND
-                "vmatrix" -> BracketType.DETERMINANT
+                "vmatrix", "Vmatrix" -> BracketType.DETERMINANT
                 else -> BracketType.SQUARE
             }
 
@@ -471,7 +534,7 @@ object LatexParser {
             val rawRows = matrixContent.split("\\\\").map { it.trim() }.filter { it.isNotEmpty() }
             val rows = rawRows.map { row ->
                 val cols = row.split("&").map { col ->
-                    parseDisplayMath(col.trim())
+                    parseDisplayMathInternal(col.trim(), depth + 1)
                 }
                 cols
             }
@@ -479,72 +542,105 @@ object LatexParser {
 
             val suffix = clean.substring(matrixMatch.range.last + 1).trim()
             if (suffix.isNotEmpty() && suffix != clean) {
-                nodes.add(parseDisplayMath(suffix))
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
             }
 
             return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
         }
 
-        // Check for stacked fraction \frac{numerator}{denominator}
-        val fracMatch = FRAC_REGEX.find(clean)
+        // 3. Binomial coefficient \binom{n}{k}
+        val binomMatch = BINOM_REGEX.find(clean)
+        if (binomMatch != null) {
+            val nodes = mutableListOf<Math2DNode>()
+            val prefix = clean.substring(0, binomMatch.range.first).trim()
+            if (prefix.isNotEmpty() && prefix != clean) {
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            }
+            val n = binomMatch.groupValues[1].trim()
+            val k = binomMatch.groupValues[2].trim()
+            nodes.add(
+                Math2DNode.Binomial(
+                    top = parseDisplayMathInternal(n, depth + 1),
+                    bottom = parseDisplayMathInternal(k, depth + 1)
+                )
+            )
+            val suffix = clean.substring(binomMatch.range.last + 1).trim()
+            if (suffix.isNotEmpty() && suffix != clean) {
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            }
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 4. Fractions \frac{num}{den}, \dfrac{num}{den}, \tfrac{num}{den}
+        val fracMatch = FRAC_COMMAND_REGEX.find(clean)
         if (fracMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, fracMatch.range.first).trim()
             if (prefix.isNotEmpty() && prefix != clean) {
-                nodes.add(parseDisplayMath(prefix))
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
             }
 
             val num = fracMatch.groupValues[1]
             val den = fracMatch.groupValues[2]
             nodes.add(
                 Math2DNode.Fraction(
-                    numerator = parseDisplayMath(num),
-                    denominator = parseDisplayMath(den)
+                    numerator = parseDisplayMathInternal(num, depth + 1),
+                    denominator = parseDisplayMathInternal(den, depth + 1)
                 )
             )
 
             val suffix = clean.substring(fracMatch.range.last + 1).trim()
             if (suffix.isNotEmpty() && suffix != clean) {
-                nodes.add(parseDisplayMath(suffix))
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
             }
 
             return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
         }
 
-        // Check for square root \sqrt{inner}
-        val sqrtMatch = SQRT_REGEX.find(clean)
+        // 5. Square Root / N-th Root \sqrt{inner} or \sqrt[n]{inner}
+        val sqrtMatch = SQRT_COMMAND_REGEX.find(clean)
         if (sqrtMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, sqrtMatch.range.first).trim()
             if (prefix.isNotEmpty() && prefix != clean) {
-                nodes.add(parseDisplayMath(prefix))
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
             }
 
-            val inner = sqrtMatch.groupValues[1]
-            nodes.add(Math2DNode.Sqrt(inner = parseDisplayMath(inner)))
+            val rootIdxStr = sqrtMatch.groupValues.getOrNull(1)?.trim()?.ifBlank { null }
+            val inner = sqrtMatch.groupValues[2]
+            nodes.add(
+                Math2DNode.Sqrt(
+                    inner = parseDisplayMathInternal(inner, depth + 1),
+                    rootIndex = rootIdxStr?.let { parseDisplayMathInternal(it, depth + 1) }
+                )
+            )
 
             val suffix = clean.substring(sqrtMatch.range.last + 1).trim()
             if (suffix.isNotEmpty() && suffix != clean) {
-                nodes.add(parseDisplayMath(suffix))
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
             }
 
             return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
         }
 
-        // Check for Summations, Products, Integrals \sum_{lower}^{upper} or \int_{lower}^{upper}
+        // 6. Big Operators (\sum, \prod, \int, \iint, \iiint, \oint, \lim, \coprod)
         val opMatch = BIG_OP_REGEX.find(clean)
         if (opMatch != null) {
             val nodes = mutableListOf<Math2DNode>()
             val prefix = clean.substring(0, opMatch.range.first).trim()
             if (prefix.isNotEmpty() && prefix != clean) {
-                nodes.add(parseDisplayMath(prefix))
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
             }
 
             val opType = opMatch.groupValues[1]
             val opSymbol = when (opType) {
                 "sum" -> "∑"
                 "prod" -> "∏"
+                "coprod" -> "∐"
                 "int" -> "∫"
+                "iint" -> "∬"
+                "iiint" -> "∭"
+                "oint" -> "∮"
                 "lim" -> "lim"
                 else -> opType
             }
@@ -552,7 +648,7 @@ object LatexParser {
             val upper = opMatch.groupValues.getOrNull(3)?.trim()?.ifBlank { null }?.let { cleanInlineLatex(it) }
 
             val suffix = clean.substring(opMatch.range.last + 1).trim()
-            val exprNode = if (suffix.isNotEmpty() && suffix != clean) parseDisplayMath(suffix) else null
+            val exprNode = if (suffix.isNotEmpty() && suffix != clean) parseDisplayMathInternal(suffix, depth + 1) else null
 
             nodes.add(
                 Math2DNode.BigOp(
@@ -564,6 +660,132 @@ object LatexParser {
             )
 
             return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 7. Delimited expressions: \left( ... \right) etc.
+        val delimMatch = DELIMITED_REGEX.find(clean)
+        if (delimMatch != null) {
+            val nodes = mutableListOf<Math2DNode>()
+            val prefix = clean.substring(0, delimMatch.range.first).trim()
+            if (prefix.isNotEmpty() && prefix != clean) {
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            }
+            val left = delimMatch.groupValues[1]
+            val inner = delimMatch.groupValues[2]
+            val right = delimMatch.groupValues[3]
+            nodes.add(
+                Math2DNode.Delimited(
+                    leftDelim = left,
+                    content = parseDisplayMathInternal(inner, depth + 1),
+                    rightDelim = right
+                )
+            )
+            val suffix = clean.substring(delimMatch.range.last + 1).trim()
+            if (suffix.isNotEmpty() && suffix != clean) {
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            }
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 8. Subscript + Superscript combined: base_{sub}^{sup} or base^{sup}_{sub}
+        val subSupMatch = SUB_SUP_REGEX.find(clean)
+        if (subSupMatch != null) {
+            val nodes = mutableListOf<Math2DNode>()
+            val prefix = clean.substring(0, subSupMatch.range.first).trim()
+            if (prefix.isNotEmpty() && prefix != clean) {
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            }
+            val base = subSupMatch.groupValues[1]
+            val sub = subSupMatch.groupValues[2]
+            val sup = subSupMatch.groupValues[3]
+            nodes.add(
+                Math2DNode.SubSup(
+                    base = parseDisplayMathInternal(base, depth + 1),
+                    subscript = parseDisplayMathInternal(sub, depth + 1),
+                    superscript = parseDisplayMathInternal(sup, depth + 1)
+                )
+            )
+            val suffix = clean.substring(subSupMatch.range.last + 1).trim()
+            if (suffix.isNotEmpty() && suffix != clean) {
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            }
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        val supSubMatch = SUP_SUB_REGEX.find(clean)
+        if (supSubMatch != null) {
+            val nodes = mutableListOf<Math2DNode>()
+            val prefix = clean.substring(0, supSubMatch.range.first).trim()
+            if (prefix.isNotEmpty() && prefix != clean) {
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            }
+            val base = supSubMatch.groupValues[1]
+            val sup = supSubMatch.groupValues[2]
+            val sub = supSubMatch.groupValues[3]
+            nodes.add(
+                Math2DNode.SubSup(
+                    base = parseDisplayMathInternal(base, depth + 1),
+                    subscript = parseDisplayMathInternal(sub, depth + 1),
+                    superscript = parseDisplayMathInternal(sup, depth + 1)
+                )
+            )
+            val suffix = clean.substring(supSubMatch.range.last + 1).trim()
+            if (suffix.isNotEmpty() && suffix != clean) {
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            }
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 9. Standalone Power: base^{exp} or base^x
+        val powerMatch = POWER_REGEX.find(clean)
+        if (powerMatch != null) {
+            val nodes = mutableListOf<Math2DNode>()
+            val prefix = clean.substring(0, powerMatch.range.first).trim()
+            if (prefix.isNotEmpty() && prefix != clean) {
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            }
+            val base = powerMatch.groupValues[1]
+            val exp = powerMatch.groupValues[2].ifBlank { powerMatch.groupValues.getOrNull(3).orEmpty() }
+            nodes.add(
+                Math2DNode.Power(
+                    base = parseDisplayMathInternal(base, depth + 1),
+                    exponent = parseDisplayMathInternal(exp, depth + 1)
+                )
+            )
+            val suffix = clean.substring(powerMatch.range.last + 1).trim()
+            if (suffix.isNotEmpty() && suffix != clean) {
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            }
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 10. Standalone Subscript: base_{sub} or base_i
+        val subMatch = SUBSCRIPT_REGEX.find(clean)
+        if (subMatch != null) {
+            val nodes = mutableListOf<Math2DNode>()
+            val prefix = clean.substring(0, subMatch.range.first).trim()
+            if (prefix.isNotEmpty() && prefix != clean) {
+                nodes.add(parseDisplayMathInternal(prefix, depth + 1))
+            }
+            val base = subMatch.groupValues[1]
+            val sub = subMatch.groupValues[2].ifBlank { subMatch.groupValues.getOrNull(3).orEmpty() }
+            nodes.add(
+                Math2DNode.Subscript(
+                    base = parseDisplayMathInternal(base, depth + 1),
+                    subscript = parseDisplayMathInternal(sub, depth + 1)
+                )
+            )
+            val suffix = clean.substring(subMatch.range.last + 1).trim()
+            if (suffix.isNotEmpty() && suffix != clean) {
+                nodes.add(parseDisplayMathInternal(suffix, depth + 1))
+            }
+            return if (nodes.size == 1) nodes.first() else Math2DNode.Row(nodes)
+        }
+
+        // 11. Chemistry notation \ce{...}
+        if (clean.startsWith("\\ce{") && clean.endsWith("}")) {
+            val formula = clean.removePrefix("\\ce{").removeSuffix("}").trim()
+            return Math2DNode.Text(cleanChemistryFormula(formula))
         }
 
         return Math2DNode.Text(cleanInlineLatex(clean))
@@ -581,7 +803,11 @@ object LatexParser {
             .trim()
 
         spoken = SPOKEN_FRAC_REGEX.replace(spoken) { "fraction with numerator ${it.groupValues[1]} over denominator ${it.groupValues[2]}" }
-        spoken = SPOKEN_SQRT_REGEX.replace(spoken) { "square root of ${it.groupValues[1]}" }
+        spoken = SPOKEN_BINOM_REGEX.replace(spoken) { "binomial coefficient ${it.groupValues[1]} choose ${it.groupValues[2]}" }
+        spoken = SPOKEN_SQRT_REGEX.replace(spoken) {
+            val idx = it.groupValues.getOrNull(1)?.ifBlank { null }
+            if (idx != null) "$idx root of ${it.groupValues[2]}" else "square root of ${it.groupValues[2]}"
+        }
         spoken = SPOKEN_SUM_REGEX.replace(spoken) { "summation from ${it.groupValues[1]} to ${it.groupValues[2]} of " }
         spoken = SPOKEN_INT_REGEX.replace(spoken) { "integral from ${it.groupValues[1]} to ${it.groupValues[2]} of " }
         spoken = SPOKEN_POW2_REGEX.replace(spoken, " squared")
@@ -607,6 +833,11 @@ object LatexParser {
                 "\\pm" -> "plus or minus"
                 "\\partial" -> "partial derivative"
                 "\\Delta" -> "delta"
+                "\\hbar" -> "h-bar"
+                "\\int" -> "integral of"
+                "\\sum" -> "sum of"
+                "\\prod" -> "product of"
+                "\\lim" -> "limit of"
                 else -> match.value.removePrefix("\\")
             }
         }

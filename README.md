@@ -2,7 +2,7 @@
 > **Personal, Local-First, AI-Powered Self-Learning & Knowledge-Graph Studio**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.3.0-green.svg)](https://github.com/pprpprppr/openED/releases/tag/v1.3.0)
+[![Release](https://img.shields.io/badge/Release-v1.4.0-green.svg)](https://github.com/pprpprppr/openED/releases/tag/v1.4.0)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-purple.svg)](https://kotlinlang.org/)
 [![Android SDK](https://img.shields.io/badge/Target_SDK-36_(Android_16)-3DDC84.svg)](https://developer.android.com/about/versions/16)
 [![Jetpack Compose](https://img.shields.io/badge/Compose-Material_3-brightgreen.svg)](https://developer.android.com/jetpack/compose)
@@ -42,16 +42,21 @@
 - **Full Version Control:** Every mutation archives a snapshot to `ChapterRevisionEntity`, enabling complete rollback and revision auditing.
 - **Socratic Q&A Assistant:** Ask follow-up questions anchored to the active chapter; tap a single button to append the explanation as a GitHub-style callout block (`> [!NOTE]`) directly into the lesson content.
 
-### 5. 📊 True 2D Math, Chemistry, Diagrams & Benchmark Charts
-- **True 2D Mathematical Rendering:** Renders 2D Matrix Grids (`\begin{bmatrix}`, `\begin{pmatrix}`) with bracket borders, stacked fractions with center dividers, summations/integrals (`∑`, `∏`, `∫`) with upper/lower limits, and radical square roots.
-- **Chemistry & Advanced Symbols:** Full Unicode mapping for chemical reaction arrows (`\longrightarrow` $\rightarrow$ $\longrightarrow$, `\rightleftharpoons`), radical intermediates (`NO^\bullet` $\rightarrow$ $\text{NO}^\bullet$), inline formulas (`$BH_4$` $\rightarrow$ $\text{BH}_4$), and highlighted boxes (`\boxed{A}`).
+### 5. 📊 ChatGPT/Gemini/Claude-Grade AI Output Render Engine
+- **Rich 2D Mathematical & Scientific Rendering:**
+  - **Comprehensive 2D Math AST:** True 2D rendering for stacked fractions (`\frac`, `\dfrac`, `\tfrac`), binomial coefficients (`\binom{n}{k}`), radicals and n-th roots (`\sqrt[n]{x}`), elevated powers (`x^2`, `e^{-x^2/2}`), lowered subscripts (`x_i`, `H_2O`), and vertically aligned sub-superscripts (`x_i^2`, `A_{ij}^T`).
+  - **LaTeX Math Environments & Code Fences:** Seamlessly parses `\begin{aligned}`, `\begin{align*}`, `\begin{gather}`, `\begin{equation}`, and ` ```math ` / ` ```latex ` blocks without rendering them as raw uninterpreted text.
+  - **Inline Math Typography:** KaTeX-style italic serif typography for variables, upright digits/operators, and clean symbol replacements (`\alpha`, `\beta`, `\gamma`, `\nabla`, `\partial`, `\hbar`, `\approx`, `\le`, `\ge`, `\pm`, `\times`, `\in`, `\forall`, `\exists`, `\implies`, `\mathbb{R,N,Z,Q,C}`).
+  - **Domain Smart Badges & Actions:** Automatically categorizes equations as *Mathematical Formulation*, *Chemical Notation*, *Linear Algebra*, or *Calculus & Analysis*, with one-tap **Copy LaTeX** to clipboard, **Copy Plain Text**, and **View LaTeX Source** toggle.
+- **Chemistry & Advanced Reaction Notations:** Full support for `\ce{...}` chemical formulas, reaction arrows (`→`, `⇌`, `↔`), radical intermediates (`•`), multi-digit subscripts (`C₆H₁₂O₆`), and ionic charges (`Ca²⁺`, `SO₄²⁻`).
+- **Interactive Checklists & Task Lists:** First-class rendering of `- [ ]` and `- [x]` checklist items with styled Material 3 checkboxes and line-through completion styling.
+- **GFM Formatting:** Strikethrough (`~~text~~`), underline (`<u>text</u>`), inline code pills, and embedded display formula splitting.
 - **Infinite-Loop Guarded Parsers:** `LatexParser` and `WikiLinkHandler` feature pre-compiled regex caches, 25-iteration maximum bounds, and identity break guards.
-- **Unicode Sets & Accented Vectors:** Converts `\mathbb{R,N,Z,Q,C}` to Unicode (`ℝ`, `ℕ`, `ℤ`, `ℚ`, `ℂ`), `\hat{i}, \hat{j}, \vec{v}` to accented characters (`î`, `ĵ`, `v⃗`), and inline matrices to vector transpose notation (`[a, b]ᵀ`).
 - **Interactive Visual Architecture Diagrams:** Parses ` ```diagram ` / ` ```mermaid ` into pan/zoomable Compose Canvas node-and-arrow diagrams with rounded cards and directional arrowheads.
 - **2D Coordinate & Benchmark Plots:** Parses ` ```chart ` / ` ```plot ` into 2D Cartesian vector plots and performance benchmark comparison bars.
 - **Material 3 Markdown Tables:** Styled table cards with alternating row colors and horizontal scrolling.
-- **Unclipped Code Syntax Highlighting:** Dark card presentation with language tags, horizontal scrolling that never clips indentation, and one-tap copy-to-clipboard functionality.
-- **GitHub-Style Alerts:** Native rendering for callout alerts: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, and `[!CAUTION]`.
+- **Unclipped Code Syntax Highlighting with Line Numbers:** Dark card presentation with language tags, line numbers gutter, keywords for Kotlin, Java, Python, C/C++, Rust, Go, JS/TS, SQL, Bash, and one-tap copy-to-clipboard functionality.
+- **GitHub-Style Alerts:** Native rendering for callout alerts: `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`, `[!INFO]`, `[!EXAMPLE]`, `[!QUESTION]`.
 
 ### 6. 🔍 Offline Instant Full-Text Search
 - Instantaneous search across all study paths, modules, chapters, revision histories, and Socratic Q&A threads.

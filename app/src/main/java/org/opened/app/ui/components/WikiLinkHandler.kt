@@ -25,7 +25,7 @@ const val TAG_URL_LINK = "TAG_URL_LINK"
 
 // Pre-compiled token regex for high-performance interactive parsing
 private val TOKEN_REGEX = Regex(
-    """(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\n]+?)\$)|(\*\*(.*?)\*\*)|(\*(.*?)\*)"""
+    """(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\s\n](?:[^\$\n]*?[^\$\s\n])?)\$)|(~~(.*?)~~)|(<u>(.*?)</u>)|(\*\*(.*?)\*\*)|(\*(.*?)\*)"""
 )
 
 @Composable
@@ -134,11 +134,11 @@ fun buildInteractiveAnnotatedString(
 
                 // `inline code`
                 fullMatch.startsWith("`") && fullMatch.endsWith("`") -> {
-                    val code = match.groupValues[7]
+                    val code = fullMatch.removePrefix("`").removeSuffix("`")
                     pushStyle(
                         SpanStyle(
                             fontFamily = FontFamily.Monospace,
-                            background = Color(0x33888888),
+                            background = Color(0x22888888),
                             color = Color(0xFFF43F5E),
                             fontSize = 13.sp
                         )
@@ -149,14 +149,15 @@ fun buildInteractiveAnnotatedString(
 
                 // \(inline math\)
                 fullMatch.startsWith("\\(") && fullMatch.endsWith("\\)") && fullMatch.length > 4 -> {
-                    val mathExpr = match.groupValues[9]
+                    val mathExpr = fullMatch.removePrefix("\\(").removeSuffix("\\)")
                     val formatted = LatexParser.cleanInlineLatex(mathExpr)
                     pushStyle(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
+                            fontFamily = FontFamily.Serif,
                             color = Color(0xFF818CF8),
                             fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp
+                            fontSize = 16.sp
                         )
                     )
                     append(formatted)
@@ -165,14 +166,15 @@ fun buildInteractiveAnnotatedString(
 
                 // \[display math\]
                 fullMatch.startsWith("\\[") && fullMatch.endsWith("\\]") && fullMatch.length > 4 -> {
-                    val mathExpr = match.groupValues[11]
+                    val mathExpr = fullMatch.removePrefix("\\[").removeSuffix("\\]")
                     val formatted = LatexParser.cleanInlineLatex(mathExpr)
                     pushStyle(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
+                            fontFamily = FontFamily.Serif,
                             color = Color(0xFF818CF8),
                             fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp
+                            fontSize = 16.sp
                         )
                     )
                     append(formatted)
@@ -181,23 +183,40 @@ fun buildInteractiveAnnotatedString(
 
                 // $inline math$
                 fullMatch.startsWith("$") && fullMatch.endsWith("$") && fullMatch.length > 2 -> {
-                    val mathExpr = match.groupValues[13]
+                    val mathExpr = fullMatch.removePrefix("$").removeSuffix("$")
                     val formatted = LatexParser.cleanInlineLatex(mathExpr)
                     pushStyle(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
+                            fontFamily = FontFamily.Serif,
                             color = Color(0xFF818CF8),
                             fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp
+                            fontSize = 16.sp
                         )
                     )
                     append(formatted)
                     pop()
                 }
 
+                // ~~strikethrough~~
+                fullMatch.startsWith("~~") && fullMatch.endsWith("~~") && fullMatch.length >= 4 -> {
+                    val strikeText = fullMatch.removePrefix("~~").removeSuffix("~~")
+                    pushStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+                    append(strikeText)
+                    pop()
+                }
+
+                // <u>underline</u>
+                fullMatch.startsWith("<u>") && fullMatch.endsWith("</u>") && fullMatch.length >= 7 -> {
+                    val underlineText = fullMatch.removePrefix("<u>").removeSuffix("</u>")
+                    pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+                    append(underlineText)
+                    pop()
+                }
+
                 // **bold**
                 fullMatch.startsWith("**") && fullMatch.endsWith("**") -> {
-                    val boldText = match.groupValues[15]
+                    val boldText = fullMatch.removePrefix("**").removeSuffix("**")
                     pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
                     append(boldText)
                     pop()
@@ -205,7 +224,7 @@ fun buildInteractiveAnnotatedString(
 
                 // *italic*
                 fullMatch.startsWith("*") && fullMatch.endsWith("*") -> {
-                    val italicText = match.groupValues[17]
+                    val italicText = fullMatch.removePrefix("*").removeSuffix("*")
                     pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
                     append(italicText)
                     pop()
