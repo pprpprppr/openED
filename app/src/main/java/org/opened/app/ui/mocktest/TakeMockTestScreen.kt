@@ -30,11 +30,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.OutlinedFlag
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -173,6 +175,37 @@ fun TakeMockTestScreen(
             val question = uiState.currentQuestion
 
             when {
+                uiState.isGeneratingQuestions -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(48.dp), strokeWidth = 3.dp)
+                                Text(
+                                    text = "Generating Exam Questions...",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = uiState.generationProgressText.ifBlank { "Synthesizing authentic questions, latex formulas, and detailed solutions..." },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
+
                 uiState.isLoading && question == null && uiState.errorMessage == null -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(
@@ -208,28 +241,42 @@ fun TakeMockTestScreen(
                             Column(
                                 modifier = Modifier.padding(24.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Close,
+                                    imageVector = Icons.Default.AutoAwesome,
                                     contentDescription = null,
                                     modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.error
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    text = "Unable to Start Exam",
+                                    text = "Mock Exam Setup",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = uiState.errorMessage ?: "This mock exam does not contain any questions. Please generate a new mock test.",
+                                    text = uiState.errorMessage ?: "This mock exam has no questions generated yet. Tap below to generate them with AI and begin your exam.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
                                 )
                                 Button(
+                                    onClick = { viewModel.generateMissingQuestions() },
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Generate Questions Now", fontWeight = FontWeight.Bold)
+                                }
+                                OutlinedButton(
                                     onClick = onNavigateBack,
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text("Back to Exam Prep")
                                 }

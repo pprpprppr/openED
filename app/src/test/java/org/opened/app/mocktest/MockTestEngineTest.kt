@@ -6,6 +6,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.JsonRepairer
 import org.opened.app.core.ai.MockTestBatchResponse
 import org.opened.app.core.ai.MockTestQuestionItem
@@ -235,5 +236,60 @@ class MockTestEngineTest {
         val networkingTopic = mastery.firstOrNull { it.topic == "Networking" }
         assertNotNull(networkingTopic)
         assertEquals(100, networkingTopic?.accuracyPercentage) // 2/2 correct
+    }
+
+    @Test
+    fun testParseMockTestBatchFlexible_handlesAlternateKeysAndShapes() {
+        // AI returns "mockTest" key with "choices" and letter answer "B"
+        val rawJson = """
+            {
+              "mockTest": [
+                {
+                  "stem": "What is the primary difference between TCP and UDP?",
+                  "choices": [
+                    "TCP is connectionless",
+                    "TCP provides reliable delivery while UDP is best-effort",
+                    "UDP uses a 3-way handshake",
+                    "TCP has no flow control"
+                  ],
+                  "answer": "B",
+                  "rationale": "TCP provides reliable, ordered byte streams via ACKs and retransmissions."
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val questions = AiLearningEngine.parseMockTestBatchFlexible(rawJson)
+        assertEquals(1, questions.size)
+        val q = questions[0]
+        assertEquals("What is the primary difference between TCP and UDP?", q.question)
+        assertEquals(4, q.options.size)
+        assertEquals(1, q.correctIndex) // 'B' -> index 1
+        assertTrue(q.explanation.contains("TCP provides reliable"))
+    }
+
+    @Test
+    fun testParseMockTestBatchFlexible_handlesRootArray() {
+        val rawJson = """
+            [
+              {
+                "question": "Which AWS service is a managed NoSQL database?",
+                "options": ["RDS", "DynamoDB", "Aurora", "Redshift"],
+                "correctIndex": 1,
+                "explanation": "Amazon DynamoDB is a fully managed NoSQL database service."
+              }
+            ]
+        """.trimIndent()
+
+        val questions = AiLearningEngine.parseMockTestBatchFlexible(rawJson)
+        assertEquals(1, questions.size)
+        assertEquals("DynamoDB", questions[0].options[1])
+        assertEquals(1, questions[0].correctIndex)
+    }
+
+    @Test(expected = IllegalStateException::class)
+    fun testParseMockTestBatchFlexible_emptyThrows() {
+        val rawJson = """{ "questions": [] }"""
+        AiLearningEngine.parseMockTestBatchFlexible(rawJson)
     }
 }

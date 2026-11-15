@@ -8,6 +8,12 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import org.opened.app.core.database.entity.ChapterEntity
 import org.opened.app.core.database.entity.ChapterQaEntity
 import org.opened.app.core.database.entity.ChapterRevisionEntity
@@ -708,16 +714,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
             )
             val cleaned = cleanJsonOutput(raw)
-            val questions = try {
-                json.decodeFromString(MockTestBatchResponse.serializer(), cleaned).questions
-            } catch (e: Exception) {
-                try {
-                    json.decodeFromString<List<MockTestQuestionItem>>(cleaned)
-                } catch (_: Exception) {
-                    throw e
-                }
-            }
-            questions
+            parseMockTestBatchFlexible(cleaned)
         }
     }
 
@@ -732,11 +729,10 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
         onProgress: suspend (currentBatch: Int, totalBatches: Int, questionsGenerated: Int) -> Unit = { _, _, _ -> }
     ): Result<MockTestEntity> = withContext(Dispatchers.IO) {
         runCatching {
-            val pathWithModules = requireNotNull(repository.getStudyPathWithModules(pathId)) {
-                "Course not found for pathId: $pathId"
-            }
-            val course = pathWithModules.studyPath
-            val modulesWithChapters = pathWithModules.modules
+            val pathWithModules = repository.getStudyPathWithModules(pathId)
+            val courseTitle = pathWithModules?.studyPath?.title ?: title
+            val courseTopic = pathWithModules?.studyPath?.topic ?: targetExamName.ifBlank { title }
+            val modulesWithChapters = pathWithModules?.modules ?: emptyList()
 
             // Collect all topics/chapters for syllabus distribution
             val topicList = mutableListOf<String>()
@@ -746,7 +742,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 topicList.add("Module: ${mod.title} (Chapters: $chapTitles)")
             }
             if (topicList.isEmpty()) {
-                topicList.add("Core Syllabus & Domain Topics: ${course.title} (${course.topic})")
+                topicList.add("Core Syllabus & Domain Topics: $courseTitle ($courseTopic)")
             }
 
             // Calculate batches: batch size 10 questions (or smaller if totalQuestions <= 10)
@@ -765,7 +761,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
 
                 // Determine topics slice for this batch
                 val batchTopics = if (topicList.size <= 1) {
-                    val baseTopic = topicList.firstOrNull() ?: "${course.title} (${course.topic})"
+                    val baseTopic = topicList.firstOrNull() ?: "$courseTitle ($courseTopic)"
                     "- $baseTopic (Comprehensive High-Yield Focus - Part ${batchIdx + 1} of $totalBatches)"
                 } else {
                     val startTopicIdx = (batchIdx * topicList.size) / totalBatches
@@ -776,8 +772,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 onProgress(batchIdx + 1, totalBatches, allQuestions.size)
 
                 val batchResult = generateMockTestBatch(
-                    courseTitle = course.title,
-                    courseTopic = course.topic,
+                    courseTitle = courseTitle,
+                    courseTopic = courseTopic,
                     examCategory = examCategory,
                     targetExamName = targetExamName,
                     batchTopicsSummary = batchTopics,
@@ -793,7 +789,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                         id = UUID.randomUUID().toString(),
                         testId = testId,
                         questionIndex = allQuestions.size,
-                        topic = item.topic.ifBlank { "General ${course.topic}" },
+                        topic = item.topic.ifBlank { "General $courseTopic" },
                         questionText = item.question,
                         optionsJson = MockTestQuestionEntity.createOptionsJson(item.options),
                         correctOptionIndex = item.correctIndex.coerceIn(0, (item.options.size - 1).coerceAtLeast(0)),
@@ -806,6 +802,10 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
 
                 currentStartIndex += currentBatchCount
                 remainingQuestions -= currentBatchCount
+            }
+
+            if (allQuestions.isEmpty()) {
+                throw IllegalStateException("Failed to generate questions for this mock test. No questions could be created.")
             }
 
             val finalTimeLimit = if (timeLimitMinutes > 0) {
@@ -837,6 +837,277 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
 
             repository.saveMockTestWithQuestions(finalTestEntity, allQuestions)
             finalTestEntity
+        }
+    }
+
+    suspend fun generateQuestionsForExistingTest(
+        testId: String,
+        onProgress: suspend (currentBatch: Int, totalBatches: Int, questionsGenerated: Int) -> Unit = { _, _, _ -> }
+    ): Result<List<MockTestQuestionEntity>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val test = requireNotNull(repository.getMockTestById(testId)) { "Mock test not found: $testId" }
+            val pathWithModules = repository.getStudyPathWithModules(test.pathId)
+            val courseTitle = pathWithModules?.studyPath?.title ?: test.title
+            val courseTopic = pathWithModules?.studyPath?.topic ?: test.targetExamName.ifBlank { test.title }
+            val modulesWithChapters = pathWithModules?.modules ?: emptyList()
+
+            val topicList = mutableListOf<String>()
+            for (moduleWithChapters in modulesWithChapters) {
+                val mod = moduleWithChapters.module
+                val chapTitles = moduleWithChapters.chapters.joinToString(", ") { it.title }
+                topicList.add("Module: ${mod.title} (Chapters: $chapTitles)")
+            }
+            if (topicList.isEmpty()) {
+                topicList.add("Core Syllabus & Domain Topics: $courseTitle ($courseTopic)")
+            }
+
+            val targetCount = if (test.totalQuestions > 0) test.totalQuestions else 10
+            val batchSize = if (targetCount <= 10) targetCount else 10
+            val totalBatches = ((targetCount + batchSize - 1) / batchSize).coerceAtLeast(1)
+
+            val allQuestions = mutableListOf<MockTestQuestionEntity>()
+            var remainingQuestions = targetCount
+            var currentStartIndex = 1
+
+            for (batchIdx in 0 until totalBatches) {
+                val currentBatchCount = if (remainingQuestions >= batchSize) batchSize else remainingQuestions
+                if (currentBatchCount <= 0) break
+
+                val batchTopics = if (topicList.size <= 1) {
+                    val baseTopic = topicList.firstOrNull() ?: "$courseTitle ($courseTopic)"
+                    "- $baseTopic (Comprehensive High-Yield Focus - Part ${batchIdx + 1} of $totalBatches)"
+                } else {
+                    val startTopicIdx = (batchIdx * topicList.size) / totalBatches
+                    val endTopicIdx = (((batchIdx + 1) * topicList.size) / totalBatches).coerceAtLeast(startTopicIdx + 1).coerceAtMost(topicList.size)
+                    topicList.subList(startTopicIdx, endTopicIdx).joinToString("\n- ", prefix = "- ")
+                }
+
+                onProgress(batchIdx + 1, totalBatches, allQuestions.size)
+
+                val batchResult = generateMockTestBatch(
+                    courseTitle = courseTitle,
+                    courseTopic = courseTopic,
+                    examCategory = test.examCategory,
+                    targetExamName = test.targetExamName,
+                    batchTopicsSummary = batchTopics,
+                    batchNumber = batchIdx + 1,
+                    totalBatches = totalBatches,
+                    questionCount = currentBatchCount,
+                    startQuestionNumber = currentStartIndex
+                ).getOrThrow()
+
+                for (item in batchResult) {
+                    val qEntity = MockTestQuestionEntity(
+                        id = UUID.randomUUID().toString(),
+                        testId = test.id,
+                        questionIndex = allQuestions.size,
+                        topic = item.topic.ifBlank { "General $courseTopic" },
+                        questionText = item.question,
+                        optionsJson = MockTestQuestionEntity.createOptionsJson(item.options),
+                        correctOptionIndex = item.correctIndex.coerceIn(0, (item.options.size - 1).coerceAtLeast(0)),
+                        explanation = item.explanation,
+                        userSelectedOption = -1,
+                        isFlagged = false
+                    )
+                    allQuestions.add(qEntity)
+                }
+
+                currentStartIndex += currentBatchCount
+                remainingQuestions -= currentBatchCount
+            }
+
+            if (allQuestions.isEmpty()) {
+                throw IllegalStateException("Failed to generate questions. Model returned no questions.")
+            }
+
+            val updatedTest = test.copy(
+                totalQuestions = allQuestions.size,
+                status = MockTestStatus.NOT_STARTED,
+                timeSpentSeconds = 0,
+                score = 0,
+                totalCorrect = 0,
+                totalAnswered = 0
+            )
+            repository.saveMockTestWithQuestions(updatedTest, allQuestions)
+            allQuestions
+        }
+    }
+
+    companion object {
+        /**
+         * Resilient and flexible parser for LLM-generated mock test question batches.
+         * Decodes questions from diverse JSON formats (objects, arrays, wrapper keys) and handles
+         * alternative field names (e.g. choices, answer letters 'A'-'D', prompt, stem, etc.).
+         */
+        fun parseMockTestBatchFlexible(cleanedJson: String): List<MockTestQuestionItem> {
+            val rootElement = try {
+                JsonRepairer.lenientJson.parseToJsonElement(cleanedJson)
+            } catch (e: Exception) {
+                throw IllegalStateException("Failed to parse AI output as JSON: ${e.message}", e)
+            }
+
+            val questionsArray = findQuestionsArray(rootElement)
+                ?: throw IllegalStateException("Could not find a list of questions in the AI response.")
+
+            val result = mutableListOf<MockTestQuestionItem>()
+
+            for (itemElem in questionsArray) {
+                if (itemElem !is JsonObject) continue
+
+                val questionText = itemElem.findFirstString(
+                    "question", "questionText", "question_text", "text", "prompt", "problem", "stem", "title"
+                )?.trim().orEmpty()
+
+                if (questionText.isBlank()) continue
+
+                val topic = itemElem.findFirstString(
+                    "topic", "subject", "category", "domain", "concept", "chapter", "section"
+                )?.trim().orEmpty()
+
+                val options = extractOptions(itemElem)
+                val correctIndex = extractCorrectIndex(itemElem, options)
+                val explanation = itemElem.findFirstString(
+                    "explanation", "rationale", "reason", "solution", "analysis", "detail"
+                )?.trim() ?: "The correct option is Option ${('A' + correctIndex)}."
+
+                result.add(
+                    MockTestQuestionItem(
+                        topic = topic,
+                        question = questionText,
+                        options = options,
+                        correctIndex = correctIndex,
+                        explanation = explanation
+                    )
+                )
+            }
+
+            if (result.isEmpty()) {
+                throw IllegalStateException("The AI response did not contain any valid multiple-choice questions.")
+            }
+
+            return result
+        }
+
+        private fun findQuestionsArray(element: JsonElement): JsonArray? {
+            if (element is JsonArray) {
+                return element
+            }
+            if (element is JsonObject) {
+                val standardKeys = listOf(
+                    "questions", "mockTest", "mock_test", "mockTests", "mock_tests",
+                    "exam", "items", "mcqs", "quiz", "test", "data", "results", "list"
+                )
+                for (key in standardKeys) {
+                    val candidate = element[key]
+                    if (candidate is JsonArray && candidate.isNotEmpty()) {
+                        return candidate
+                    }
+                }
+
+                for ((_, value) in element) {
+                    if (value is JsonArray && value.isNotEmpty() && value.firstOrNull() is JsonObject) {
+                        return value
+                    }
+                }
+
+                for ((_, value) in element) {
+                    if (value is JsonObject) {
+                        val nested = findQuestionsArray(value)
+                        if (nested != null && nested.isNotEmpty()) return nested
+                    }
+                }
+            }
+            return null
+        }
+
+        private fun JsonObject.findFirstString(vararg keys: String): String? {
+            for (key in keys) {
+                val el = this[key]
+                if (el is JsonPrimitive && el.isString) {
+                    return el.content
+                } else if (el is JsonPrimitive) {
+                    return el.content
+                }
+            }
+            for (key in keys) {
+                val entry = this.entries.find { it.key.equals(key, ignoreCase = true) }
+                if (entry != null && entry.value is JsonPrimitive) {
+                    return entry.value.jsonPrimitive.content
+                }
+            }
+            return null
+        }
+
+        private fun extractOptions(questionObj: JsonObject): List<String> {
+            val optionKeys = listOf(
+                "options", "choices", "answers", "alternatives", "distractors", "optionsList", "options_list"
+            )
+            for (key in optionKeys) {
+                val candidate = questionObj[key]
+                    ?: questionObj.entries.find { it.key.equals(key, ignoreCase = true) }?.value
+                if (candidate is JsonArray) {
+                    val list = mutableListOf<String>()
+                    for (opt in candidate) {
+                        when (opt) {
+                            is JsonPrimitive -> list.add(opt.content.trim())
+                            is JsonObject -> {
+                                val text = opt.findFirstString("text", "option", "value", "content", "choice")
+                                    ?: opt.values.filterIsInstance<JsonPrimitive>().firstOrNull()?.content
+                                if (!text.isNullOrBlank()) list.add(text.trim())
+                            }
+                            else -> {}
+                        }
+                    }
+                    if (list.size >= 2) return list
+                } else if (candidate is JsonObject) {
+                    val sortedValues = candidate.entries
+                        .sortedBy { it.key }
+                        .mapNotNull {
+                            (it.value as? JsonPrimitive)?.content?.trim()
+                        }
+                    if (sortedValues.size >= 2) return sortedValues
+                }
+            }
+            return listOf("Option A", "Option B", "Option C", "Option D")
+        }
+
+        private fun extractCorrectIndex(questionObj: JsonObject, options: List<String>): Int {
+            val indexKeys = listOf(
+                "correctIndex", "correct_index", "answerIndex", "answer_index",
+                "correctAnswerIndex", "correctAnswer", "correct_answer", "correct", "answer", "key"
+            )
+            for (key in indexKeys) {
+                val candidate = questionObj[key]
+                    ?: questionObj.entries.find { it.key.equals(key, ignoreCase = true) }?.value
+                if (candidate is JsonPrimitive) {
+                    val intVal = candidate.intOrNull
+                    if (intVal != null && intVal in options.indices) {
+                        return intVal
+                    }
+                    val str = candidate.content.trim()
+                    val digitVal = str.toIntOrNull()
+                    if (digitVal != null && digitVal in options.indices) {
+                        return digitVal
+                    }
+                    val letterMatch = when (str.uppercase().take(1)) {
+                        "A" -> 0
+                        "B" -> 1
+                        "C" -> 2
+                        "D" -> 3
+                        else -> -1
+                    }
+                    if (letterMatch in options.indices) {
+                        return letterMatch
+                    }
+                    val matchIdx = options.indexOfFirst { opt ->
+                        opt.equals(str, ignoreCase = true) || opt.contains(str, ignoreCase = true) || str.contains(opt, ignoreCase = true)
+                    }
+                    if (matchIdx >= 0) {
+                        return matchIdx
+                    }
+                }
+            }
+            return 0
         }
     }
 }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.core.database.entity.MockTestStatus
@@ -26,6 +27,8 @@ data class TakeMockTestUiState(
     val remainingSeconds: Int = 0,
     val isTimerRunning: Boolean = false,
     val isLoading: Boolean = true,
+    val isGeneratingQuestions: Boolean = false,
+    val generationProgressText: String = "",
     val showPalette: Boolean = false,
     val showSubmitConfirmDialog: Boolean = false,
     val isSubmitting: Boolean = false,
@@ -46,7 +49,8 @@ data class TakeMockTestUiState(
 
 @HiltViewModel
 class TakeMockTestViewModel @Inject constructor(
-    private val repository: OpenEDRepository
+    private val repository: OpenEDRepository,
+    private val aiLearningEngine: AiLearningEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TakeMockTestUiState())
@@ -55,7 +59,7 @@ class TakeMockTestViewModel @Inject constructor(
     private var timerJob: Job? = null
 
     fun loadTest(testId: String) {
-        if (_uiState.value.testId == testId && _uiState.value.testWithQuestions != null) {
+        if (_uiState.value.testId == testId && _uiState.value.testWithQuestions != null && _uiState.value.totalQuestions > 0) {
             return
         }
 
@@ -64,13 +68,16 @@ class TakeMockTestViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Immediate direct load for instantaneous response
-                var directTwq = repository.getMockTestWithQuestions(testId)
-                if (directTwq == null) {
-                    val directTest = repository.getMockTestById(testId)
-                    if (directTest != null) {
-                        val questions = repository.getQuestionsForTest(testId)
-                        directTwq = MockTestWithQuestions(directTest, questions)
-                    }
+                val directTest = repository.getMockTestById(testId)
+                val directQuestions = repository.getQuestionsForTest(testId)
+                var directTwq = if (directTest != null) {
+                    MockTestWithQuestions(directTest, directQuestions)
+                } else {
+                    repository.getMockTestWithQuestions(testId)
+                }
+
+                if (directTwq != null && directTwq.questions.isEmpty() && directQuestions.isNotEmpty()) {
+                    directTwq = directTwq.copy(questions = directQuestions)
                 }
 
                 if (directTwq != null) {
@@ -79,7 +86,12 @@ class TakeMockTestViewModel @Inject constructor(
 
                 // Continuous Flow collection for live updates
                 repository.getMockTestWithQuestionsFlow(testId).collect { flowTwq ->
-                    val effectiveTwq = flowTwq ?: directTwq
+                    val effectiveTwq = if (flowTwq != null && flowTwq.questions.isEmpty() && directQuestions.isNotEmpty()) {
+                        flowTwq.copy(questions = directQuestions)
+                    } else {
+                        flowTwq ?: directTwq
+                    }
+
                     if (effectiveTwq != null) {
                         applyTestLoaded(effectiveTwq)
                     } else if (directTwq == null) {
@@ -96,6 +108,70 @@ class TakeMockTestViewModel @Inject constructor(
                     it.copy(
                         isLoading = false,
                         errorMessage = e.localizedMessage ?: "Failed to load mock exam."
+                    )
+                }
+            }
+        }
+    }
+
+    fun generateMissingQuestions() {
+        val testId = _uiState.value.testId.ifBlank {
+            _uiState.value.testWithQuestions?.test?.id.orEmpty()
+        }
+        if (testId.isBlank()) return
+
+        _uiState.update {
+            it.copy(
+                isGeneratingQuestions = true,
+                generationProgressText = "Preparing exam questions...",
+                errorMessage = null
+            )
+        }
+
+        viewModelScope.launch {
+            try {
+                val result = aiLearningEngine.generateQuestionsForExistingTest(
+                    testId = testId,
+                    onProgress = { currentBatch, totalBatches, questionsGenerated ->
+                        _uiState.update {
+                            it.copy(
+                                generationProgressText = "Generating Part $currentBatch of $totalBatches ($questionsGenerated questions ready)..."
+                            )
+                        }
+                    }
+                )
+
+                result.fold(
+                    onSuccess = { questions ->
+                        val test = repository.getMockTestById(testId)
+                        if (test != null) {
+                            val twq = MockTestWithQuestions(test, questions)
+                            applyTestLoaded(twq)
+                        }
+                        _uiState.update {
+                            it.copy(
+                                isGeneratingQuestions = false,
+                                generationProgressText = "",
+                                errorMessage = null
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isGeneratingQuestions = false,
+                                generationProgressText = "",
+                                errorMessage = error.localizedMessage ?: "Failed to generate questions. Please try again."
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isGeneratingQuestions = false,
+                        generationProgressText = "",
+                        errorMessage = e.localizedMessage ?: "Failed to generate questions. Please try again."
                     )
                 }
             }
@@ -122,7 +198,7 @@ class TakeMockTestViewModel @Inject constructor(
             )
         }
 
-        if (test.status == MockTestStatus.NOT_STARTED) {
+        if (sortedQuestions.isNotEmpty() && test.status == MockTestStatus.NOT_STARTED) {
             repository.updateMockTest(test.copy(status = MockTestStatus.IN_PROGRESS))
         }
 

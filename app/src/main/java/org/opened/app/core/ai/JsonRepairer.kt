@@ -47,21 +47,24 @@ object JsonRepairer {
             return "{}"
         }
 
-        // 3. Remove trailing commas before closing braces/brackets
+        // 3. Fix unescaped LaTeX backslashes inside JSON string values
+        content = fixUnescapedBackslashes(content)
+
+        // 4. Remove trailing commas before closing braces/brackets
         content = removeTrailingCommas(content)
 
-        // 4. Quick check: does it already parse?
+        // 5. Quick check: does it already parse?
         if (isValidJson(content)) {
             return content
         }
 
-        // 5. Direct repair of EOF truncation
+        // 6. Direct repair of EOF truncation
         val directRepaired = attemptRepair(content)
         if (isValidJson(directRepaired)) {
             return directRepaired
         }
 
-        // 6. Backtrack past the last comma (removes partially generated trailing object)
+        // 7. Backtrack past the last comma (removes partially generated trailing object)
         var backtracked = content
         for (attempt in 1..8) {
             val lastComma = backtracked.lastIndexOf(',')
@@ -73,8 +76,100 @@ object JsonRepairer {
             }
         }
 
-        // 7. If still invalid, return direct repaired or raw content as fallback
+        // 8. If still invalid, return direct repaired or raw content as fallback
         return if (directRepaired.isNotBlank()) directRepaired else content
+    }
+
+    /**
+     * Repairs unescaped LaTeX backslashes (e.g., \frac, \int, \alpha, \sqrt, \theta, \times)
+     * inside JSON strings to prevent invalid escape sequence deserialization errors.
+     */
+    fun fixUnescapedBackslashes(input: String): String {
+        val sb = StringBuilder(input.length + 32)
+        var inString = false
+        var i = 0
+        val len = input.length
+
+        while (i < len) {
+            val c = input[i]
+            if (c == '"') {
+                var backslashCount = 0
+                var j = i - 1
+                while (j >= 0 && input[j] == '\\') {
+                    backslashCount++
+                    j--
+                }
+                if (backslashCount % 2 == 0) {
+                    inString = !inString
+                }
+                sb.append(c)
+                i++
+                continue
+            }
+
+            if (inString && c == '\\') {
+                if (i + 1 >= len) {
+                    sb.append("\\\\")
+                    i++
+                    continue
+                }
+                val next = input[i + 1]
+
+                // Known LaTeX command prefixes starting with f, t, b, n, r
+                val isLatexCommandWithControlLetter = when (next) {
+                    'f' -> input.regionMatches(i, "\\frac", 0, 5, ignoreCase = false)
+                    't' -> input.regionMatches(i, "\\text", 0, 5, ignoreCase = false) ||
+                           input.regionMatches(i, "\\theta", 0, 6, ignoreCase = false) ||
+                           input.regionMatches(i, "\\times", 0, 6, ignoreCase = false) ||
+                           input.regionMatches(i, "\\tau", 0, 4, ignoreCase = false) ||
+                           input.regionMatches(i, "\\to", 0, 3, ignoreCase = false) ||
+                           input.regionMatches(i, "\\tan", 0, 4, ignoreCase = false)
+                    'b' -> input.regionMatches(i, "\\beta", 0, 5, ignoreCase = false) ||
+                           input.regionMatches(i, "\\bar", 0, 4, ignoreCase = false) ||
+                           input.regionMatches(i, "\\binom", 0, 6, ignoreCase = false)
+                    'n' -> input.regionMatches(i, "\\nabla", 0, 6, ignoreCase = false) ||
+                           input.regionMatches(i, "\\nu", 0, 3, ignoreCase = false) ||
+                           input.regionMatches(i, "\\neq", 0, 4, ignoreCase = false)
+                    'r' -> input.regionMatches(i, "\\rho", 0, 4, ignoreCase = false) ||
+                           input.regionMatches(i, "\\right", 0, 6, ignoreCase = false)
+                    else -> false
+                }
+
+                val isStandardControl = when (next) {
+                    '"', '\\', '/' -> true
+                    'u' -> {
+                        i + 5 < len && (2..5).all { offset ->
+                            val hexChar = input[i + offset]
+                            hexChar in '0'..'9' || hexChar in 'a'..'f' || hexChar in 'A'..'F'
+                        }
+                    }
+                    'b', 'f', 'n', 'r', 't' -> !isLatexCommandWithControlLetter
+                    else -> false
+                }
+
+                if (isStandardControl) {
+                    sb.append(c)
+                    sb.append(next)
+                    i += 2
+                    if (next == 'u') {
+                        for (k in 2..5) {
+                            sb.append(input[i])
+                            i++
+                        }
+                    }
+                } else {
+                    // Escape the backslash so \int becomes \\int, \frac becomes \\frac, etc.
+                    sb.append("\\\\")
+                    sb.append(next)
+                    i += 2
+                }
+                continue
+            }
+
+            sb.append(c)
+            i++
+        }
+        return sb.toString()
     }
 
     fun isValidJson(jsonStr: String): Boolean {

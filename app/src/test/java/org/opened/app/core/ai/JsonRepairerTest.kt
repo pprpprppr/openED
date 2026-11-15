@@ -123,4 +123,21 @@ class JsonRepairerTest {
         assertEquals("Module 1: Structure", parsed.modules[0].title)
         assertEquals(1, parsed.modules[0].chapters.size)
     }
+
+    @Test
+    fun testUnescapedLatexBackslashesRepaired() {
+        // Raw LLM output with unescaped backslashes inside JSON string
+        val input = """
+            {
+              "question": "Calculate \int_0^1 \frac{x}{\sqrt{1-x^2}} dx and determine \alpha + \beta.",
+              "options": ["\frac{\pi}{2}", "\sqrt{2}", "\infty", "0"]
+            }
+        """.trimIndent()
+        val cleaned = JsonRepairer.cleanAndRepairJson(input)
+        assertTrue(JsonRepairer.isValidJson(cleaned))
+        assertTrue(cleaned.contains("\\int"))
+        assertTrue(cleaned.contains("\\frac"))
+        assertTrue(cleaned.contains("\\sqrt"))
+        assertTrue(cleaned.contains("\\alpha"))
+    }
 }

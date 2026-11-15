@@ -238,6 +238,58 @@ class MockTestListViewModel @Inject constructor(
         }
     }
 
+    fun regenerateMockTestQuestions(testId: String) {
+        _uiState.update {
+            it.copy(
+                isGenerating = true,
+                generationProgressText = "Preparing exam questions...",
+                errorMessage = null
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val result = aiLearningEngine.generateQuestionsForExistingTest(
+                    testId = testId,
+                    onProgress = { currentBatch, totalBatches, questionsGenerated ->
+                        _uiState.update {
+                            it.copy(
+                                generationProgressText = "Generating Part $currentBatch of $totalBatches ($questionsGenerated questions ready)..."
+                            )
+                        }
+                    }
+                )
+                result.fold(
+                    onSuccess = {
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                generationProgressText = "",
+                                errorMessage = null
+                            )
+                        }
+                    },
+                    onFailure = { error ->
+                        _uiState.update {
+                            it.copy(
+                                isGenerating = false,
+                                generationProgressText = "",
+                                errorMessage = error.localizedMessage ?: "Failed to generate questions."
+                            )
+                        }
+                    }
+                )
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isGenerating = false,
+                        generationProgressText = "",
+                        errorMessage = e.localizedMessage ?: "Failed to generate questions."
+                    )
+                }
+            }
+        }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
     }

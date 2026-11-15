@@ -316,6 +316,7 @@ fun MockTestListScreen(
                             courseName = matchedCourse?.studyPath?.topic,
                             onTakeTest = { onTakeTest(test.id) },
                             onViewResult = { onViewResult(test.id) },
+                            onRegenerate = { viewModel.regenerateMockTestQuestions(test.id) },
                             onDelete = { viewModel.deleteMockTest(test.id) }
                         )
                     }
@@ -558,6 +559,7 @@ private fun MockTestCard(
     courseName: String? = null,
     onTakeTest: () -> Unit,
     onViewResult: () -> Unit,
+    onRegenerate: () -> Unit,
     onDelete: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -676,6 +678,16 @@ private fun MockTestCard(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("Regenerate Questions") },
+                            leadingIcon = {
+                                Icon(Icons.Default.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            },
+                            onClick = {
+                                showMenu = false
+                                onRegenerate()
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("Delete Mock Test") },
                             leadingIcon = {
@@ -823,12 +835,12 @@ private fun MockTestCard(
                     MockTestStatus.NOT_STARTED -> {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant
+                            color = if (test.totalQuestions == 0) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceVariant
                         ) {
                             Text(
-                                text = "Not Started",
+                                text = if (test.totalQuestions == 0) "Needs Setup" else "Not Started",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (test.totalQuestions == 0) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
@@ -838,9 +850,13 @@ private fun MockTestCard(
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(
+                                imageVector = if (test.totalQuestions == 0) Icons.Default.AutoAwesome else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Start Exam")
+                            Text(if (test.totalQuestions == 0) "Setup Exam" else "Start Exam")
                         }
                     }
                 }
