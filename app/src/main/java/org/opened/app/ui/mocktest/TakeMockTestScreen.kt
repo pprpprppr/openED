@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -96,14 +97,26 @@ fun TakeMockTestScreen(
 
     // Handle Android system back press
     BackHandler {
-        showExitDialog = true
+        if (uiState.isGeneratingQuestions) {
+            viewModel.cancelGeneration()
+            onNavigateBack()
+        } else {
+            showExitDialog = true
+        }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = { showExitDialog = true }) {
+                    IconButton(onClick = {
+                        if (uiState.isGeneratingQuestions) {
+                            viewModel.cancelGeneration()
+                            onNavigateBack()
+                        } else {
+                            showExitDialog = true
+                        }
+                    }) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Exit Exam")
                     }
                 },
@@ -201,6 +214,23 @@ fun TakeMockTestScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = TextAlign.Center
                                 )
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.cancelGeneration()
+                                        onNavigateBack()
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Cancel Generation")
+                                }
                             }
                         }
                     }
@@ -290,7 +320,7 @@ fun TakeMockTestScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 16.dp),
-                        contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
+                        contentPadding = PaddingValues(top = 12.dp, bottom = 100.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         // Question Header: Topic badge + Flag for Review
@@ -357,7 +387,8 @@ fun TakeMockTestScreen(
                             Box(modifier = Modifier.padding(18.dp)) {
                                 RichMarkdownRenderer(
                                     markdown = question.questionText,
-                                    onChapterClick = {}
+                                    onChapterClick = {},
+                                    selectable = false
                                 )
                             }
                         }
@@ -389,6 +420,7 @@ fun TakeMockTestScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clickable { viewModel.selectOption(index) }
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -397,7 +429,9 @@ fun TakeMockTestScreen(
                                 Surface(
                                     shape = CircleShape,
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clickable { viewModel.selectOption(index) }
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Text(
@@ -410,14 +444,79 @@ fun TakeMockTestScreen(
                                 }
 
                                 // Option Content with Markdown & LaTeX support
-                                Box(modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { viewModel.selectOption(index) }
+                                ) {
                                     RichMarkdownRenderer(
                                         markdown = optionText,
-                                        onChapterClick = {}
+                                        onChapterClick = {},
+                                        selectable = false
                                     )
                                 }
                             }
                         }
+                    }
+
+                    // Inline Bottom Action Navigation Row inside the scrollable column
+                    item {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = { viewModel.prevQuestion() },
+                                enabled = uiState.currentQuestionIndex > 0,
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Prev", maxLines = 1)
+                            }
+
+                            val hasAnswer = (question.userSelectedOption >= 0)
+                            TextButton(
+                                onClick = { viewModel.clearCurrentAnswer() },
+                                enabled = hasAnswer,
+                                modifier = Modifier.weight(0.9f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Clear", maxLines = 1)
+                            }
+
+                            if (uiState.currentQuestionIndex < uiState.totalQuestions - 1) {
+                                Button(
+                                    onClick = { viewModel.nextQuestion() },
+                                    modifier = Modifier.weight(1.2f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("Next", maxLines = 1)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                }
+                            } else {
+                                Button(
+                                    onClick = { viewModel.showSubmitConfirmation() },
+                                    modifier = Modifier.weight(1.4f),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Text("Submit Exam", fontWeight = FontWeight.Bold, maxLines = 1)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
             }
@@ -572,12 +671,16 @@ private fun ExamBottomNavigation(
 ) {
     Surface(
         tonalElevation = 6.dp,
-        color = MaterialTheme.colorScheme.surface
+        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.RefineAction
@@ -232,6 +234,7 @@ class CourseWorkspaceViewModel @Inject constructor(
             _uiState.update { it.copy(isStreaming = true, streamingContent = "", errorMessage = null) }
             val accumulatedText = StringBuilder()
             var lastEmitTime = 0L
+            var lastSaveTime = 0L
             var streamSuccess = false
 
             try {
@@ -243,29 +246,21 @@ class CourseWorkspaceViewModel @Inject constructor(
                     .collect { chunk ->
                         accumulatedText.append(chunk)
                         val now = System.currentTimeMillis()
-                        if (now - lastEmitTime >= 500L) {
+                        if (now - lastEmitTime >= 400L) {
                             lastEmitTime = now
                             val currentText = accumulatedText.toString()
                             _uiState.update { it.copy(streamingContent = currentText) }
                         }
+                        // Periodically persist to SQLite Room so no text is ever lost on sudden exit or back press
+                        if (now - lastSaveTime >= 2500L && accumulatedText.isNotEmpty()) {
+                            lastSaveTime = now
+                            repository.updateChapterContent(chapterId, accumulatedText.toString(), ChapterStatus.GENERATING)
+                        }
                     }
 
-                // Final emission and write once to Room SQLite after stream finishes
                 val finalText = accumulatedText.toString().trim()
                 if (finalText.isNotEmpty()) {
                     streamSuccess = true
-                    _uiState.update { state ->
-                        state.copy(
-                            streamingContent = finalText,
-                            chapterDetails = state.chapterDetails?.copy(
-                                chapter = state.chapterDetails.chapter.copy(
-                                    markdownContent = finalText,
-                                    status = ChapterStatus.COMPLETED
-                                )
-                            )
-                        )
-                    }
-                    repository.updateChapterContent(chapterId, finalText, ChapterStatus.COMPLETED)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -277,12 +272,34 @@ class CourseWorkspaceViewModel @Inject constructor(
                     )
                 }
             } finally {
-                if (!streamSuccess) {
-                    repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
+                withContext(NonCancellable + Dispatchers.IO) {
+                    val textToSave = accumulatedText.toString().trim()
+                    if (textToSave.isNotEmpty()) {
+                        val finalStatus = ChapterStatus.COMPLETED
+                        repository.updateChapterContent(chapterId, textToSave, finalStatus)
+                        _uiState.update { state ->
+                            state.copy(
+                                chapterDetails = state.chapterDetails?.copy(
+                                    chapter = state.chapterDetails.chapter.copy(
+                                        markdownContent = textToSave,
+                                        status = finalStatus
+                                    )
+                                )
+                            )
+                        }
+                    } else if (!streamSuccess) {
+                        repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
+                    }
                 }
                 _uiState.update { it.copy(isStreaming = false, streamingContent = null) }
             }
         }
+    }
+
+    fun cancelChapterStreaming() {
+        streamingJob?.cancel()
+        streamingJob = null
+        _uiState.update { it.copy(isStreaming = false) }
     }
 
     // ---- Feature 1: Flashcards ----
@@ -506,6 +523,37 @@ class CourseWorkspaceViewModel @Inject constructor(
                     it.copy(
                         isExpandingCourse = false,
                         errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to expand course syllabus.")
+                    )
+                }
+            }
+        }
+    }
+
+    fun generateSyllabusForCourse() {
+        val path = _uiState.value.pathWithModules?.studyPath ?: return
+        if (_uiState.value.isExpandingCourse) return
+
+        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+            _uiState.update { it.copy(isExpandingCourse = true, errorMessage = null) }
+            try {
+                val syllabus = aiLearningEngine.generateSyllabus(
+                    topic = path.topic,
+                    userLevel = path.userLevel,
+                    answers = emptyMap()
+                ).getOrThrow()
+                val updatedSyllabus = syllabus.copy(title = path.title, topic = path.topic)
+                aiLearningEngine.persistGeneratedSyllabus(updatedSyllabus)
+                _uiState.update {
+                    it.copy(
+                        isExpandingCourse = false,
+                        flashcardSnackMessage = "Course curriculum and chapters generated successfully!"
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isExpandingCourse = false,
+                        errorMessage = formatUserFriendlyAiError(e.localizedMessage ?: "Failed to generate course syllabus.")
                     )
                 }
             }

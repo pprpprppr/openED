@@ -24,6 +24,8 @@ class DiagnosticWizardViewModel @Inject constructor(
     private val preferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
+    private var activeAiJob: kotlinx.coroutines.Job? = null
+
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
         if (throwable is kotlinx.coroutines.CancellationException) return@CoroutineExceptionHandler
         _uiState.update {
@@ -121,7 +123,7 @@ class DiagnosticWizardViewModel @Inject constructor(
         }
         val targetSubject = if (topic.isNotBlank()) "$topic (${persona.title})" else persona.title
 
-        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+        activeAiJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
             val result = aiLearningEngine.generateSystemInstruction(
                 userNotes = userNotes,
@@ -158,7 +160,7 @@ class DiagnosticWizardViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+        activeAiJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update {
                 it.copy(
                     currentStep = WizardStep.GENERATING_QUESTIONS,
@@ -231,7 +233,7 @@ class DiagnosticWizardViewModel @Inject constructor(
 
     fun generateSyllabus() {
         val state = _uiState.value
-        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+        activeAiJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update {
                 it.copy(
                     currentStep = WizardStep.GENERATING_SYLLABUS,
@@ -299,7 +301,7 @@ class DiagnosticWizardViewModel @Inject constructor(
     fun saveAndStartCourse(onSuccess: (String) -> Unit) {
         val baseSyllabus = _uiState.value.generatedSyllabus ?: return
         val syllabus = baseSyllabus.copy(userLevel = _uiState.value.userLevel)
-        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
+        activeAiJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isBusy = true, errorMessage = null) }
             try {
                 val pathId = aiLearningEngine.persistGeneratedSyllabus(syllabus)
@@ -317,6 +319,23 @@ class DiagnosticWizardViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    fun cancelCurrentGeneration() {
+        activeAiJob?.cancel()
+        activeAiJob = null
+        _uiState.update { current ->
+            val fallbackStep = when (current.currentStep) {
+                WizardStep.GENERATING_QUESTIONS -> WizardStep.ENTER_TOPIC
+                WizardStep.GENERATING_SYLLABUS -> WizardStep.ANSWERING_QUESTIONS
+                else -> current.currentStep
+            }
+            current.copy(
+                isBusy = false,
+                isGeneratingPrompt = false,
+                currentStep = fallbackStep
+            )
         }
     }
 

@@ -1,6 +1,7 @@
 package org.opened.app.core.ai
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -366,23 +367,22 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
                 accumulatedText.append(chunk)
                 emit(chunk)
             }
-
-            var finalMarkdown = accumulatedText.toString().trim()
-            if (finalMarkdown.isNotEmpty()) {
-                if (domain != AcademicDomain.SOFTWARE_AND_CS) {
-                    finalMarkdown = sanitizeNonCsCodeBlocks(finalMarkdown)
-                }
-                finalMarkdown = org.opened.app.core.source.EducationalDisclaimerManager.injectDisclaimerIfNeeded(finalMarkdown, domain)
-                repository.updateChapterContent(chapterId, finalMarkdown, ChapterStatus.COMPLETED)
-            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
             throw e
         } finally {
-            if (accumulatedText.toString().trim().isBlank()) {
-                repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
+            kotlinx.coroutines.withContext(NonCancellable) {
+                var markdownToSave = accumulatedText.toString().trim()
+                if (markdownToSave.isNotEmpty()) {
+                    if (domain != AcademicDomain.SOFTWARE_AND_CS) {
+                        markdownToSave = sanitizeNonCsCodeBlocks(markdownToSave)
+                    }
+                    markdownToSave = org.opened.app.core.source.EducationalDisclaimerManager.injectDisclaimerIfNeeded(markdownToSave, domain)
+                    repository.updateChapterContent(chapterId, markdownToSave, ChapterStatus.COMPLETED)
+                } else {
+                    repository.updateChapterStatus(chapterId, ChapterStatus.PENDING)
+                }
             }
         }
     }.flowOn(Dispatchers.IO)
@@ -745,8 +745,12 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 topicList.add("Core Syllabus & Domain Topics: $courseTitle ($courseTopic)")
             }
 
-            // Calculate batches: batch size 10 questions (or smaller if totalQuestions <= 10)
-            val batchSize = if (totalQuestions <= 10) totalQuestions else 10
+            // Calculate optimal batches: 1 batch for up to 15 questions, 15-20 per batch for larger tests
+            val batchSize = when {
+                totalQuestions <= 15 -> totalQuestions
+                totalQuestions <= 30 -> 15
+                else -> 20
+            }
             val totalBatches = ((totalQuestions + batchSize - 1) / batchSize).coerceAtLeast(1)
 
             val allQuestions = mutableListOf<MockTestQuestionEntity>()
@@ -862,7 +866,11 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
             }
 
             val targetCount = if (test.totalQuestions > 0) test.totalQuestions else 10
-            val batchSize = if (targetCount <= 10) targetCount else 10
+            val batchSize = when {
+                targetCount <= 15 -> targetCount
+                targetCount <= 30 -> 15
+                else -> 20
+            }
             val totalBatches = ((targetCount + batchSize - 1) / batchSize).coerceAtLeast(1)
 
             val allQuestions = mutableListOf<MockTestQuestionEntity>()

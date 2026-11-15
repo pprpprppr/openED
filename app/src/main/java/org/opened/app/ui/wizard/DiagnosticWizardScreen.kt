@@ -1,5 +1,6 @@
 package org.opened.app.ui.wizard
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MenuBook
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
 import org.opened.app.core.ai.TutorPersonaRegistry
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -47,6 +50,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -79,6 +83,16 @@ fun DiagnosticWizardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+    BackHandler {
+        if (uiState.isBusy) {
+            viewModel.cancelCurrentGeneration()
+        } else if (uiState.currentStep == WizardStep.ENTER_TOPIC) {
+            onNavigateBack()
+        } else {
+            viewModel.stepBack()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -97,7 +111,9 @@ fun DiagnosticWizardScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = {
-                        if (uiState.currentStep == WizardStep.ENTER_TOPIC) {
+                        if (uiState.isBusy) {
+                            viewModel.cancelCurrentGeneration()
+                        } else if (uiState.currentStep == WizardStep.ENTER_TOPIC) {
                             onNavigateBack()
                         } else {
                             viewModel.stepBack()
@@ -143,7 +159,8 @@ fun DiagnosticWizardScreen(
                 WizardStep.GENERATING_QUESTIONS -> {
                     LoadingStepIndicator(
                         title = "Generating Diagnostic Interview",
-                        subtitle = "${uiState.activeProviderName} is generating 3-5 targeted assessment questions tailored to '${uiState.topic}'..."
+                        subtitle = "${uiState.activeProviderName} is generating 3-5 targeted assessment questions tailored to '${uiState.topic}'...",
+                        onCancel = { viewModel.cancelCurrentGeneration() }
                     )
                 }
 
@@ -167,7 +184,8 @@ fun DiagnosticWizardScreen(
                 WizardStep.GENERATING_SYLLABUS -> {
                     LoadingStepIndicator(
                         title = "Structuring Your Curriculum",
-                        subtitle = "Synthesizing your assessment profile, learning goals, and building modular chapters..."
+                        subtitle = "Synthesizing your assessment profile, learning goals, and building modular chapters...",
+                        onCancel = { viewModel.cancelCurrentGeneration() }
                     )
                 }
 
@@ -868,7 +886,11 @@ private fun ReviewSyllabusContent(
 }
 
 @Composable
-private fun LoadingStepIndicator(title: String, subtitle: String) {
+private fun LoadingStepIndicator(
+    title: String,
+    subtitle: String,
+    onCancel: (() -> Unit)? = null
+) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -895,6 +917,23 @@ private fun LoadingStepIndicator(title: String, subtitle: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
+            if (onCancel != null) {
+                Spacer(modifier = Modifier.height(20.dp))
+                OutlinedButton(
+                    onClick = onCancel,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Cancel Generation")
+                }
+            }
         }
     }
 }

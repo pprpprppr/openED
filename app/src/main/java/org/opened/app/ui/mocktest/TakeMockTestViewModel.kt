@@ -57,6 +57,7 @@ class TakeMockTestViewModel @Inject constructor(
     val uiState: StateFlow<TakeMockTestUiState> = _uiState.asStateFlow()
 
     private var timerJob: Job? = null
+    private var questionGenJob: Job? = null
 
     fun loadTest(testId: String) {
         if (_uiState.value.testId == testId && _uiState.value.testWithQuestions != null && _uiState.value.totalQuestions > 0) {
@@ -128,7 +129,8 @@ class TakeMockTestViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
+        questionGenJob?.cancel()
+        questionGenJob = viewModelScope.launch {
             try {
                 val result = aiLearningEngine.generateQuestionsForExistingTest(
                     testId = testId,
@@ -175,6 +177,17 @@ class TakeMockTestViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    fun cancelGeneration() {
+        questionGenJob?.cancel()
+        questionGenJob = null
+        _uiState.update {
+            it.copy(
+                isGeneratingQuestions = false,
+                generationProgressText = ""
+            )
         }
     }
 
@@ -329,60 +342,83 @@ class TakeMockTestViewModel @Inject constructor(
         _uiState.update { it.copy(isSubmitting = true, showSubmitConfirmDialog = false) }
 
         viewModelScope.launch {
-            val questions = twq.questions
-            val totalQuestions = questions.size
-            var totalCorrect = 0
-            var totalAnswered = 0
+            try {
+                val questions = twq.questions
+                val totalQuestions = questions.size
+                var totalCorrect = 0
+                var totalAnswered = 0
 
-            for (q in questions) {
-                if (q.userSelectedOption >= 0) {
-                    totalAnswered++
-                    if (q.userSelectedOption == q.correctOptionIndex) {
-                        totalCorrect++
-                    } else {
-                        // Record mistake for adaptive mastery loop
-                        val userSelectedText = q.optionsList.getOrNull(q.userSelectedOption).orEmpty()
-                        val correctText = q.optionsList.getOrNull(q.correctOptionIndex).orEmpty()
-                        repository.recordMistake(
-                            MistakeRecordEntity(
-                                id = UUID.randomUUID().toString(),
-                                chapterId = twq.test.id,
-                                pathId = twq.test.pathId,
-                                conceptKey = q.topic,
-                                questionPrompt = q.questionText,
-                                userSelectedAnswer = userSelectedText,
-                                correctAnswer = correctText,
-                                explanation = q.explanation,
-                                failureCount = 1,
-                                timestamp = System.currentTimeMillis()
-                            )
-                        )
+                // Load course chapters if available so mistake records reference a valid chapterId foreign key
+                val pathDetails = runCatching { repository.getStudyPathWithModules(twq.test.pathId) }.getOrNull()
+                val allChapters = pathDetails?.modules?.flatMap { it.chapters }.orEmpty()
+
+                for (q in questions) {
+                    if (q.userSelectedOption >= 0) {
+                        totalAnswered++
+                        if (q.userSelectedOption == q.correctOptionIndex) {
+                            totalCorrect++
+                        } else {
+                            // Find a valid chapter in the course or fallback chapter to satisfy foreign key constraint
+                            val validChapter = allChapters.firstOrNull { ch ->
+                                ch.title.contains(q.topic, ignoreCase = true) || q.topic.contains(ch.title, ignoreCase = true)
+                            } ?: allChapters.firstOrNull()
+
+                            if (validChapter != null) {
+                                val userSelectedText = q.optionsList.getOrNull(q.userSelectedOption).orEmpty()
+                                val correctText = q.optionsList.getOrNull(q.correctOptionIndex).orEmpty()
+                                runCatching {
+                                    repository.recordMistake(
+                                        MistakeRecordEntity(
+                                            id = UUID.randomUUID().toString(),
+                                            chapterId = validChapter.id,
+                                            pathId = twq.test.pathId,
+                                            conceptKey = q.topic,
+                                            questionPrompt = q.questionText,
+                                            userSelectedAnswer = userSelectedText,
+                                            correctAnswer = correctText,
+                                            explanation = q.explanation,
+                                            failureCount = 1,
+                                            timestamp = System.currentTimeMillis()
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
+
+                val scorePercentage = if (totalQuestions > 0) {
+                    ((totalCorrect.toFloat() / totalQuestions.toFloat()) * 100).toInt()
+                } else {
+                    0
+                }
+
+                val totalLimitSec = twq.test.timeLimitMinutes * 60
+                val spentSec = (totalLimitSec - _uiState.value.remainingSeconds).coerceAtLeast(0)
+
+                val completedTest = twq.test.copy(
+                    status = MockTestStatus.COMPLETED,
+                    score = scorePercentage,
+                    totalCorrect = totalCorrect,
+                    totalAnswered = totalAnswered,
+                    timeSpentSeconds = spentSec,
+                    completedAt = System.currentTimeMillis()
+                )
+
+                repository.updateMockTest(completedTest)
+
+                _uiState.update { it.copy(isSubmitting = false) }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onCompleted(twq.test.id)
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isSubmitting = false,
+                        errorMessage = "Error saving exam results: ${e.localizedMessage ?: "Unknown error"}"
+                    )
+                }
             }
-
-            val scorePercentage = if (totalQuestions > 0) {
-                ((totalCorrect.toFloat() / totalQuestions.toFloat()) * 100).toInt()
-            } else {
-                0
-            }
-
-            val totalLimitSec = twq.test.timeLimitMinutes * 60
-            val spentSec = (totalLimitSec - _uiState.value.remainingSeconds).coerceAtLeast(0)
-
-            val completedTest = twq.test.copy(
-                status = MockTestStatus.COMPLETED,
-                score = scorePercentage,
-                totalCorrect = totalCorrect,
-                totalAnswered = totalAnswered,
-                timeSpentSeconds = spentSec,
-                completedAt = System.currentTimeMillis()
-            )
-
-            repository.updateMockTest(completedTest)
-
-            _uiState.update { it.copy(isSubmitting = false) }
-            onCompleted(twq.test.id)
         }
     }
 

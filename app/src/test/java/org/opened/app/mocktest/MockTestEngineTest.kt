@@ -127,6 +127,40 @@ class MockTestEngineTest {
     }
 
     @Test
+    fun testDynamicBatchCalculation_speedsUpGeneration() {
+        fun calculateDynamicBatches(totalQuestions: Int): List<Int> {
+            val batchSize = when {
+                totalQuestions <= 15 -> totalQuestions
+                totalQuestions <= 30 -> 15
+                else -> 20
+            }
+            val totalBatches = ((totalQuestions + batchSize - 1) / batchSize).coerceAtLeast(1)
+            val batches = mutableListOf<Int>()
+            var remaining = totalQuestions
+            for (i in 0 until totalBatches) {
+                val count = if (remaining >= batchSize) batchSize else remaining
+                if (count > 0) batches.add(count)
+                remaining -= count
+            }
+            return batches
+        }
+
+        // <= 15: single batch (1 round trip instead of 2)
+        assertEquals(listOf(5), calculateDynamicBatches(5))
+        assertEquals(listOf(10), calculateDynamicBatches(10))
+        assertEquals(listOf(15), calculateDynamicBatches(15))
+
+        // <= 30: 15-question batches (2 round trips for 20/25/30 instead of 3)
+        assertEquals(listOf(15, 5), calculateDynamicBatches(20))
+        assertEquals(listOf(15, 10), calculateDynamicBatches(25))
+        assertEquals(listOf(15, 15), calculateDynamicBatches(30))
+
+        // > 30: 20-question batches (e.g. 50 questions is 3 batches: 20, 20, 10 instead of 5 batches)
+        assertEquals(listOf(20, 20, 10), calculateDynamicBatches(50))
+        assertEquals(5, calculateDynamicBatches(100).size) // 5 batches instead of 10
+    }
+
+    @Test
     fun testMockTestBatchResponse_serializationAndCleanJson() {
         val rawJson = """
         ```json

@@ -2,6 +2,7 @@ package org.opened.app.ui.components
 
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -50,23 +51,36 @@ fun InteractiveMarkdownText(
         }.getOrElse { AnnotatedString(text) }
     }
 
-    ClickableText(
-        text = annotatedString,
-        modifier = modifier,
-        style = style.copy(color = color),
-        onClick = { offset ->
-            annotatedString.getStringAnnotations(tag = TAG_WIKI_LINK, start = offset, end = offset)
-                .firstOrNull()?.let { annotation ->
-                    onChapterClick(annotation.item)
-                    return@ClickableText
-                }
+    val hasLinks = remember(annotatedString) {
+        annotatedString.getStringAnnotations(tag = TAG_WIKI_LINK, start = 0, end = annotatedString.length).isNotEmpty() ||
+        annotatedString.getStringAnnotations(tag = TAG_URL_LINK, start = 0, end = annotatedString.length).isNotEmpty()
+    }
 
-            annotatedString.getStringAnnotations(tag = TAG_URL_LINK, start = offset, end = offset)
-                .firstOrNull()?.let { annotation ->
-                    // External link handling
-                }
-        }
-    )
+    if (!hasLinks) {
+        Text(
+            text = annotatedString,
+            modifier = modifier,
+            style = style.copy(color = color)
+        )
+    } else {
+        ClickableText(
+            text = annotatedString,
+            modifier = modifier,
+            style = style.copy(color = color),
+            onClick = { offset ->
+                annotatedString.getStringAnnotations(tag = TAG_WIKI_LINK, start = offset, end = offset)
+                    .firstOrNull()?.let { annotation ->
+                        onChapterClick(annotation.item)
+                        return@ClickableText
+                    }
+
+                annotatedString.getStringAnnotations(tag = TAG_URL_LINK, start = offset, end = offset)
+                    .firstOrNull()?.let { annotation ->
+                        // External link handling
+                    }
+            }
+        )
+    }
 }
 
 fun buildInteractiveAnnotatedString(
@@ -81,7 +95,14 @@ fun buildInteractiveAnnotatedString(
         fun appendCleanedText(raw: String) {
             if (raw.isEmpty()) return
             // Never allow raw LaTeX leaks, unparsed math, or stray braces in body text
-            val cleaned = if (raw.contains('\\') || (raw.contains('{') && raw.contains('}'))) {
+            val cleaned = if (
+                raw.contains('\\') ||
+                (raw.contains('{') && raw.contains('}')) ||
+                raw.contains('^') ||
+                raw.contains('_') ||
+                raw.contains("sqrt") ||
+                raw.contains("--")
+            ) {
                 LatexParser.cleanInlineLatex(raw)
             } else {
                 raw

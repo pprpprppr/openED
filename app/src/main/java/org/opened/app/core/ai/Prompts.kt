@@ -1122,9 +1122,7 @@ CRITICAL PEDAGOGICAL REQUIREMENTS:
 2. Every question must be realistic, rigorous, and representative of what appears in real high-stakes exams.
 3. Each question must have EXACTLY 4 options (indices 0, 1, 2, 3).
 4. For all math formulas, chemical reactions, or code snippets, use appropriate LaTeX math (${'$'}...${'$'} or $${'$'}...$${'$'}) or Markdown code blocks.
-5. In the "explanation", provide a comprehensive pedagogical breakdown:
-   - Clearly state why the correct option is right with the step-by-step logic, formula, or scenario analysis.
-   - Specifically explain why the remaining 3 distractors are incorrect or suboptimal.
+5. In the "explanation", provide a concise, high-yield explanation (2-3 crisp sentences): clearly justify why the correct option is right with the core formula or logic, and highlight the key distractor trap.
 6. The "correctIndex" MUST be an integer between 0 and 3 corresponding to the correct option in "options".
 
 RESPOND ONLY WITH A VALID JSON OBJECT MATCHING THIS EXACT SCHEMA:

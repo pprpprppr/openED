@@ -265,6 +265,41 @@ class LatexParserTest {
         assertTrue("Should contain H₂O", cleaned.contains("H₂O"))
     }
 
+    @Test
+    fun testArgonGradeFormulas_renderedCleanlyWithoutCaretsOrRawSqrt() {
+        // Antibonding pi-star orbital
+        val piStar = LatexParser.cleanInlineLatex("""\pi \to \pi^*""")
+        assertEquals("π → π*", piStar)
+
+        val piStarBraced = LatexParser.cleanInlineLatex("""\pi \to \pi^{*}""")
+        assertEquals("π → π*", piStarBraced)
+
+        // Square roots: \sqrt{N}, \sqrt N, sqrtN, sqrt(N)
+        val sqrtBraced = LatexParser.cleanInlineLatex("""\sqrt{N}""")
+        assertEquals("√(N)", sqrtBraced)
+
+        val sqrtNoSlash = LatexParser.cleanInlineLatex("""sqrtN""")
+        assertEquals("√(N)", sqrtNoSlash)
+
+        val sqrtParen = LatexParser.cleanInlineLatex("""sqrt(2\pi)""")
+        assertEquals("√(2π)", sqrtParen)
+
+        // Exponents & Ranges with en-dash: 10^{-8}--10^{-6} M, 10^4--10^5
+        val lodRange = LatexParser.cleanInlineLatex("""10^{-8}--10^{-6} M (1--10 ng)""")
+        assertEquals("10⁻⁸ – 10⁻⁶ M (1 – 10 ng)", lodRange)
+
+        val dynamicRange = LatexParser.cleanInlineLatex("""10^4--10^5""")
+        assertEquals("10⁴ – 10⁵", dynamicRange)
+
+        // States and subscripts
+        val stateTransition = LatexParser.cleanInlineLatex("""S_1 \to S_0""")
+        assertEquals("S₁ → S₀", stateTransition)
+
+        // Fractions
+        val half = LatexParser.cleanInlineLatex("""\frac{1}{2}""")
+        assertEquals("½", half)
+    }
+
     @Test(timeout = 2000L)
     fun testLatexParserCompletesOn10000CharHalfStreamedWithUnclosedBracesUnder100ms() {
         val sb = StringBuilder()

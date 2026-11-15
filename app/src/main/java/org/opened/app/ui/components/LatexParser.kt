@@ -73,11 +73,20 @@ object LatexParser {
     private val FLOOR_CLOSE_SPACES_REGEX = Regex("""\s+⌋""")
     private val CEIL_SPACES_REGEX = Regex("""⌈\s+""")
     private val CEIL_CLOSE_SPACES_REGEX = Regex("""\s+⌉""")
-    private val FRAC_REGEX = Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}""")
-    private val SQRT_REGEX = Regex("""\\sqrt\{([^{}]+)\}""")
+    private val FRAC_REGEX = Regex("""\\?(?:frac|dfrac|tfrac)\{([^{}]+)\}\{([^{}]+)\}""")
+    private val SQRT_REGEX = Regex("""\\?sqrt(?:\[([^\]]+)\])?\{([^{}]+)\}""")
+    private val SQRT_PAREN_REGEX = Regex("""\\?sqrt\(([^()]+)\)""")
+    private val SQRT_SIMPLE_REGEX = Regex("""\\?sqrt\s*([0-9a-zA-Z])(?![a-zA-Z0-9])""")
+    private val STAR_EXPONENT_REGEX = Regex("""\^\{\\?(?:ast|star|\*)\}|\^\\?(?:ast|star|\*)""")
+    private val DEGREE_EXPONENT_REGEX = Regex("""\^\{\\?(?:circ|deg)\}|\^\\?(?:circ|deg)""")
+    private val PRIME_EXPONENT_REGEX = Regex("""\^\{\\?(?:prime)\}|\^\\?(?:prime)|\^'""")
+    private val EN_DASH_REGEX = Regex("""(?<!-)--(?!-)""")
+    private val EM_DASH_REGEX = Regex("""---""")
     private val SUPERSCRIPT_BRACED_REGEX = Regex("""\^\{([^{}]+)\}""")
-    private val SUPERSCRIPT_SINGLE_REGEX = Regex("""\^([0-9a-zA-Z•●·])""")
+    private val SUPERSCRIPT_ALPHANUM_REGEX = Regex("""\^([+\-]?[0-9a-zA-Z]+)""")
+    private val SUPERSCRIPT_SINGLE_REGEX = Regex("""\^([0-9a-zA-Z•●·+\-*'′])""")
     private val SUBSCRIPT_BRACED_REGEX = Regex("""_\{([^{}]+)\}""")
+    private val SUBSCRIPT_ALPHANUM_REGEX = Regex("""_([0-9a-zA-Z]+)""")
     private val SUBSCRIPT_SINGLE_REGEX = Regex("""_([0-9a-zA-Z])""")
     private val LEFTOVER_COMMANDS_REGEX = Regex("""\\[a-zA-Z]+""")
     private val MULTIPLE_SPACES_REGEX = Regex("""[ \t]{2,}""")
@@ -294,10 +303,15 @@ object LatexParser {
         // 6. Radicals/bullets: NO^\bullet, ^\bullet -> •
         text = text.replace(BULLET_ACCENT_REGEX, "•")
 
-        // 7. Inline matrices \begin{bmatrix} a \\ b \end{bmatrix} -> [a, b]ᵀ
+        // 7. Star & common superscript symbols: \pi^*, \pi^{* }, ^\circ, ^\prime
+        text = text.replace(STAR_EXPONENT_REGEX, "*")
+            .replace(DEGREE_EXPONENT_REGEX, "°")
+            .replace(PRIME_EXPONENT_REGEX, "′")
+
+        // 8. Inline matrices \begin{bmatrix} a \\ b \end{bmatrix} -> [a, b]ᵀ
         text = replaceInlineMatrices(text)
 
-        // 8. Hat and vector accents
+        // 9. Hat and vector accents
         text = text.replace(HAT_I_REGEX, "î")
             .replace(HAT_J_REGEX, "ĵ")
             .replace(HAT_K_REGEX, "k̂")
@@ -316,7 +330,7 @@ object LatexParser {
             .replace(VEC_J_REGEX, "j⃗")
             .replace(VEC_ACCENTS_REGEX) { "${it.groupValues[1]}⃗" }
 
-        // 9. Blackboard bold sets
+        // 10. Blackboard bold sets
         text = text.replace("\\mathbb{R}", "ℝ")
             .replace("\\mathbb{N}", "ℕ")
             .replace("\\mathbb{Z}", "ℤ")
@@ -327,7 +341,7 @@ object LatexParser {
             .replace("\\mathbb{H}", "ℍ")
             .replace(MATH_BB_GENERIC_REGEX) { it.groupValues[1] }
 
-        // 10. Formats: \mathbf, \boldsymbol, \mathrm, \text, \mathit, \mathsf, \mathtt, \mathcal, \mathscr, \mathbb, \mathfrak
+        // 11. Formats: \mathbf, \boldsymbol, \mathrm, \text, \mathit, \mathsf, \mathtt, \mathcal, \mathscr, \mathbb, \mathfrak
         iter = 0
         while (FORMATTING_COMMANDS_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
             val next = text.replace(FORMATTING_COMMANDS_REGEX) { it.groupValues[2] }
@@ -335,101 +349,157 @@ object LatexParser {
             text = next
         }
 
-        // 11. Non-letter spacing commands
+        // 12. Fractions: \frac{a}{b}, \dfrac{a}{b}, \tfrac{a}{b} -> special unicode fractions or a/b
+        iter = 0
+        while (FRAC_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = FRAC_REGEX.replace(text) { match ->
+                val num = match.groupValues[1].trim()
+                val den = match.groupValues[2].trim()
+                when {
+                    num == "1" && den == "2" -> "½"
+                    num == "1" && den == "3" -> "⅓"
+                    num == "2" && den == "3" -> "⅔"
+                    num == "1" && den == "4" -> "¼"
+                    num == "3" && den == "4" -> "¾"
+                    num == "1" && den == "5" -> "⅕"
+                    num == "1" && den == "8" -> "⅛"
+                    num.length <= 3 && den.length <= 3 && !num.contains(" ") && !den.contains(" ") -> "$num/$den"
+                    else -> "($num)/($den)"
+                }
+            }
+            if (next == text) break
+            text = next
+        }
+
+        // 13. Square roots & roots: \sqrt{...}, \sqrt[3]{...}, \sqrt N, sqrtN, sqrt(...) -> √( ... )
+        iter = 0
+        while (SQRT_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
+            val next = SQRT_REGEX.replace(text) { match ->
+                val rootIndex = match.groupValues[1].trim()
+                val inner = match.groupValues[2].trim()
+                when (rootIndex) {
+                    "3" -> "∛($inner)"
+                    "4" -> "∜($inner)"
+                    "" -> "√($inner)"
+                    else -> {
+                        val supIndex = rootIndex.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+                        "$supIndex√($inner)"
+                    }
+                }
+            }
+            if (next == text) break
+            text = next
+        }
+
+        text = SQRT_PAREN_REGEX.replace(text) { match ->
+            "√(${match.groupValues[1].trim()})"
+        }
+
+        text = SQRT_SIMPLE_REGEX.replace(text) { match ->
+            "√(${match.groupValues[1].trim()})"
+        }
+
+        // 14. Non-letter spacing commands
         text = text.replace("\\,", " ")
             .replace("\\;", " ")
             .replace("\\:", " ")
             .replace("\\!", "")
             .replace("\\ ", " ")
 
-        // 12. Whole-word regex matching for LaTeX commands: \\([a-zA-Z]+)
+        // 15. Whole-word regex matching for LaTeX commands: \\([a-zA-Z]+)
         text = LATEX_COMMAND_WORD_REGEX.replace(text) { match ->
             val cmd = match.groupValues[1]
             LATEX_COMMANDS[cmd] ?: cmd
         }
 
+        // 16. LaTeX dashes / ranges: -- -> –, --- -> —
+        text = text.replace(EM_DASH_REGEX, " — ")
+        text = text.replace(EN_DASH_REGEX, " – ")
+
         // Clean spaces around brackets, floors, and ceilings
         text = text.replace(FLOOR_SPACES_REGEX, "⌊").replace(FLOOR_CLOSE_SPACES_REGEX, "⌋")
         text = text.replace(CEIL_SPACES_REGEX, "⌈").replace(CEIL_CLOSE_SPACES_REGEX, "⌉")
 
-        // 13. Fractions: \frac{a}{b} -> a/b or (a)/(b)
-        iter = 0
-        while (FRAC_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
-            val next = FRAC_REGEX.replace(text) { match ->
-                val num = match.groupValues[1].trim()
-                val den = match.groupValues[2].trim()
-                if (num.length <= 3 && den.length <= 3 && !num.contains(" ") && !den.contains(" ")) {
-                    "$num/$den"
-                } else {
-                    "($num)/($den)"
-                }
-            }
-            if (next == text) break
-            text = next
-        }
-
-        // 14. Square roots: \sqrt{...} -> √( ... )
-        iter = 0
-        while (SQRT_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
-            val next = SQRT_REGEX.replace(text) { match ->
-                "√(${match.groupValues[1].trim()})"
-            }
-            if (next == text) break
-            text = next
-        }
-
-        // 15. Transpose ^T or ^\top or ^\intercal
-        text = text.replace(TRANSPOSE_REGEX, "ᵀ")
-
-        // 16. Superscripts: ^{x} or ^x
+        // 17. Superscripts: ^{x} or ^x or ^-8 or ^4
         iter = 0
         while (SUPERSCRIPT_BRACED_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
             val next = SUPERSCRIPT_BRACED_REGEX.replace(text) { match ->
-                val inner = match.groupValues[1]
+                val inner = match.groupValues[1].trim()
                 val allMapped = inner.all { SUPERSCRIPTS.containsKey(it) }
                 if (allMapped && inner.isNotBlank()) {
                     inner.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
-                } else {
+                } else if (inner.isNotBlank()) {
                     "^($inner)"
+                } else {
+                    ""
                 }
             }
             if (next == text) break
             text = next
         }
+
+        text = SUPERSCRIPT_ALPHANUM_REGEX.replace(text) { match ->
+            val inner = match.groupValues[1]
+            val allMapped = inner.all { SUPERSCRIPTS.containsKey(it) }
+            if (allMapped) {
+                inner.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+            } else {
+                inner.map { SUPERSCRIPTS[it] ?: it }.joinToString("")
+            }
+        }
+
         text = SUPERSCRIPT_SINGLE_REGEX.replace(text) { match ->
             val c = match.groupValues[1].first()
             (SUPERSCRIPTS[c] ?: "^$c").toString()
         }
 
-        // 17. Subscripts: _{x} or _x
+        // 18. Subscripts: _{x} or _x
         iter = 0
         while (SUBSCRIPT_BRACED_REGEX.containsMatchIn(text) && iter++ < MAX_REPLACE_ITERATIONS) {
             val next = SUBSCRIPT_BRACED_REGEX.replace(text) { match ->
-                val inner = match.groupValues[1]
+                val inner = match.groupValues[1].trim()
                 val allMapped = inner.all { SUBSCRIPTS.containsKey(it) }
                 if (allMapped && inner.isNotBlank()) {
                     inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
-                } else {
+                } else if (inner.isNotBlank()) {
                     "_($inner)"
+                } else {
+                    ""
                 }
             }
             if (next == text) break
             text = next
         }
+
+        text = SUBSCRIPT_ALPHANUM_REGEX.replace(text) { match ->
+            val inner = match.groupValues[1]
+            val allMapped = inner.all { SUBSCRIPTS.containsKey(it) }
+            if (allMapped) {
+                inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
+            } else {
+                inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
+            }
+        }
+
         text = SUBSCRIPT_SINGLE_REGEX.replace(text) { match ->
             val c = match.groupValues[1].first()
             (SUBSCRIPTS[c] ?: "_$c").toString()
         }
 
-        // 18. Clean stray delimiters
+        // 19. Clean stray delimiters
         text = text.replace("\\(", "(").replace("\\)", ")")
             .replace("\\[", "[").replace("\\]", "]")
+            .replace("\\{", "{").replace("\\}", "}")
 
-        // 19. Strip leftover formatting commands and braces
+        // 20. Strip leftover formatting commands and braces
         text = text.replace(LEFTOVER_COMMANDS_REGEX, "")
         text = text.replace("{", "").replace("}", "")
 
-        // 20. Restore protected escaped underscores
+        // 21. Clean any isolated trailing carets
+        text = text.replace(Regex("""\^\{\s*\}"""), "")
+        text = text.replace(Regex("""\^\s*$"""), "")
+
+        // 22. Restore protected escaped underscores
         text = text.replace(placeholderUnderscore, "_")
 
         // Normalize multiple spaces

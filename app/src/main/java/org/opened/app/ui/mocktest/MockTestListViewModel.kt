@@ -3,6 +3,7 @@ package org.opened.app.ui.mocktest
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -43,6 +44,8 @@ class MockTestListViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(MockTestListUiState())
     val uiState: StateFlow<MockTestListUiState> = _uiState.asStateFlow()
+
+    private var generationJob: Job? = null
 
     fun loadMockTests(pathId: String = "") {
         _uiState.update { it.copy(pathId = pathId, isLoading = true) }
@@ -131,7 +134,8 @@ class MockTestListViewModel @Inject constructor(
             )
         }
 
-        viewModelScope.launch {
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
             try {
                 var effectivePathId = targetPathId
 
@@ -246,7 +250,8 @@ class MockTestListViewModel @Inject constructor(
                 errorMessage = null
             )
         }
-        viewModelScope.launch {
+        generationJob?.cancel()
+        generationJob = viewModelScope.launch {
             try {
                 val result = aiLearningEngine.generateQuestionsForExistingTest(
                     testId = testId,
@@ -287,6 +292,17 @@ class MockTestListViewModel @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    fun cancelGeneration() {
+        generationJob?.cancel()
+        generationJob = null
+        _uiState.update {
+            it.copy(
+                isGenerating = false,
+                generationProgressText = ""
+            )
         }
     }
 

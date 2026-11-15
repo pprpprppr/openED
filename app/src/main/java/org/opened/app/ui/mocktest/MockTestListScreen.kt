@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -349,7 +350,8 @@ fun MockTestListScreen(
                 GenerationProgressDialog(
                     progressText = uiState.generationProgressText,
                     currentBatch = uiState.currentBatch,
-                    totalBatches = uiState.totalBatches
+                    totalBatches = uiState.totalBatches,
+                    onCancel = { viewModel.cancelGeneration() }
                 )
             }
         }
@@ -1290,9 +1292,10 @@ private fun CreateMockTestDialog(
 private fun GenerationProgressDialog(
     progressText: String,
     currentBatch: Int,
-    totalBatches: Int
+    totalBatches: Int,
+    onCancel: () -> Unit
 ) {
-    Dialog(onDismissRequest = { /* Non-dismissible while generating */ }) {
+    Dialog(onDismissRequest = onCancel) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
@@ -1345,6 +1348,25 @@ private fun GenerationProgressDialog(
                         color = MaterialTheme.colorScheme.primary,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(10.dp)
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = onCancel,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        "Cancel Generation",
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
