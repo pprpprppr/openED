@@ -438,4 +438,101 @@ class MockTestEngineTest {
         assertTrue(wrongAnswer.isAnswered)
         assertFalse(wrongAnswer.isCorrect)
     }
+
+    @Test
+    fun testGenerateMockTestCustomPrompt_containsTopicCategoryAndDirectives() {
+        val prompt = Prompts.generateMockTestCustomPrompt(
+            topic = "Quantum Chromatography",
+            examCategory = ExamCategory.ENTRANCE.displayName,
+            targetExamName = "JEE Advanced",
+            userNotes = "Focus on column efficiency equations and retention factors."
+        )
+
+        assertTrue(prompt.contains("Quantum Chromatography"))
+        assertTrue(prompt.contains(ExamCategory.ENTRANCE.displayName))
+        assertTrue(prompt.contains("TARGET OFFICIAL EXAM STANDARD: JEE Advanced"))
+        assertTrue(prompt.contains("Focus on column efficiency equations and retention factors."))
+        assertTrue(prompt.contains("REQUIREMENTS FOR THE GENERATED CUSTOM INSTRUCTION"))
+    }
+
+    @Test
+    fun testExamMockTestBatchPrompt_withContextRetention() {
+        val summary = """
+PRIOR MISSED QUESTIONS (Learner scored wrong on these concepts):
+- [PREVIOUSLY MISSED - TEST COMPLEMENTARY ANGLE] (Chromatography): What is the Van Deemter equation parameter A?
+
+PRIOR TESTED QUESTIONS & TOPICS (DO NOT REPEAT):
+- (Retention Theory): How does temperature alter the capacity factor k?
+        """.trimIndent()
+
+        val prompt = Prompts.examMockTestBatchPrompt(
+            courseTitle = "Quantum Chromatography",
+            courseTopic = "Analytical Chemistry",
+            examCategory = "ENTRANCE",
+            targetExamName = "JEE Advanced",
+            batchTopicsSummary = "Module 2: Quantum Retention",
+            batchNumber = 1,
+            totalBatches = 1,
+            questionCount = 10,
+            startQuestionNumber = 1,
+            previouslyTestedQuestionsSummary = summary
+        )
+
+        assertTrue(prompt.contains("PREVIOUSLY TESTED QUESTIONS & CONTINUITY CONTEXT"))
+        assertTrue(prompt.contains("ZERO DUPLICATION"))
+        assertTrue(prompt.contains("TARGET WEAK SPOTS"))
+        assertTrue(prompt.contains("PROGRESSIVE COVERAGE"))
+        assertTrue(prompt.contains("[PREVIOUSLY MISSED - TEST COMPLEMENTARY ANGLE]"))
+        assertTrue(prompt.contains("Van Deemter"))
+    }
+
+    @Test
+    fun testTopicGroupingLogic() {
+        val test1 = MockTestEntity(
+            id = "t1",
+            pathId = "path-quantum",
+            title = "Test 1",
+            examCategory = ExamCategory.ENTRANCE,
+            targetExamName = "JEE Advanced",
+            totalQuestions = 10,
+            timeLimitMinutes = 20,
+            status = MockTestStatus.COMPLETED,
+            score = 80
+        )
+        val test2 = MockTestEntity(
+            id = "t2",
+            pathId = "path-quantum",
+            title = "Test 2",
+            examCategory = ExamCategory.ENTRANCE,
+            targetExamName = "JEE Advanced",
+            totalQuestions = 10,
+            timeLimitMinutes = 20,
+            status = MockTestStatus.COMPLETED,
+            score = 60
+        )
+        val test3 = MockTestEntity(
+            id = "t3",
+            pathId = "path-python",
+            title = "Python Test 1",
+            examCategory = ExamCategory.CERTIFICATION,
+            targetExamName = "PCAP",
+            totalQuestions = 15,
+            timeLimitMinutes = 25,
+            status = MockTestStatus.NOT_STARTED,
+            score = 0
+        )
+
+        val tests = listOf(test1, test2, test3)
+        val pathNames = mapOf("path-quantum" to "Quantum Chromatography", "path-python" to "Python for Data Science")
+
+        val grouped = tests.groupBy { pathNames[it.pathId] ?: "General Practice" }
+
+        assertEquals(2, grouped.size)
+        assertEquals(2, grouped["Quantum Chromatography"]?.size)
+        assertEquals(1, grouped["Python for Data Science"]?.size)
+
+        val quantumTests = grouped["Quantum Chromatography"] ?: emptyList()
+        val avgScore = quantumTests.map { it.score }.average().toInt()
+        assertEquals(70, avgScore)
+    }
 }

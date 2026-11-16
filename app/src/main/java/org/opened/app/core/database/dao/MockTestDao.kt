@@ -49,6 +49,14 @@ interface MockTestDao {
     @Query("SELECT * FROM mock_test_questions WHERE testId = :testId ORDER BY questionIndex ASC")
     suspend fun getQuestionsForTest(testId: String): List<MockTestQuestionEntity>
 
+    @Query("""
+        SELECT q.* FROM mock_test_questions q
+        INNER JOIN mock_tests t ON q.testId = t.id
+        WHERE t.pathId = :pathId
+        ORDER BY t.createdAt DESC, q.questionIndex ASC
+    """)
+    suspend fun getQuestionsForPath(pathId: String): List<MockTestQuestionEntity>
+
     @Query("UPDATE mock_test_questions SET userSelectedOption = :userSelectedOption WHERE id = :questionId")
     suspend fun updateQuestionAnswer(questionId: String, userSelectedOption: Int)
 

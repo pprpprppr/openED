@@ -707,7 +707,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
         totalBatches: Int,
         questionCount: Int,
         startQuestionNumber: Int,
-        customPrompt: String = ""
+        customPrompt: String = "",
+        previouslyTestedQuestionsSummary: String = ""
     ): Result<List<MockTestQuestionItem>> = withContext(Dispatchers.IO) {
         runCatching {
             val prefs = preferencesRepository.userPreferencesFlow.first()
@@ -721,7 +722,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 totalBatches = totalBatches,
                 questionCount = questionCount,
                 startQuestionNumber = startQuestionNumber,
-                customPrompt = customPrompt
+                customPrompt = customPrompt,
+                previouslyTestedQuestionsSummary = previouslyTestedQuestionsSummary
             )
             val raw = multiAiClient.generateContent(
                 systemInstruction = prefs.customSystemInstructions,
@@ -732,6 +734,56 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
             val cleaned = cleanJsonOutput(raw)
             parseMockTestBatchFlexible(cleaned)
         }
+    }
+
+    suspend fun generateMockTestCustomPrompt(
+        topic: String,
+        examCategory: ExamCategory,
+        targetExamName: String,
+        userNotes: String = ""
+    ): Result<String> = withContext(Dispatchers.IO) {
+        runCatching {
+            val prompt = Prompts.generateMockTestCustomPrompt(
+                topic = topic,
+                examCategory = examCategory.displayName,
+                targetExamName = targetExamName,
+                userNotes = userNotes
+            )
+            val systemInstruction = """
+You are an expert psychometrician and high-stakes test design prompt architect. Generate an authoritative, high-yield system instruction prompt for generating mock exam questions based on the user's exam goals. Output ONLY the raw instruction text without commentary or markdown code fences.
+            """.trimIndent()
+            val rawOutput = multiAiClient.generateContent(
+                systemInstruction = systemInstruction,
+                prompt = prompt,
+                isJson = false,
+                taskType = org.opened.app.core.ai.provider.AiTaskType.GENERAL
+            )
+            rawOutput.trim()
+                .removeSurrounding("```markdown", "```")
+                .removeSurrounding("```", "```")
+                .trim()
+        }
+    }
+
+    private fun formatContinuitySummary(questions: List<MockTestQuestionEntity>): String {
+        if (questions.isEmpty()) return ""
+        val missedQuestions = questions.filter { it.isAnswered && !it.isCorrect }
+        val otherQuestions = questions.filterNot { it.isAnswered && !it.isCorrect }
+        return buildString {
+            if (missedQuestions.isNotEmpty()) {
+                appendLine("PRIOR MISSED QUESTIONS (Learner scored wrong on these concepts in previous tests - generate fresh complementary diagnostic questions probing these principles without duplicating stems):")
+                missedQuestions.take(15).forEach { q ->
+                    appendLine("- [PREVIOUSLY MISSED - TEST COMPLEMENTARY ANGLE] (${q.topic}): ${q.questionText.take(160)}")
+                }
+                appendLine()
+            }
+            if (otherQuestions.isNotEmpty()) {
+                appendLine("PRIOR TESTED QUESTIONS & TOPICS (DO NOT REPEAT):")
+                otherQuestions.take(25).forEach { q ->
+                    appendLine("- (${q.topic}): ${q.questionText.take(140)}")
+                }
+            }
+        }.trim()
     }
 
     suspend fun generateFullMockTest(
@@ -750,6 +802,10 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
             val courseTopic = pathWithModules?.studyPath?.topic ?: targetExamName.ifBlank { title }
             val effectiveCustomPrompt = customPrompt.ifBlank { pathWithModules?.studyPath?.customPrompt.orEmpty() }
             val modulesWithChapters = pathWithModules?.modules ?: emptyList()
+
+            // Fetch prior questions for this topic/course to maintain continuity and prevent duplication
+            val previousQuestions = repository.getQuestionsForPath(pathId)
+            val continuitySummary = formatContinuitySummary(previousQuestions)
 
             // Collect all topics/chapters for syllabus distribution
             val topicList = mutableListOf<String>()
@@ -802,7 +858,8 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                     totalBatches = totalBatches,
                     questionCount = currentBatchCount,
                     startQuestionNumber = currentStartIndex,
-                    customPrompt = effectiveCustomPrompt
+                    customPrompt = effectiveCustomPrompt,
+                    previouslyTestedQuestionsSummary = continuitySummary
                 ).getOrThrow()
 
                 for (item in batchResult) {
@@ -883,7 +940,12 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
             val pathWithModules = repository.getStudyPathWithModules(test.pathId)
             val courseTitle = pathWithModules?.studyPath?.title ?: test.title
             val courseTopic = pathWithModules?.studyPath?.topic ?: test.targetExamName.ifBlank { test.title }
+            val effectiveCustomPrompt = pathWithModules?.studyPath?.customPrompt.orEmpty()
             val modulesWithChapters = pathWithModules?.modules ?: emptyList()
+
+            // Fetch prior questions for this path excluding current test
+            val previousQuestions = repository.getQuestionsForPath(test.pathId).filter { it.testId != testId }
+            val continuitySummary = formatContinuitySummary(previousQuestions)
 
             val topicList = mutableListOf<String>()
             for (moduleWithChapters in modulesWithChapters) {
@@ -931,21 +993,36 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                     batchNumber = batchIdx + 1,
                     totalBatches = totalBatches,
                     questionCount = currentBatchCount,
-                    startQuestionNumber = currentStartIndex
+                    startQuestionNumber = currentStartIndex,
+                    customPrompt = effectiveCustomPrompt,
+                    previouslyTestedQuestionsSummary = continuitySummary
                 ).getOrThrow()
 
                 for (item in batchResult) {
+                    val validOptions = if (item.options.size >= 2) item.options else listOf("Option A", "Option B", "Option C", "Option D")
+                    val isMulti = item.type.equals("MULTI_SELECT", ignoreCase = true) || item.correctAnswers.size > 1
+                    val qType = if (isMulti) QuestionType.MULTI_SELECT else QuestionType.SINGLE_CHOICE
+                    val primaryCorrectIndex = item.correctIndex.coerceIn(0, validOptions.size - 1)
+                    val finalCorrectAnswers = if (item.correctAnswers.isNotEmpty()) {
+                        item.correctAnswers
+                    } else {
+                        listOf(validOptions[primaryCorrectIndex])
+                    }
+
                     val qEntity = MockTestQuestionEntity(
                         id = UUID.randomUUID().toString(),
                         testId = test.id,
                         questionIndex = allQuestions.size,
                         topic = item.topic.ifBlank { "General $courseTopic" },
                         questionText = item.question,
-                        optionsJson = MockTestQuestionEntity.createOptionsJson(item.options),
-                        correctOptionIndex = item.correctIndex.coerceIn(0, (item.options.size - 1).coerceAtLeast(0)),
+                        optionsJson = MockTestQuestionEntity.createOptionsJson(validOptions),
+                        correctOptionIndex = primaryCorrectIndex,
                         explanation = item.explanation,
                         userSelectedOption = -1,
-                        isFlagged = false
+                        isFlagged = false,
+                        questionType = qType,
+                        correctAnswers = finalCorrectAnswers,
+                        userSelectedAnswers = emptyList()
                     )
                     allQuestions.add(qEntity)
                 }

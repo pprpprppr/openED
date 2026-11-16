@@ -754,6 +754,12 @@ class OpenEDRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun getQuestionsForPath(pathId: String): List<MockTestQuestionEntity> {
+        return withContext(Dispatchers.IO) {
+            mockTestDao.getQuestionsForPath(pathId)
+        }
+    }
+
     override suspend fun getMockTestWithQuestions(id: String): MockTestWithQuestions? {
         return withContext(Dispatchers.IO) {
             mockTestDao.getMockTestWithQuestions(id)

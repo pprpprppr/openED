@@ -33,6 +33,10 @@ data class MockTestListUiState(
     val currentBatch: Int = 0,
     val totalBatches: Int = 0,
     val showCreateDialog: Boolean = false,
+    val preselectedCourseId: String? = null,
+    val isGeneratingPrompt: Boolean = false,
+    val generatedCustomPrompt: String? = null,
+    val promptGenerationError: String? = null,
     val errorMessage: String? = null
 )
 
@@ -105,12 +109,71 @@ class MockTestListViewModel @Inject constructor(
         }
     }
 
-    fun openCreateDialog() {
-        _uiState.update { it.copy(showCreateDialog = true, errorMessage = null) }
+    fun openCreateDialog(preselectedCourseId: String? = null) {
+        _uiState.update {
+            it.copy(
+                showCreateDialog = true,
+                preselectedCourseId = preselectedCourseId,
+                errorMessage = null,
+                generatedCustomPrompt = null,
+                promptGenerationError = null
+            )
+        }
     }
 
     fun dismissCreateDialog() {
-        _uiState.update { it.copy(showCreateDialog = false) }
+        _uiState.update {
+            it.copy(
+                showCreateDialog = false,
+                preselectedCourseId = null,
+                generatedCustomPrompt = null,
+                promptGenerationError = null
+            )
+        }
+    }
+
+    fun generateCustomPrompt(
+        topic: String,
+        category: ExamCategory,
+        targetExam: String,
+        userNotes: String
+    ) {
+        if (topic.isBlank()) {
+            _uiState.update { it.copy(promptGenerationError = "Please enter or select a target course or topic first.") }
+            return
+        }
+        _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
+        viewModelScope.launch {
+            val result = aiLearningEngine.generateMockTestCustomPrompt(
+                topic = topic,
+                examCategory = category,
+                targetExamName = targetExam,
+                userNotes = userNotes
+            )
+            result.fold(
+                onSuccess = { generatedPrompt ->
+                    _uiState.update {
+                        it.copy(
+                            isGeneratingPrompt = false,
+                            generatedCustomPrompt = generatedPrompt,
+                            promptGenerationError = null
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            isGeneratingPrompt = false,
+                            promptGenerationError = error.localizedMessage ?: "Failed to generate prompt."
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    fun clearGeneratedPrompt() {
+        _uiState.update { it.copy(generatedCustomPrompt = null, promptGenerationError = null) }
     }
 
     fun createMockTest(

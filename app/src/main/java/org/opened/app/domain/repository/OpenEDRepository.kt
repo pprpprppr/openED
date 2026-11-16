@@ -104,6 +104,7 @@ interface OpenEDRepository {
     fun getMockTestsForPathFlow(pathId: String): Flow<List<MockTestEntity>>
     suspend fun getMockTestById(id: String): MockTestEntity?
     suspend fun getQuestionsForTest(testId: String): List<MockTestQuestionEntity>
+    suspend fun getQuestionsForPath(pathId: String): List<MockTestQuestionEntity>
     suspend fun getMockTestWithQuestions(id: String): MockTestWithQuestions?
     fun getMockTestWithQuestionsFlow(id: String): Flow<MockTestWithQuestions?>
     suspend fun saveMockTestWithQuestions(test: MockTestEntity, questions: List<MockTestQuestionEntity>)

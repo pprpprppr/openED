@@ -1035,6 +1035,28 @@ REQUIREMENTS FOR THE GENERATED SYSTEM INSTRUCTION:
 """.trimIndent()
     }
 
+    fun generateMockTestCustomPrompt(
+        topic: String,
+        examCategory: String,
+        targetExamName: String,
+        userNotes: String = ""
+    ): String {
+        val targetContext = if (targetExamName.isNotBlank()) "\nTARGET OFFICIAL EXAM STANDARD: $targetExamName" else ""
+        val notesContext = if (userNotes.isNotBlank()) "\nLEARNER'S SPECIFIC FOCUS AREAS & ROUGH NOTES:\n\"$userNotes\"" else ""
+        return """
+You are a senior psychometrician and high-stakes test design prompt architect for openED.
+Your task is to craft a crisp, authoritative System Instruction / Custom Focus Directive for generating rigorous Mock Exam questions for:
+Course Topic: "$topic"
+Exam Category: $examCategory$targetContext$notesContext
+
+REQUIREMENTS FOR THE GENERATED CUSTOM INSTRUCTION:
+1. Define the exact exam standard, difficulty level, and cognitive domain to target (e.g. multi-step calculation, clinical reasoning, assertion-reason statements, enterprise scenarios).
+2. Mandate specific high-yield subtopics, trap patterns, formula rigor, and distractor design rules tailored to "$topic".
+3. Keep it authoritative, precise, and directly usable as a test-generation directive (between 60 to 150 words).
+4. Do NOT include markdown code fences (```) around the entire output. Do NOT include conversational filler, greetings, or intro/outro text. Output ONLY the raw prompt text that will be fed directly to the exam question generator.
+""".trimIndent()
+    }
+
     fun examMockTestBatchPrompt(
         courseTitle: String,
         courseTopic: String,
@@ -1045,7 +1067,8 @@ REQUIREMENTS FOR THE GENERATED SYSTEM INSTRUCTION:
         totalBatches: Int,
         questionCount: Int,
         startQuestionNumber: Int,
-        customPrompt: String = ""
+        customPrompt: String = "",
+        previouslyTestedQuestionsSummary: String = ""
     ): String {
         val examGuideline = when (examCategory.uppercase()) {
             "ENTRANCE" -> """
@@ -1102,6 +1125,21 @@ $customPrompt
             ""
         }
 
+        val contextRetentionClause = if (previouslyTestedQuestionsSummary.isNotBlank()) {
+            """
+PREVIOUSLY TESTED QUESTIONS & CONTINUITY CONTEXT (FOR THIS COURSE/TOPIC):
+The learner has already taken previous mock tests on this course. Below is a summary of concepts and question stems previously generated:
+$previouslyTestedQuestionsSummary
+
+CONTINUITY DIRECTIVES (STRICT):
+1. ZERO DUPLICATION: Do NOT duplicate, re-ask, or slightly reword any of the stems or scenarios listed above. Generate completely fresh, authentic questions.
+2. TARGET WEAK SPOTS: Notice any questions marked with [PREVIOUSLY MISSED - TEST COMPLEMENTARY ANGLE]. The learner answered these incorrectly in prior tests. Design new, complementary, diagnostic questions that test the underlying principles of those weak areas from a different perspective or scenario to reinforce mastery.
+3. PROGRESSIVE COVERAGE: Explore complementary subtopics, deeper applications, and edge cases to expand the breadth and depth of the learner's test preparation.
+"""
+        } else {
+            ""
+        }
+
         return """
 You are a senior exam paper setter and psychometric testing architect creating an authentic, high-yield Mock Exam for openED.
 Course Title: "$courseTitle"
@@ -1116,7 +1154,7 @@ $batchTopicsSummary
 
 $examGuideline
 $customInstructionClause
-
+$contextRetentionClause
 CRITICAL PEDAGOGICAL REQUIREMENTS:
 1. Cover the topics listed above thoroughly without repeating previous questions.
 2. Every question must be realistic, rigorous, and representative of what appears in real high-stakes exams.

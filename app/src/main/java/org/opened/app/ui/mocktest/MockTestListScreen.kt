@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
@@ -51,6 +53,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -71,6 +74,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -125,6 +129,39 @@ fun MockTestListScreen(
     }
     val avgScore = remember(completedTests) {
         if (completedTests.isNotEmpty()) completedTests.map { it.score }.average().toInt() else 0
+    }
+
+    val collapsedTopics = remember { mutableStateMapOf<String, Boolean>() }
+    val groupedMockTests = remember(uiState.mockTests, uiState.availableCourses) {
+        val groups = mutableListOf<TopicTestGroup>()
+        val map = linkedMapOf<String, MutableList<MockTestEntity>>()
+        val pathIdMap = mutableMapOf<String, String>()
+
+        for (test in uiState.mockTests) {
+            val matchedCourse = uiState.availableCourses.find { it.studyPath.id == test.pathId }
+            val topicKey = matchedCourse?.studyPath?.topic?.ifBlank { null }
+                ?: matchedCourse?.studyPath?.title?.ifBlank { null }
+                ?: test.targetExamName.ifBlank { null }
+                ?: "General Practice"
+
+            map.getOrPut(topicKey) { mutableListOf() }.add(test)
+            if (matchedCourse != null) {
+                pathIdMap[topicKey] = matchedCourse.studyPath.id
+            } else if (test.pathId.isNotBlank()) {
+                pathIdMap[topicKey] = test.pathId
+            }
+        }
+
+        for ((topic, tests) in map) {
+            groups.add(
+                TopicTestGroup(
+                    topicName = topic,
+                    pathId = pathIdMap[topic],
+                    tests = tests
+                )
+            )
+        }
+        groups
     }
 
     Scaffold(
@@ -312,16 +349,42 @@ fun MockTestListScreen(
                         EmptyMockTestsCard(onCreateClick = { viewModel.openCreateDialog() })
                     }
                 } else {
-                    items(uiState.mockTests, key = { it.id }) { test ->
-                        val matchedCourse = uiState.availableCourses.find { it.studyPath.id == test.pathId }
-                        MockTestCard(
-                            test = test,
-                            courseName = matchedCourse?.studyPath?.topic,
-                            onTakeTest = { onTakeTest(test.id) },
-                            onViewResult = { onViewResult(test.id) },
-                            onRegenerate = { viewModel.regenerateMockTestQuestions(test.id) },
-                            onDelete = { viewModel.deleteMockTest(test.id) }
-                        )
+                    groupedMockTests.forEach { group ->
+                        val groupCompleted = group.tests.count { it.status == MockTestStatus.COMPLETED }
+                        val groupAvg = if (groupCompleted > 0) {
+                            group.tests.filter { it.status == MockTestStatus.COMPLETED }.map { it.score }.average().toInt()
+                        } else 0
+                        val isExpanded = collapsedTopics[group.topicName] != true
+
+                        item(key = "header_${group.topicName}") {
+                            TopicSectionHeaderCard(
+                                topicName = group.topicName,
+                                totalTests = group.tests.size,
+                                completedTests = groupCompleted,
+                                avgScore = groupAvg,
+                                isExpanded = isExpanded,
+                                onToggleExpand = {
+                                    collapsedTopics[group.topicName] = isExpanded
+                                },
+                                onNewTestClick = {
+                                    viewModel.openCreateDialog(preselectedCourseId = group.pathId)
+                                }
+                            )
+                        }
+
+                        if (isExpanded) {
+                            items(group.tests, key = { it.id }) { test ->
+                                val matchedCourse = uiState.availableCourses.find { it.studyPath.id == test.pathId }
+                                MockTestCard(
+                                    test = test,
+                                    courseName = matchedCourse?.studyPath?.topic,
+                                    onTakeTest = { onTakeTest(test.id) },
+                                    onViewResult = { onViewResult(test.id) },
+                                    onRegenerate = { viewModel.regenerateMockTestQuestions(test.id) },
+                                    onDelete = { viewModel.deleteMockTest(test.id) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -330,7 +393,14 @@ fun MockTestListScreen(
             if (uiState.showCreateDialog) {
                 CreateMockTestDialog(
                     availableCourses = uiState.availableCourses,
-                    initialCourseId = uiState.pathId.ifBlank { uiState.selectedCourseFilter },
+                    initialCourseId = uiState.preselectedCourseId ?: uiState.pathId.ifBlank { uiState.selectedCourseFilter },
+                    isGeneratingPrompt = uiState.isGeneratingPrompt,
+                    generatedCustomPrompt = uiState.generatedCustomPrompt,
+                    promptGenerationError = uiState.promptGenerationError,
+                    onGeneratePrompt = { topic, category, targetExam, notes ->
+                        viewModel.generateCustomPrompt(topic, category, targetExam, notes)
+                    },
+                    onClearGeneratedPrompt = { viewModel.clearGeneratedPrompt() },
                     onDismiss = { viewModel.dismissCreateDialog() },
                     onConfirm = { category, targetExam, count, timeLimit, customTitle, selectedCourseId, customCourse, customPrompt ->
                         viewModel.createMockTest(
@@ -552,6 +622,140 @@ private fun EmptyMockTestsCard(onCreateClick: () -> Unit) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("Generate Mock Test")
+            }
+        }
+    }
+}
+
+data class TopicTestGroup(
+    val topicName: String,
+    val pathId: String?,
+    val tests: List<MockTestEntity>
+)
+
+@Composable
+private fun TopicSectionHeaderCard(
+    topicName: String,
+    totalTests: Int,
+    completedTests: Int,
+    avgScore: Int,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onNewTestClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onToggleExpand),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.School,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = topicName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        ) {
+                            Text(
+                                text = "$totalTests ${if (totalTests == 1) "Test" else "Tests"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+
+                        if (completedTests > 0) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (avgScore >= 70) Color(0xFF10B981).copy(alpha = 0.2f) else MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    text = "$avgScore% Avg ($completedTests done)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (avgScore >= 70) Color(0xFF047857) else MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = onNewTestClick,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "New Test",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -921,6 +1125,11 @@ private fun MockTestCard(
 private fun CreateMockTestDialog(
     availableCourses: List<StudyPathWithModules> = emptyList(),
     initialCourseId: String? = null,
+    isGeneratingPrompt: Boolean = false,
+    generatedCustomPrompt: String? = null,
+    promptGenerationError: String? = null,
+    onGeneratePrompt: (topic: String, category: ExamCategory, targetExam: String, userNotes: String) -> Unit = { _, _, _, _ -> },
+    onClearGeneratedPrompt: () -> Unit = {},
     onDismiss: () -> Unit,
     onConfirm: (
         category: ExamCategory,
@@ -955,6 +1164,13 @@ private fun CreateMockTestDialog(
     var isCustomQuestionCount by remember { mutableStateOf(false) }
     var customQuestionCountInput by remember { mutableStateOf("") }
     var timeLimitMinutes by remember { mutableIntStateOf(20) }
+
+    LaunchedEffect(generatedCustomPrompt) {
+        if (!generatedCustomPrompt.isNullOrBlank()) {
+            customPrompt = generatedCustomPrompt
+            onClearGeneratedPrompt()
+        }
+    }
 
     val quickExamRecommendations = remember(selectedCategory) {
         when (selectedCategory) {
@@ -1246,14 +1462,66 @@ private fun CreateMockTestDialog(
                     }
                 }
 
-                // 6. Custom Prompt / Focus Areas (Optional)
+                // 6. Custom Prompt / Focus Areas (Optional) with AI Prompt Architect
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "CUSTOM PROMPT / FOCUS AREAS (OPTIONAL)",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "CUSTOM PROMPT / FOCUS AREAS (OPTIONAL)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FilledTonalButton(
+                            onClick = {
+                                onGeneratePrompt(
+                                    targetCourseText.trim(),
+                                    selectedCategory,
+                                    targetExamName.trim(),
+                                    customPrompt.trim()
+                                )
+                            },
+                            enabled = !isGeneratingPrompt && targetCourseText.isNotBlank(),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            if (isGeneratingPrompt) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(13.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Architecting...",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AutoAwesome,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (customPrompt.isBlank()) "✨ Generate from Topic" else "✨ Polish with AI",
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
+                    }
+
+                    if (promptGenerationError != null) {
+                        Text(
+                            text = promptGenerationError,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
                     OutlinedTextField(
                         value = customPrompt,
                         onValueChange = { customPrompt = it },
