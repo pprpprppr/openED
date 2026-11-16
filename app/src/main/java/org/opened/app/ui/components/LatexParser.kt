@@ -59,7 +59,7 @@ object LatexParser {
     private const val MAX_REPLACE_ITERATIONS = 25
 
     // Pre-compiled Regex constants to eliminate repeated compilation on Main/Worker threads
-    private val CE_REGEX = Regex("""\\ce\{([^{}]+)\}""")
+    private val CE_REGEX = Regex("""\\ce\{((?:[^{}]|\{[^{}]*\})*)\}""")
     private val OPERATOR_NAME_REGEX = Regex("""\\operatorname\*?\{([^{}]+)\}""")
     private val BOXED_REGEX = Regex("""\\boxed\{([^{}]+)\}""")
     private val TRANSPOSE_REGEX = Regex("""\^\{\\?(?:mathsf|mathrm)?\{?T\}?\}|\^\\?(?:mathsf|mathrm)?\{?T\}?|\^\{\\top\}|\^\\top|\^T|\^\{T\}|\^\{\\intercal\}""")
@@ -155,7 +155,7 @@ object LatexParser {
         'H' to 'ᴴ', 'I' to 'ᴵ', 'J' to 'ᶪ', 'K' to 'ᴷ', 'L' to 'ᴸ',
         'M' to 'ᴹ', 'N' to 'ᴺ', 'O' to 'ᴼ', 'P' to 'ᴾ', 'R' to 'ᴿ',
         'T' to 'ᵀ', 'U' to 'ᵁ', 'V' to 'ⱽ', 'W' to 'ᵂ',
-        '×' to 'ˣ', '*' to '*'
+        '×' to 'ˣ', '*' to '*', ' ' to ' '
     )
 
     private val SUBSCRIPTS = mapOf(
@@ -165,7 +165,7 @@ object LatexParser {
         'a' to 'ₐ', 'e' to 'ₑ', 'h' to 'ₕ', 'i' to 'ᵢ', 'j' to 'ⱼ',
         'k' to 'ₖ', 'l' to 'ₗ', 'm' to 'ₘ', 'n' to 'ₙ', 'o' to 'ₒ',
         'p' to 'ₚ', 'r' to 'ᵣ', 's' to 'ₛ', 't' to 'ₜ', 'u' to 'ᵤ',
-        'v' to 'ᵥ', 'x' to 'ₓ'
+        'v' to 'ᵥ', 'x' to 'ₓ', ' ' to ' '
     )
 
     private val LATEX_COMMANDS = mapOf(
@@ -473,17 +473,12 @@ object LatexParser {
 
         text = SUBSCRIPT_ALPHANUM_REGEX.replace(text) { match ->
             val inner = match.groupValues[1]
-            val allMapped = inner.all { SUBSCRIPTS.containsKey(it) }
-            if (allMapped) {
-                inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
-            } else {
-                inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
-            }
+            inner.map { SUBSCRIPTS[it] ?: it }.joinToString("")
         }
 
         text = SUBSCRIPT_SINGLE_REGEX.replace(text) { match ->
             val c = match.groupValues[1].first()
-            (SUBSCRIPTS[c] ?: "_$c").toString()
+            (SUBSCRIPTS[c] ?: c).toString()
         }
 
         // 19. Clean stray delimiters

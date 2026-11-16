@@ -154,11 +154,25 @@ fun KaTeXMathView(
         Modifier.heightIn(min = minHeight)
     }
 
+    var webViewRef by remember { androidx.compose.runtime.mutableStateOf<WebView?>(null) }
+
+    DisposableEffect(cleanLatex) {
+        onDispose {
+            try {
+                webViewRef?.stopLoading()
+                webViewRef?.destroy()
+            } catch (_: Exception) {}
+            webViewRef = null
+        }
+    }
+
     Box(modifier = modifier.then(heightModifier)) {
         AndroidView(
             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             factory = { ctx ->
                 WebView(ctx).apply {
+                    webViewRef = this
+                    tag = htmlContent
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
@@ -187,13 +201,17 @@ fun KaTeXMathView(
                 }
             },
             update = { webView ->
-                webView.loadDataWithBaseURL(
-                    "file:///android_asset/katex/",
-                    htmlContent,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
+                val currentTag = webView.tag as? String
+                if (currentTag != htmlContent) {
+                    webView.tag = htmlContent
+                    webView.loadDataWithBaseURL(
+                        "file:///android_asset/katex/",
+                        htmlContent,
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
+                }
             }
         )
     }

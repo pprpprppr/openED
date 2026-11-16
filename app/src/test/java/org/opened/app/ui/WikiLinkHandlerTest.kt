@@ -43,6 +43,22 @@ class WikiLinkHandlerTest {
     }
 
     @Test
+    fun testInlineMathWithSquareRootAndFractions() {
+        val input = "Consider \$\\sqrt{x^2 + y^2}\$ and \$\\frac{1}{2}\$ as inputs."
+        val annotated = buildInteractiveAnnotatedString(input, defaultColor, wikiColor, urlColor)
+        assertTrue("Should format square root with superscripts", annotated.text.contains("√(x² + y²)"))
+        assertTrue("Should format fraction", annotated.text.contains("½"))
+    }
+
+    @Test
+    fun testInlineMathWithChemicalFormulas() {
+        val input = "Water is \$\\ce{H2O}\$ and sulfate is \$\\ce{SO4^{2-}}\$."
+        val annotated = buildInteractiveAnnotatedString(input, defaultColor, wikiColor, urlColor)
+        assertTrue("Should format H₂O", annotated.text.contains("H₂O"))
+        assertTrue("Should format SO₄²⁻", annotated.text.contains("SO₄²⁻"))
+    }
+
+    @Test
     fun testWikiLinksAndMarkdownLinks() {
         val input = "See [[Quantum Electrodynamics]] and [OpenED](https://opened.org)."
         val annotated = buildInteractiveAnnotatedString(input, defaultColor, wikiColor, urlColor)

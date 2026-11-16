@@ -143,6 +143,9 @@ fun CourseWorkspaceScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
         drawerContent = {
             CourseTreeDrawer(
                 pathWithModules = uiState.pathWithModules,

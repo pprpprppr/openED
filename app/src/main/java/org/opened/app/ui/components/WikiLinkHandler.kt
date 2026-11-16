@@ -46,7 +46,8 @@ fun InteractiveMarkdownText(
                 text = text,
                 defaultColor = color,
                 wikiLinkColor = primaryColor,
-                urlColor = secondaryColor
+                urlColor = secondaryColor,
+                mathColor = primaryColor
             )
         }.getOrElse { AnnotatedString(text) }
     }
@@ -87,7 +88,8 @@ fun buildInteractiveAnnotatedString(
     text: String,
     defaultColor: Color,
     wikiLinkColor: Color,
-    urlColor: Color
+    urlColor: Color,
+    mathColor: Color = wikiLinkColor
 ): AnnotatedString {
     return buildAnnotatedString {
         var lastIndex = 0
@@ -176,7 +178,7 @@ fun buildInteractiveAnnotatedString(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
                             fontFamily = FontFamily.Serif,
-                            color = Color(0xFF818CF8),
+                            color = mathColor,
                             fontWeight = FontWeight.Medium,
                             fontSize = 16.sp
                         )
@@ -193,7 +195,7 @@ fun buildInteractiveAnnotatedString(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
                             fontFamily = FontFamily.Serif,
-                            color = Color(0xFF818CF8),
+                            color = mathColor,
                             fontWeight = FontWeight.Medium,
                             fontSize = 16.sp
                         )
@@ -210,7 +212,7 @@ fun buildInteractiveAnnotatedString(
                         SpanStyle(
                             fontStyle = FontStyle.Italic,
                             fontFamily = FontFamily.Serif,
-                            color = Color(0xFF818CF8),
+                            color = mathColor,
                             fontWeight = FontWeight.Medium,
                             fontSize = 16.sp
                         )
