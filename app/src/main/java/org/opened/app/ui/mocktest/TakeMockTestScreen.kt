@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flag
@@ -171,7 +172,7 @@ fun TakeMockTestScreen(
                 ExamBottomNavigation(
                     currentIndex = uiState.currentQuestionIndex,
                     totalQuestions = uiState.totalQuestions,
-                    hasSelectedOption = (uiState.currentQuestion?.userSelectedOption ?: -1) >= 0,
+                    hasSelectedOption = uiState.currentQuestion?.isAnswered == true,
                     onPrev = { viewModel.prevQuestion() },
                     onNext = { viewModel.nextQuestion() },
                     onClear = { viewModel.clearCurrentAnswer() },
@@ -323,27 +324,60 @@ fun TakeMockTestScreen(
                         contentPadding = PaddingValues(top = 12.dp, bottom = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Question Header: Topic badge + Flag for Review
+                        // Question Header: Topic badge + Type badge + Flag for Review
                         item {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    modifier = Modifier.weight(1f, fill = false)
+                                Row(
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = question.topic,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer
+                                    ) {
+                                        Text(
+                                            text = question.topic,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+
+                                    if (question.isMultiSelect) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.tertiaryContainer
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(12.dp),
+                                                    tint = MaterialTheme.colorScheme.onTertiaryContainer
+                                                )
+                                                Text(
+                                                    text = "Select all that apply",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -369,7 +403,9 @@ fun TakeMockTestScreen(
                                     Text(
                                         text = if (question.isFlagged) "Flagged" else "Flag",
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -399,7 +435,7 @@ fun TakeMockTestScreen(
                     val optionLetters = listOf("A", "B", "C", "D", "E", "F")
 
                     itemsIndexed(options) { index, optionText ->
-                        val isSelected = question.userSelectedOption == index
+                        val isSelected = question.effectiveSelectedIndices.contains(index)
                         val optionLetter = optionLetters.getOrElse(index) { "${index + 1}" }
 
                         ElevatedCard(
@@ -420,35 +456,55 @@ fun TakeMockTestScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { viewModel.selectOption(index) }
                                     .padding(14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                // Option Letter Badge / Radio
-                                Surface(
-                                    shape = CircleShape,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier
-                                        .size(32.dp)
-                                        .clickable { viewModel.selectOption(index) }
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = optionLetter,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                // Indicator: Checkbox (rounded square) for MULTI_SELECT, Circle for SINGLE_CHOICE
+                                if (question.isMultiSelect) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        border = if (!isSelected) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+                                        modifier = Modifier.size(30.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            if (isSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Selected",
+                                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = optionLetter,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = optionLetter,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
 
                                 // Option Content with Markdown & LaTeX support
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { viewModel.selectOption(index) }
-                                ) {
+                                Box(modifier = Modifier.weight(1f)) {
                                     RichMarkdownRenderer(
                                         markdown = optionText,
                                         onChapterClick = {},
@@ -635,7 +691,7 @@ private fun ExamBottomNavigation(
             ) {
                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Prev", maxLines = 1)
+                Text("Prev", maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
 
             // Clear Button
@@ -647,7 +703,7 @@ private fun ExamBottomNavigation(
             ) {
                 Icon(imageVector = Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Clear", maxLines = 1)
+                Text("Clear", maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
 
             // Next or Submit Button
@@ -658,7 +714,7 @@ private fun ExamBottomNavigation(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
-                    Text("Next", maxLines = 1)
+                    Text("Next", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(modifier = Modifier.width(4.dp))
                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
@@ -670,7 +726,7 @@ private fun ExamBottomNavigation(
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("Submit", fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("Submit", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -738,7 +794,7 @@ private fun QuestionPaletteBottomSheet(
             ) {
                 gridItemsIndexed(questions) { index, question ->
                     val isCurrent = index == currentIndex
-                    val isAnswered = question.userSelectedOption >= 0
+                    val isAnswered = question.isAnswered
                     val isFlagged = question.isFlagged
 
                     Surface(

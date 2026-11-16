@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -268,8 +269,8 @@ fun MockTestResultScreen(
                                 ResultFilter.values().forEach { filter ->
                                     val count = when (filter) {
                                         ResultFilter.ALL -> uiState.questions.size
-                                        ResultFilter.INCORRECT -> uiState.questions.count { it.userSelectedOption != it.correctOptionIndex }
-                                        ResultFilter.CORRECT -> uiState.questions.count { it.userSelectedOption >= 0 && it.userSelectedOption == it.correctOptionIndex }
+                                        ResultFilter.INCORRECT -> uiState.questions.count { !it.isCorrect }
+                                        ResultFilter.CORRECT -> uiState.questions.count { it.isCorrect }
                                         ResultFilter.FLAGGED -> uiState.questions.count { it.isFlagged }
                                     }
 
@@ -297,6 +298,48 @@ fun MockTestResultScreen(
                             questionNumber = question.questionIndex + 1,
                             question = question
                         )
+                    }
+
+                    // Action Buttons at end of results
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.retakeTest(onRetakeTest) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(vertical = 12.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Retake Mock Exam",
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = onNavigateBack,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(vertical = 12.dp)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Back to Exam Prep",
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -442,8 +485,8 @@ private fun QuestionSolutionCard(
     questionNumber: Int,
     question: MockTestQuestionEntity
 ) {
-    val isCorrect = question.userSelectedOption >= 0 && question.userSelectedOption == question.correctOptionIndex
-    val isUnanswered = question.userSelectedOption < 0
+    val isCorrect = question.isCorrect
+    val isUnanswered = !question.isAnswered
     val optionLetters = listOf("A", "B", "C", "D", "E", "F")
 
     ElevatedCard(
@@ -459,7 +502,7 @@ private fun QuestionSolutionCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header: Question Number, Topic Badge, Result Status
+            // Header: Question Number, Topic Badge, Multi-select Badge, Result Status
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -468,7 +511,7 @@ private fun QuestionSolutionCard(
                 Row(
                     modifier = Modifier.weight(1f, fill = false),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
@@ -495,6 +538,21 @@ private fun QuestionSolutionCard(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
+                    }
+
+                    if (question.isMultiSelect) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer
+                        ) {
+                            Text(
+                                text = "MULTI-SELECT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
 
@@ -553,22 +611,30 @@ private fun QuestionSolutionCard(
 
             // Options with Correct vs Selected indicators
             val options = question.optionsList
+            val correctIndices = question.effectiveCorrectIndices
+            val selectedIndices = question.effectiveSelectedIndices
+
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 options.forEachIndexed { optIdx, optText ->
-                    val isOptionSelected = question.userSelectedOption == optIdx
-                    val isOptionCorrect = question.correctOptionIndex == optIdx
+                    val isOptionSelected = selectedIndices.contains(optIdx)
+                    val isOptionCorrect = correctIndices.contains(optIdx)
+                    val isCorrectlySelected = isOptionCorrect && isOptionSelected
+                    val isMissed = isOptionCorrect && !isOptionSelected
+                    val isWronglySelected = !isOptionCorrect && isOptionSelected
                     val optionLetter = optionLetters.getOrElse(optIdx) { "${optIdx + 1}" }
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = when {
-                            isOptionCorrect -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                            isOptionSelected && !isOptionCorrect -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            isCorrectlySelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            isWronglySelected -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                            isMissed -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
                             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
                         },
                         border = when {
-                            isOptionCorrect -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                            isOptionSelected && !isOptionCorrect -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.error)
+                            isCorrectlySelected -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                            isWronglySelected -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.error)
+                            isMissed -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.tertiary)
                             else -> null
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -579,10 +645,11 @@ private fun QuestionSolutionCard(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Surface(
-                                shape = CircleShape,
+                                shape = if (question.isMultiSelect) RoundedCornerShape(6.dp) else CircleShape,
                                 color = when {
-                                    isOptionCorrect -> MaterialTheme.colorScheme.primary
-                                    isOptionSelected && !isOptionCorrect -> MaterialTheme.colorScheme.error
+                                    isCorrectlySelected -> MaterialTheme.colorScheme.primary
+                                    isWronglySelected -> MaterialTheme.colorScheme.error
+                                    isMissed -> MaterialTheme.colorScheme.tertiary
                                     else -> MaterialTheme.colorScheme.surfaceVariant
                                 },
                                 modifier = Modifier.size(24.dp)
@@ -593,8 +660,9 @@ private fun QuestionSolutionCard(
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = when {
-                                            isOptionCorrect -> MaterialTheme.colorScheme.onPrimary
-                                            isOptionSelected && !isOptionCorrect -> MaterialTheme.colorScheme.onError
+                                            isCorrectlySelected -> MaterialTheme.colorScheme.onPrimary
+                                            isWronglySelected -> MaterialTheme.colorScheme.onError
+                                            isMissed -> MaterialTheme.colorScheme.onTertiary
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                     )
@@ -605,20 +673,64 @@ private fun QuestionSolutionCard(
                                 RichMarkdownRenderer(markdown = optText, onChapterClick = {})
                             }
 
-                            if (isOptionCorrect) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = "Correct Answer",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            } else if (isOptionSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Cancel,
-                                    contentDescription = "Your Answer",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                            when {
+                                isCorrectlySelected -> {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Correct",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Correct Answer",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                isMissed -> {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Missed",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Missed Correct Answer",
+                                            tint = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                                isWronglySelected -> {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "Wrong",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.Cancel,
+                                            contentDescription = "Your Answer",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

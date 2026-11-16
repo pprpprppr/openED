@@ -108,7 +108,12 @@ interface OpenEDRepository {
     fun getMockTestWithQuestionsFlow(id: String): Flow<MockTestWithQuestions?>
     suspend fun saveMockTestWithQuestions(test: MockTestEntity, questions: List<MockTestQuestionEntity>)
     suspend fun updateMockTest(test: MockTestEntity)
-    suspend fun answerMockTestQuestion(questionId: String, selectedOptionIndex: Int)
+    suspend fun answerMockTestQuestion(
+        questionId: String,
+        selectedOptionIndex: Int,
+        userSelectedAnswers: List<String> = emptyList()
+    )
+    suspend fun resetMockTestQuestions(testId: String)
     suspend fun toggleQuestionFlag(questionId: String, isFlagged: Boolean)
     suspend fun deleteMockTest(id: String)
 

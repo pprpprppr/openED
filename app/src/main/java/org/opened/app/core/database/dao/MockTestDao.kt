@@ -52,6 +52,12 @@ interface MockTestDao {
     @Query("UPDATE mock_test_questions SET userSelectedOption = :userSelectedOption WHERE id = :questionId")
     suspend fun updateQuestionAnswer(questionId: String, userSelectedOption: Int)
 
+    @Query("UPDATE mock_test_questions SET userSelectedOption = :userSelectedOption, userSelectedAnswers = :userSelectedAnswers WHERE id = :questionId")
+    suspend fun updateQuestionMultiAnswer(questionId: String, userSelectedOption: Int, userSelectedAnswers: List<String>)
+
+    @Query("UPDATE mock_test_questions SET userSelectedOption = -1, userSelectedAnswers = '[]', isFlagged = 0 WHERE testId = :testId")
+    suspend fun resetQuestionsForTest(testId: String)
+
     @Query("UPDATE mock_test_questions SET isFlagged = :isFlagged WHERE id = :questionId")
     suspend fun updateQuestionFlag(questionId: String, isFlagged: Boolean)
 

@@ -24,6 +24,7 @@ TASK_PLAN*.md
 
 # Gradle files
 .gradle/
+.kotlin/
 buildOutput/
 
 # Local configuration file (sdk path, etc)
@@ -74,3 +75,11 @@ Thumbs.db
 # User prompts & local notes
 prompt.txt
 myprompts.txt
+
+# Local screenshots & capture files
+sp*.jpeg
+sp*.jpg
+sp*.png
+/*.jpeg
+/*.jpg
+/*.png

@@ -119,11 +119,16 @@ class CourseWorkspaceViewModel @Inject constructor(
                         _uiState.update { it.copy(pathWithModules = pathWithModules) }
 
                         // Recover any chapters stuck in GENERATING state from previous unexpected app termination
-                        pathWithModules?.allChapters?.filter { it.status == ChapterStatus.GENERATING }?.forEach { stuck ->
-                            if (stuck.markdownContent.isNotBlank()) {
-                                repository.updateChapterStatus(stuck.id, ChapterStatus.COMPLETED)
-                            } else {
-                                repository.updateChapterStatus(stuck.id, ChapterStatus.PENDING)
+                        val stuckChapters = pathWithModules?.allChapters?.filter { it.status == ChapterStatus.GENERATING }.orEmpty()
+                        if (stuckChapters.isNotEmpty()) {
+                            viewModelScope.launch(Dispatchers.IO) {
+                                stuckChapters.forEach { stuck ->
+                                    if (stuck.markdownContent.isNotBlank()) {
+                                        repository.updateChapterStatus(stuck.id, ChapterStatus.COMPLETED)
+                                    } else {
+                                        repository.updateChapterStatus(stuck.id, ChapterStatus.PENDING)
+                                    }
+                                }
                             }
                         }
 

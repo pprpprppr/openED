@@ -3,9 +3,12 @@ package org.opened.app.ui.wizard
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,13 +19,19 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,7 +47,6 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
-import org.opened.app.core.ai.TutorPersonaRegistry
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -62,7 +70,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,6 +105,7 @@ fun DiagnosticWizardScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
                 title = {
@@ -141,7 +152,6 @@ fun DiagnosticWizardScreen(
                     EnterTopicContent(
                         topic = uiState.topic,
                         userLevel = uiState.userLevel,
-                        selectedTutorPersonaId = uiState.selectedTutorPersonaId,
                         customInstructions = uiState.customInstructions,
                         isCustomInstructionsExpanded = uiState.isCustomInstructionsExpanded,
                         isGeneratingPrompt = uiState.isGeneratingPrompt,
@@ -149,7 +159,6 @@ fun DiagnosticWizardScreen(
                         errorMessage = uiState.errorMessage,
                         onTopicChange = { viewModel.setTopic(it) },
                         onLevelChange = { viewModel.setUserLevel(it) },
-                        onPersonaChange = { viewModel.selectTutorPersona(it) },
                         onCustomInstructionsChange = { viewModel.setCustomInstructions(it) },
                         onToggleCustomInstructions = { viewModel.toggleCustomInstructions() },
                         onToggleTemplate = { viewModel.toggleCustomTemplate(it) },
@@ -207,12 +216,11 @@ fun DiagnosticWizardScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun EnterTopicContent(
     topic: String,
     userLevel: String,
-    selectedTutorPersonaId: String,
     customInstructions: String,
     isCustomInstructionsExpanded: Boolean,
     isGeneratingPrompt: Boolean,
@@ -220,7 +228,6 @@ private fun EnterTopicContent(
     errorMessage: String?,
     onTopicChange: (String) -> Unit,
     onLevelChange: (String) -> Unit,
-    onPersonaChange: (String) -> Unit,
     onCustomInstructionsChange: (String) -> Unit,
     onToggleCustomInstructions: () -> Unit,
     onToggleTemplate: (String) -> Unit,
@@ -234,12 +241,26 @@ private fun EnterTopicContent(
         "Deep Learning Transformer Architectures",
         "Quantum Computing & Qiskit"
     )
-    val activePersona = TutorPersonaRegistry.getById(selectedTutorPersonaId)
+
+    val scrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
+    val topicRequester = remember { BringIntoViewRequester() }
+    val customPromptRequester = remember { BringIntoViewRequester() }
+
+    val isImeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(isImeVisible, isCustomInstructionsExpanded) {
+        if (isImeVisible || isCustomInstructionsExpanded) {
+            delay(150)
+            if (isCustomInstructionsExpanded) {
+                customPromptRequester.bringIntoView()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(vertical = 12.dp)
     ) {
         Text(
@@ -293,73 +314,22 @@ private fun EnterTopicContent(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Tutor Subject Persona Selector
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "TUTOR SUBJECT PERSONA",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.5.sp
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = "${activePersona.icon} ${activePersona.title}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val personas = TutorPersonaRegistry.ALL_PERSONAS.filter { it.id != "CUSTOM" }
-            personas.forEach { persona ->
-                val isSelected = persona.id.equals(selectedTutorPersonaId, ignoreCase = true)
-                Surface(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onPersonaChange(persona.id) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isSelected) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                    },
-                    border = BorderStroke(
-                        width = if (isSelected) 1.5.dp else 1.dp,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                    )
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text(text = persona.icon, fontSize = 13.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = persona.title,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
         OutlinedTextField(
             value = topic,
             onValueChange = onTopicChange,
             label = { Text("Topic or Subject") },
             placeholder = { Text("e.g. Molecular Biology, French Revolution, Constitutional Law") },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(topicRequester)
+                .onFocusChanged { focusState ->
+                    if (focusState.isFocused) {
+                        scope.launch {
+                            delay(150)
+                            topicRequester.bringIntoView()
+                        }
+                    }
+                },
             shape = RoundedCornerShape(12.dp),
             isError = errorMessage != null
         )
@@ -407,7 +377,7 @@ private fun EnterTopicContent(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Custom Instructions Expandable Section
+        // Custom System Prompt / Tutor Persona (Optional) Section
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -430,12 +400,12 @@ private fun EnterTopicContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Custom System Instructions",
+                        text = "Custom System Prompt / Tutor Persona (Optional)",
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = if (customInstructions.isNotBlank()) "Active (${customInstructions.length} chars)" else "Optional custom prompt rules",
+                        text = if (customInstructions.isNotBlank()) "Active (${customInstructions.length} chars)" else "Specify mentor persona, tone, or focus rules",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -463,10 +433,12 @@ private fun EnterTopicContent(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val templates = listOf(
+                        "🎓 Socratic Inquirer" to "Act as a rigorous Socratic mentor: prompt me with thought-provoking questions and challenge my assumptions rather than just presenting facts.",
+                        "🔬 Rigorous Derivations" to "Emphasize first-principles derivations, formal mathematical and theoretical proofs, and step-by-step logic.",
+                        "⚡ Intuitive Analogies" to "Explain complex concepts through intuitive, vivid real-world analogies before diving into technical details.",
+                        "🚀 Practical Engineering" to "Ground every concept in practical engineering trade-offs, architecture patterns, and production scenarios.",
                         "✨ 3 Takeaways" to "Always conclude each lesson with 3 concise summary takeaways and bulleted key points.",
-                        "❓ Self-Test Quiz" to "At the end of each chapter, provide 3 multiple-choice self-test questions with detailed answer explanations.",
-                        "🔬 Case Studies" to "Ground every conceptual theory in an authentic real-world case study or empirical experiment.",
-                        "⚡ Socratic Inquirer" to "Include thought-provoking Socratic reflection questions throughout to stimulate critical thinking."
+                        "❓ Self-Test Quiz" to "At the end of each chapter, provide 3 multiple-choice self-test questions with detailed answer explanations."
                     )
                     templates.forEach { (label, snippet) ->
                         val isSelected = customInstructions.contains(snippet, ignoreCase = true)
@@ -498,10 +470,22 @@ private fun EnterTopicContent(
                 OutlinedTextField(
                     value = customInstructions,
                     onValueChange = onCustomInstructionsChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Custom Prompt Instructions") },
-                    placeholder = { Text("e.g. Always structure lessons with real-world case studies and 3 self-test questions.") },
-                    maxLines = 4,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bringIntoViewRequester(customPromptRequester)
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) {
+                                scope.launch {
+                                    delay(200)
+                                    customPromptRequester.bringIntoView()
+                                    scrollState.animateScrollTo(scrollState.maxValue)
+                                }
+                            }
+                        },
+                    label = { Text("Custom System Prompt / Tutor Persona") },
+                    placeholder = { Text("e.g. Act as an MIT professor specializing in quantum computing. Explain derivations step-by-step with real-world analogies.") },
+                    minLines = 3,
+                    maxLines = 6,
                     shape = RoundedCornerShape(10.dp)
                 )
 
@@ -560,6 +544,9 @@ private fun EnterTopicContent(
             Spacer(modifier = Modifier.width(8.dp))
             Text("Begin Diagnostic Interview")
         }
+
+        // Ample bottom space so keyboard never obscures fields while typing
+        Spacer(modifier = Modifier.height(200.dp))
     }
 }
 
@@ -578,7 +565,7 @@ private fun AnsweringQuestionsContent(
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        contentPadding = PaddingValues(bottom = 32.dp, top = 8.dp)
+        contentPadding = PaddingValues(bottom = 220.dp, top = 8.dp)
     ) {
         item {
             Text(

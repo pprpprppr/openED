@@ -43,8 +43,8 @@ data class MockTestResultUiState(
     val filteredQuestions: List<MockTestQuestionEntity>
         get() = when (selectedFilter) {
             ResultFilter.ALL -> questions
-            ResultFilter.INCORRECT -> questions.filter { it.userSelectedOption != it.correctOptionIndex }
-            ResultFilter.CORRECT -> questions.filter { it.userSelectedOption >= 0 && it.userSelectedOption == it.correctOptionIndex }
+            ResultFilter.INCORRECT -> questions.filter { !it.isCorrect }
+            ResultFilter.CORRECT -> questions.filter { it.isCorrect }
             ResultFilter.FLAGGED -> questions.filter { it.isFlagged }
         }
 
@@ -52,7 +52,7 @@ data class MockTestResultUiState(
         get() {
             val grouped = questions.groupBy { it.topic }
             return grouped.map { (topic, qList) ->
-                val correct = qList.count { it.userSelectedOption == it.correctOptionIndex }
+                val correct = qList.count { it.isCorrect }
                 TopicMasteryItem(topic, correct, qList.size)
             }.sortedBy { it.accuracyPercentage }
         }
@@ -101,10 +101,7 @@ class MockTestResultViewModel @Inject constructor(
                 completedAt = 0L
             )
             repository.updateMockTest(resetTest)
-            for (q in twq.questions) {
-                repository.answerMockTestQuestion(q.id, -1)
-                repository.toggleQuestionFlag(q.id, false)
-            }
+            repository.resetMockTestQuestions(twq.test.id)
             onRetakeReady(twq.test.id)
         }
     }

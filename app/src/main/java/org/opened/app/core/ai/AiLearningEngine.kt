@@ -24,6 +24,7 @@ import org.opened.app.core.database.entity.MockTestEntity
 import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.core.database.entity.MockTestStatus
 import org.opened.app.core.database.entity.ModuleEntity
+import org.opened.app.core.database.entity.QuestionType
 import org.opened.app.core.database.entity.StudyPathEntity
 import org.opened.app.core.database.model.ChapterStatus
 import org.opened.app.core.datastore.UserPreferencesRepository
@@ -61,26 +62,19 @@ class AiLearningEngine @Inject constructor(
         tutorPersonaOverride: String? = null,
         customInstructionsOverride: String? = null
     ): String {
-        val personaId = tutorPersonaOverride ?: prefs.selectedTutorPersona
         val customInstructions = (customInstructionsOverride ?: prefs.customSystemInstructions).trim()
-        val persona = TutorPersonaRegistry.getById(personaId)
-        val personaInstruction = if (persona.id == "CUSTOM") {
-            customInstructions.ifBlank { TutorPersonaRegistry.ADAPTIVE_POLYMATH.instruction }
-        } else {
-            persona.instruction
-        }
-
-        val combinedInstruction = if (persona.id != "CUSTOM" && customInstructions.isNotBlank() &&
+        val baseInstruction = org.opened.app.core.datastore.UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS
+        val combinedInstruction = if (customInstructions.isNotBlank() &&
             customInstructions != org.opened.app.core.datastore.UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS
         ) {
             """
-$personaInstruction
+$baseInstruction
 
-ADDITIONAL USER CUSTOM SYSTEM INSTRUCTIONS:
+ADDITIONAL COURSE & TUTOR SYSTEM INSTRUCTIONS:
 $customInstructions
 """.trimIndent()
         } else {
-            personaInstruction
+            baseInstruction
         }
 
         return getEffectiveSystemInstruction(
@@ -201,7 +195,7 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
         }
     }
 
-    suspend fun persistGeneratedSyllabus(syllabus: SyllabusResponse): String = withContext(Dispatchers.IO) {
+    suspend fun persistGeneratedSyllabus(syllabus: SyllabusResponse, customPrompt: String = ""): String = withContext(Dispatchers.IO) {
         val pathId = UUID.randomUUID().toString()
         val studyPath = StudyPathEntity(
             id = pathId,
@@ -209,7 +203,8 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             topic = syllabus.topic,
             userLevel = syllabus.userLevel.ifBlank { "BEGINNER" },
             learningGoalsJson = json.encodeToString(syllabus.prerequisites),
-            progress = 0f
+            progress = 0f,
+            customPrompt = customPrompt
         )
 
         val modulesWithChapters = mutableListOf<Pair<ModuleEntity, List<ChapterEntity>>>()
@@ -343,7 +338,8 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
         val effectiveSystemInstruction = buildSystemInstruction(
             prefs = prefs,
             userLevel = effectiveUserLevel,
-            domain = domain
+            domain = domain,
+            customInstructionsOverride = pathWithModules.studyPath.customPrompt.ifBlank { null }
         )
         val prompt = Prompts.chapterContentPrompt(
             courseTitle = pathWithModules.studyPath.title,
@@ -423,7 +419,8 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             val effectiveSystemInstruction = buildSystemInstruction(
                 prefs = prefs,
                 userLevel = effectiveUserLevel,
-                domain = domain
+                domain = domain,
+                customInstructionsOverride = studyPath?.customPrompt?.ifBlank { null }
             )
 
             val prompt = Prompts.inlineRefinePrompt(
@@ -491,7 +488,8 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             val effectiveSystemInstruction = buildSystemInstruction(
                 prefs = prefs,
                 userLevel = "INTERMEDIATE",
-                domain = domain
+                domain = domain,
+                customInstructionsOverride = studyPath?.customPrompt?.ifBlank { null }
             )
 
             val answer = multiAiClient.generateContent(
@@ -534,10 +532,16 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
             require(chapter.markdownContent.isNotBlank()) { "Chapter has no content yet. Generate content first." }
             val prefs = preferencesRepository.userPreferencesFlow.first()
+            val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = studyPath?.userLevel ?: "INTERMEDIATE",
+                customInstructionsOverride = studyPath?.customPrompt?.ifBlank { null }
+            )
 
             val prompt = Prompts.generateFlashcardsPrompt(chapter.title, chapter.markdownContent)
             val raw = multiAiClient.generateContent(
-                systemInstruction = prefs.customSystemInstructions,
+                systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
                 isJson = true,
                 taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
@@ -614,10 +618,16 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
             require(chapter.markdownContent.isNotBlank()) { "Chapter has no content yet." }
             val prefs = preferencesRepository.userPreferencesFlow.first()
+            val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = studyPath?.userLevel ?: "INTERMEDIATE",
+                customInstructionsOverride = studyPath?.customPrompt?.ifBlank { null }
+            )
 
             val prompt = Prompts.adaptiveQuizPrompt(chapter.title, chapter.markdownContent)
             val raw = multiAiClient.generateContent(
-                systemInstruction = prefs.customSystemInstructions,
+                systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
                 isJson = true,
                 taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
@@ -638,10 +648,16 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
         runCatching {
             val chapter = requireNotNull(repository.getChapter(chapterId)) { "Chapter not found" }
             val prefs = preferencesRepository.userPreferencesFlow.first()
+            val studyPath = repository.getStudyPathWithModules(chapter.pathId)?.studyPath
+            val effectiveSystemInstruction = buildSystemInstruction(
+                prefs = prefs,
+                userLevel = studyPath?.userLevel ?: "INTERMEDIATE",
+                customInstructionsOverride = studyPath?.customPrompt?.ifBlank { null }
+            )
 
             val prompt = Prompts.feynmanEvaluationPrompt(chapter.title, chapter.markdownContent, userExplanation)
             val raw = multiAiClient.generateContent(
-                systemInstruction = prefs.customSystemInstructions,
+                systemInstruction = effectiveSystemInstruction,
                 prompt = prompt,
                 isJson = true,
                 taskType = org.opened.app.core.ai.provider.AiTaskType.FLASHCARDS_QUIZ
@@ -732,6 +748,7 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
             val pathWithModules = repository.getStudyPathWithModules(pathId)
             val courseTitle = pathWithModules?.studyPath?.title ?: title
             val courseTopic = pathWithModules?.studyPath?.topic ?: targetExamName.ifBlank { title }
+            val effectiveCustomPrompt = customPrompt.ifBlank { pathWithModules?.studyPath?.customPrompt.orEmpty() }
             val modulesWithChapters = pathWithModules?.modules ?: emptyList()
 
             // Collect all topics/chapters for syllabus distribution
@@ -785,21 +802,34 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                     totalBatches = totalBatches,
                     questionCount = currentBatchCount,
                     startQuestionNumber = currentStartIndex,
-                    customPrompt = customPrompt
+                    customPrompt = effectiveCustomPrompt
                 ).getOrThrow()
 
                 for (item in batchResult) {
+                    val validOptions = if (item.options.size >= 2) item.options else listOf("Option A", "Option B", "Option C", "Option D")
+                    val isMulti = item.type.equals("MULTI_SELECT", ignoreCase = true) || item.correctAnswers.size > 1
+                    val qType = if (isMulti) QuestionType.MULTI_SELECT else QuestionType.SINGLE_CHOICE
+                    val primaryCorrectIndex = item.correctIndex.coerceIn(0, validOptions.size - 1)
+                    val finalCorrectAnswers = if (item.correctAnswers.isNotEmpty()) {
+                        item.correctAnswers
+                    } else {
+                        listOf(validOptions[primaryCorrectIndex])
+                    }
+
                     val qEntity = MockTestQuestionEntity(
                         id = UUID.randomUUID().toString(),
                         testId = testId,
                         questionIndex = allQuestions.size,
                         topic = item.topic.ifBlank { "General $courseTopic" },
                         questionText = item.question,
-                        optionsJson = MockTestQuestionEntity.createOptionsJson(item.options),
-                        correctOptionIndex = item.correctIndex.coerceIn(0, (item.options.size - 1).coerceAtLeast(0)),
+                        optionsJson = MockTestQuestionEntity.createOptionsJson(validOptions),
+                        correctOptionIndex = primaryCorrectIndex,
                         explanation = item.explanation,
                         userSelectedOption = -1,
-                        isFlagged = false
+                        isFlagged = false,
+                        questionType = qType,
+                        correctAnswers = finalCorrectAnswers,
+                        userSelectedAnswers = emptyList()
                     )
                     allQuestions.add(qEntity)
                 }
@@ -978,13 +1008,20 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                     "explanation", "rationale", "reason", "solution", "analysis", "detail"
                 )?.trim() ?: "The correct option is Option ${('A' + correctIndex)}."
 
+                val rawType = itemElem.findFirstString("type", "questionType", "question_type", "kind")?.trim().orEmpty()
+                val extractedAnswers = extractCorrectAnswers(itemElem, options, correctIndex)
+                val isMulti = rawType.contains("MULTI", ignoreCase = true) || extractedAnswers.size > 1
+                val questionTypeStr = if (isMulti) "MULTI_SELECT" else "SINGLE_CHOICE"
+
                 result.add(
                     MockTestQuestionItem(
                         topic = topic,
                         question = questionText,
                         options = options,
                         correctIndex = correctIndex,
-                        explanation = explanation
+                        explanation = explanation,
+                        type = questionTypeStr,
+                        correctAnswers = extractedAnswers
                     )
                 )
             }
@@ -1116,6 +1153,71 @@ You are an expert pedagogical prompt engineer. Generate an actionable, concise, 
                 }
             }
             return 0
+        }
+
+        private fun extractCorrectAnswers(
+            questionObj: JsonObject,
+            options: List<String>,
+            fallbackIndex: Int
+        ): List<String> {
+            val answerKeys = listOf(
+                "correctAnswers", "correct_answers", "answers", "correctOptions", "correct_options", "correct_answer_list"
+            )
+            for (key in answerKeys) {
+                val candidate = questionObj[key]
+                    ?: questionObj.entries.find { it.key.equals(key, ignoreCase = true) }?.value
+                if (candidate is JsonArray) {
+                    val list = mutableListOf<String>()
+                    for (item in candidate) {
+                        when (item) {
+                            is JsonPrimitive -> {
+                                val str = item.content.trim()
+                                val intVal = item.intOrNull ?: str.toIntOrNull()
+                                if (intVal != null && intVal in options.indices) {
+                                    list.add(options[intVal])
+                                } else if (str.length == 1 && str[0].uppercaseChar() in 'A'..'Z') {
+                                    val letterIdx = str[0].uppercaseChar() - 'A'
+                                    if (letterIdx in options.indices) list.add(options[letterIdx]) else list.add(str)
+                                } else {
+                                    val match = options.firstOrNull { it.trim().equals(str, ignoreCase = true) }
+                                    list.add(match ?: str)
+                                }
+                            }
+                            is JsonObject -> {
+                                val text = item.findFirstString("text", "option", "value", "content", "choice")
+                                if (!text.isNullOrBlank()) list.add(text.trim())
+                            }
+                            else -> {}
+                        }
+                    }
+                    if (list.isNotEmpty()) return list.distinct()
+                } else if (candidate is JsonPrimitive) {
+                    val str = candidate.content.trim()
+                    if (str.contains(",")) {
+                        val parts = str.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                        val matched = parts.map { part ->
+                            val parsedInt = part.toIntOrNull()
+                            if (parsedInt != null && parsedInt in options.indices) {
+                                options[parsedInt]
+                            } else if (part.length == 1 && part[0].uppercaseChar() in 'A'..'Z') {
+                                val letterIdx = part[0].uppercaseChar() - 'A'
+                                if (letterIdx in options.indices) options[letterIdx] else part
+                            } else {
+                                options.firstOrNull { it.trim().equals(part, ignoreCase = true) } ?: part
+                            }
+                        }
+                        if (matched.isNotEmpty()) return matched.distinct()
+                    } else {
+                        val parsedInt = str.toIntOrNull()
+                        if (parsedInt != null && parsedInt in options.indices) {
+                            return listOf(options[parsedInt])
+                        }
+                    }
+                }
+            }
+
+            val fallbackOption = options.getOrNull(fallbackIndex)
+            return if (!fallbackOption.isNullOrBlank()) listOf(fallbackOption) else emptyList()
         }
     }
 }

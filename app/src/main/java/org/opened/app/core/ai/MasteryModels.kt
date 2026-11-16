@@ -53,5 +53,7 @@ data class MockTestQuestionItem(
     val question: String = "",
     val options: List<String> = emptyList(),
     val correctIndex: Int = 0,
-    val explanation: String = ""
+    val explanation: String = "",
+    val type: String = "SINGLE_CHOICE", // "SINGLE_CHOICE" or "MULTI_SELECT"
+    val correctAnswers: List<String> = emptyList() // List of valid answer texts or indices
 )

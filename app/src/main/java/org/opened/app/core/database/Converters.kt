@@ -1,8 +1,11 @@
 package org.opened.app.core.database
 
 import androidx.room.TypeConverter
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.opened.app.core.database.entity.ExamCategory
 import org.opened.app.core.database.entity.MockTestStatus
+import org.opened.app.core.database.entity.QuestionType
 import org.opened.app.core.database.model.ChapterStatus
 
 class Converters {
@@ -45,6 +48,34 @@ class Converters {
             if (value != null) MockTestStatus.valueOf(value) else MockTestStatus.NOT_STARTED
         } catch (e: Exception) {
             MockTestStatus.NOT_STARTED
+        }
+    }
+
+    @TypeConverter
+    fun fromQuestionType(type: QuestionType?): String {
+        return type?.name ?: QuestionType.SINGLE_CHOICE.name
+    }
+
+    @TypeConverter
+    fun toQuestionType(value: String?): QuestionType {
+        return try {
+            if (value != null) QuestionType.valueOf(value) else QuestionType.SINGLE_CHOICE
+        } catch (e: Exception) {
+            QuestionType.SINGLE_CHOICE
+        }
+    }
+
+    @TypeConverter
+    fun fromStringList(list: List<String>?): String {
+        return if (list != null) Json.encodeToString(list) else "[]"
+    }
+
+    @TypeConverter
+    fun toStringList(value: String?): List<String> {
+        return try {
+            if (!value.isNullOrBlank()) Json.decodeFromString<List<String>>(value) else emptyList()
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 }

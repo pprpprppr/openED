@@ -53,7 +53,7 @@ import org.opened.app.core.database.entity.SyncTombstoneEntity
         MockTestEntity::class,
         MockTestQuestionEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -301,6 +301,18 @@ abstract class OpenEDDatabase : RoomDatabase() {
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId` ON `mock_test_questions` (`testId`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId_questionIndex` ON `mock_test_questions` (`testId`, `questionIndex`)")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Add customPrompt column to study_paths
+                db.execSQL("ALTER TABLE `study_paths` ADD COLUMN `customPrompt` TEXT NOT NULL DEFAULT ''")
+
+                // 2. Add questionType, correctAnswers, and userSelectedAnswers to mock_test_questions
+                db.execSQL("ALTER TABLE `mock_test_questions` ADD COLUMN `questionType` TEXT NOT NULL DEFAULT 'SINGLE_CHOICE'")
+                db.execSQL("ALTER TABLE `mock_test_questions` ADD COLUMN `correctAnswers` TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE `mock_test_questions` ADD COLUMN `userSelectedAnswers` TEXT NOT NULL DEFAULT '[]'")
             }
         }
     }

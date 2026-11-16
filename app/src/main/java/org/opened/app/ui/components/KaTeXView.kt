@@ -95,10 +95,14 @@ private class KaTeXBridge(
     private val onLink: (String) -> Unit
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var lastReported: Int = 0
 
     @JavascriptInterface
     fun onHeightChanged(heightDp: Int) {
-        mainHandler.post { onHeight(heightDp) }
+        if (Math.abs(heightDp - lastReported) >= 2) {
+            lastReported = heightDp
+            mainHandler.post { onHeight(heightDp) }
+        }
     }
 
     @JavascriptInterface
@@ -149,7 +153,7 @@ fun KaTeXMathView(
     }
 
     val heightModifier = if (reportedHeightDp > 0) {
-        Modifier.height(reportedHeightDp.dp + 6.dp)
+        Modifier.height(reportedHeightDp.dp)
     } else {
         Modifier.heightIn(min = minHeight)
     }
@@ -159,8 +163,11 @@ fun KaTeXMathView(
     DisposableEffect(cleanLatex) {
         onDispose {
             try {
-                webViewRef?.stopLoading()
-                webViewRef?.destroy()
+                webViewRef?.let { wv ->
+                    (wv.parent as? android.view.ViewGroup)?.removeView(wv)
+                    wv.stopLoading()
+                    wv.destroy()
+                }
             } catch (_: Exception) {}
             webViewRef = null
         }
@@ -170,39 +177,43 @@ fun KaTeXMathView(
         AndroidView(
             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             factory = { ctx ->
-                WebView(ctx).apply {
-                    webViewRef = this
-                    tag = htmlContent
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        allowFileAccess = true
-                        cacheMode = WebSettings.LOAD_DEFAULT
+                try {
+                    WebView(ctx).apply {
+                        webViewRef = this
+                        tag = htmlContent
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            allowFileAccess = true
+                            cacheMode = WebSettings.LOAD_DEFAULT
+                        }
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        isVerticalScrollBarEnabled = false
+                        isHorizontalScrollBarEnabled = false
+
+                        addJavascriptInterface(
+                            KaTeXBridge(
+                                onHeight = { h -> reportedHeightDp = h },
+                                onLink = {}
+                            ),
+                            "AndroidBridge"
+                        )
+
+                        loadDataWithBaseURL(
+                            "file:///android_asset/katex/",
+                            htmlContent,
+                            "text/html",
+                            "UTF-8",
+                            null
+                        )
                     }
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    isVerticalScrollBarEnabled = false
-                    isHorizontalScrollBarEnabled = false
-
-                    addJavascriptInterface(
-                        KaTeXBridge(
-                            onHeight = { h -> reportedHeightDp = h },
-                            onLink = {}
-                        ),
-                        "AndroidBridge"
-                    )
-
-                    loadDataWithBaseURL(
-                        "file:///android_asset/katex/",
-                        htmlContent,
-                        "text/html",
-                        "UTF-8",
-                        null
-                    )
+                } catch (_: Exception) {
+                    android.view.View(ctx)
                 }
             },
             update = { webView ->
                 val currentTag = webView.tag as? String
-                if (currentTag != htmlContent) {
+                if (currentTag != htmlContent && webView is WebView) {
                     webView.tag = htmlContent
                     webView.loadDataWithBaseURL(
                         "file:///android_asset/katex/",
@@ -262,53 +273,87 @@ fun KaTeXRichTextView(
     }
 
     val heightModifier = if (reportedHeightDp > 0) {
-        Modifier.height(reportedHeightDp.dp + 4.dp)
+        Modifier.height(reportedHeightDp.dp)
     } else {
         Modifier.heightIn(min = minHeight)
+    }
+
+    var webViewRef by remember { androidx.compose.runtime.mutableStateOf<WebView?>(null) }
+
+    DisposableEffect(formattedContent) {
+        onDispose {
+            try {
+                webViewRef?.let { wv ->
+                    (wv.parent as? android.view.ViewGroup)?.removeView(wv)
+                    wv.stopLoading()
+                    wv.destroy()
+                }
+            } catch (_: Exception) {}
+            webViewRef = null
+        }
     }
 
     Box(modifier = modifier.then(heightModifier)) {
         AndroidView(
             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        allowFileAccess = true
-                        cacheMode = WebSettings.LOAD_DEFAULT
-                    }
-                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    isVerticalScrollBarEnabled = false
-                    isHorizontalScrollBarEnabled = false
+                try {
+                    WebView(ctx).apply {
+                        webViewRef = this
+                        tag = htmlContent
+                        settings.apply {
+                            javaScriptEnabled = true
+                            domStorageEnabled = true
+                            allowFileAccess = true
+                            cacheMode = WebSettings.LOAD_DEFAULT
+                        }
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                        isVerticalScrollBarEnabled = false
+                        isHorizontalScrollBarEnabled = false
 
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                            val url = request?.url?.toString() ?: return false
-                            if (url.startsWith("opened://chapter/")) {
-                                val title = Uri.decode(url.removePrefix("opened://chapter/"))
-                                onChapterClick(title)
-                                return true
-                            }
-                            return try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                context.startActivity(intent)
-                                true
-                            } catch (e: Exception) {
-                                false
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                val url = request?.url?.toString() ?: return false
+                                if (url.startsWith("opened://chapter/")) {
+                                    val title = Uri.decode(url.removePrefix("opened://chapter/"))
+                                    onChapterClick(title)
+                                    return true
+                                }
+                                return try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
+                                    true
+                                } catch (e: Exception) {
+                                    false
+                                }
                             }
                         }
+
+                        addJavascriptInterface(
+                            KaTeXBridge(
+                                onHeight = { h -> reportedHeightDp = h },
+                                onLink = { title -> onChapterClick(title) }
+                            ),
+                            "AndroidBridge"
+                        )
+
+                        loadDataWithBaseURL(
+                            "file:///android_asset/katex/",
+                            htmlContent,
+                            "text/html",
+                            "UTF-8",
+                            null
+                        )
                     }
-
-                    addJavascriptInterface(
-                        KaTeXBridge(
-                            onHeight = { h -> reportedHeightDp = h },
-                            onLink = { title -> onChapterClick(title) }
-                        ),
-                        "AndroidBridge"
-                    )
-
-                    loadDataWithBaseURL(
+                } catch (_: Exception) {
+                    android.view.View(ctx)
+                }
+            },
+            update = { webView ->
+                val currentTag = webView.tag as? String
+                if (currentTag != htmlContent && webView is WebView) {
+                    webView.tag = htmlContent
+                    webView.loadDataWithBaseURL(
                         "file:///android_asset/katex/",
                         htmlContent,
                         "text/html",
@@ -316,15 +361,6 @@ fun KaTeXRichTextView(
                         null
                     )
                 }
-            },
-            update = { webView ->
-                webView.loadDataWithBaseURL(
-                    "file:///android_asset/katex/",
-                    htmlContent,
-                    "text/html",
-                    "UTF-8",
-                    null
-                )
             }
         )
     }
@@ -419,19 +455,20 @@ private fun buildKaTeXDisplayHtml(
   html, body {
     margin: 0;
     padding: 0;
+    height: auto;
+    min-height: 0;
     background-color: transparent;
     color: $textColorHex;
     font-size: ${fontSizePx}px;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow: hidden;
   }
   #math-container {
-    padding: 4px 2px;
+    padding: 2px 2px;
     display: flex;
     justify-content: ${if (isDisplayMode) "center" else "flex-start"};
     align-items: center;
-    min-height: 24px;
+    min-height: 20px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -443,7 +480,7 @@ private fun buildKaTeXDisplayHtml(
     font-size: 1.15em;
   }
   .katex-display {
-    margin: 0.2em 0;
+    margin: 0.15em 0;
   }
 </style>
 <script src="katex.min.js"></script>
@@ -452,6 +489,19 @@ private fun buildKaTeXDisplayHtml(
 <body>
 <div id="math-container"></div>
 <script>
+var lastH = 0;
+function reportHeight() {
+    var elem = document.getElementById("math-container");
+    if (!elem) return;
+    var h = Math.ceil(elem.getBoundingClientRect().height || elem.offsetHeight || elem.scrollHeight);
+    if (h > 0 && Math.abs(h - lastH) >= 2) {
+        lastH = h;
+        if (window.AndroidBridge && window.AndroidBridge.onHeightChanged) {
+            window.AndroidBridge.onHeightChanged(h);
+        }
+    }
+}
+
 function render() {
     try {
         katex.render(`$escapedLatex`, document.getElementById("math-container"), {
@@ -462,17 +512,11 @@ function render() {
         document.getElementById("math-container").innerText = `$escapedLatex`;
     }
     reportHeight();
-}
-
-function reportHeight() {
-    var h = document.getElementById("math-container").scrollHeight || document.body.scrollHeight;
-    if (window.AndroidBridge && window.AndroidBridge.onHeightChanged) {
-        window.AndroidBridge.onHeightChanged(Math.ceil(h));
-    }
+    setTimeout(reportHeight, 50);
 }
 
 window.addEventListener("load", render);
-new ResizeObserver(reportHeight).observe(document.body);
+document.addEventListener("DOMContentLoaded", render);
 </script>
 </body>
 </html>
@@ -560,6 +604,19 @@ private fun buildKaTeXRichTextHtml(
 <body>
 <div id="content">$bodyHtml</div>
 <script>
+var lastH = 0;
+function reportHeight() {
+    var elem = document.getElementById("content");
+    if (!elem) return;
+    var h = Math.ceil(elem.getBoundingClientRect().height || elem.offsetHeight || elem.scrollHeight);
+    if (h > 0 && Math.abs(h - lastH) >= 2) {
+        lastH = h;
+        if (window.AndroidBridge && window.AndroidBridge.onHeightChanged) {
+            window.AndroidBridge.onHeightChanged(h);
+        }
+    }
+}
+
 function render() {
     try {
         renderMathInElement(document.getElementById("content"), {
@@ -583,18 +640,11 @@ function render() {
         console.error("KaTeX auto-render error:", e);
     }
     reportHeight();
-}
-
-function reportHeight() {
-    var elem = document.getElementById("content") || document.body;
-    var h = elem.scrollHeight || document.body.scrollHeight;
-    if (window.AndroidBridge && window.AndroidBridge.onHeightChanged) {
-        window.AndroidBridge.onHeightChanged(Math.ceil(h));
-    }
+    setTimeout(reportHeight, 50);
 }
 
 window.addEventListener("load", render);
-new ResizeObserver(reportHeight).observe(document.body);
+document.addEventListener("DOMContentLoaded", render);
 </script>
 </body>
 </html>

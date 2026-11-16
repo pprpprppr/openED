@@ -23,5 +23,6 @@ data class StudyPathEntity(
     val learningGoalsJson: String, // JSON array string
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val progress: Float = 0.0f // 0.0 to 1.0
+    val progress: Float = 0.0f, // 0.0 to 1.0
+    val customPrompt: String = "" // Per-course custom system prompt / tutor persona
 )

@@ -326,4 +326,116 @@ class MockTestEngineTest {
         val rawJson = """{ "questions": [] }"""
         AiLearningEngine.parseMockTestBatchFlexible(rawJson)
     }
+
+    @Test
+    fun testParseMockTestBatchFlexible_multiSelectWithArrayAnswers() {
+        val rawJson = """
+            {
+              "questions": [
+                {
+                  "type": "MULTI_SELECT",
+                  "question": "Which of the following are ACID properties in database management systems?",
+                  "options": [
+                    "Atomicity",
+                    "Consistency",
+                    "Throughput",
+                    "Durability"
+                  ],
+                  "correctAnswers": ["Atomicity", "Consistency", "Durability"],
+                  "explanation": "ACID stands for Atomicity, Consistency, Isolation, and Durability."
+                },
+                {
+                  "type": "SINGLE_CHOICE",
+                  "question": "Which protocol operates at Layer 4 of the OSI model?",
+                  "options": ["IP", "TCP", "HTTP", "Ethernet"],
+                  "correctIndex": 1,
+                  "explanation": "TCP is a transport layer (Layer 4) protocol."
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val questions = AiLearningEngine.parseMockTestBatchFlexible(rawJson)
+        assertEquals(2, questions.size)
+
+        // Question 1: MULTI_SELECT
+        val q1 = questions[0]
+        assertEquals("MULTI_SELECT", q1.type)
+        assertEquals(3, q1.correctAnswers.size)
+        assertTrue(q1.correctAnswers.contains("Atomicity"))
+        assertTrue(q1.correctAnswers.contains("Consistency"))
+        assertTrue(q1.correctAnswers.contains("Durability"))
+
+        // Question 2: SINGLE_CHOICE
+        val q2 = questions[1]
+        assertEquals("SINGLE_CHOICE", q2.type)
+        assertEquals(1, q2.correctIndex)
+    }
+
+    @Test
+    fun testMockTestQuestionEntity_exactSetEqualityGrading_multiSelect() {
+        val options = listOf("Option A", "Option B", "Option C", "Option D")
+        val entity = MockTestQuestionEntity(
+            id = "q-1",
+            testId = "test-1",
+            questionIndex = 0,
+            topic = "Databases",
+            questionText = "Select all true statements",
+            optionsJson = MockTestQuestionEntity.createOptionsJson(options),
+            correctOptionIndex = 0,
+            explanation = "A and C are correct.",
+            questionType = org.opened.app.core.database.entity.QuestionType.MULTI_SELECT,
+            correctAnswers = listOf("Option A", "Option C"),
+            userSelectedAnswers = emptyList()
+        )
+
+        // Unanswered
+        assertFalse(entity.isAnswered)
+        assertFalse(entity.isCorrect)
+
+        // Partial selection: only Option A selected -> incorrect
+        val partialAnswer = entity.copy(userSelectedAnswers = listOf("Option A"))
+        assertTrue(partialAnswer.isAnswered)
+        assertFalse(partialAnswer.isCorrect)
+
+        // Over-selection: Option A, B, and C selected -> incorrect (Option B is wrong)
+        val overAnswer = entity.copy(userSelectedAnswers = listOf("Option A", "Option B", "Option C"))
+        assertTrue(overAnswer.isAnswered)
+        assertFalse(overAnswer.isCorrect)
+
+        // Exact match: Option A and Option C selected -> correct!
+        val exactAnswer = entity.copy(userSelectedAnswers = listOf("Option C", "Option A"))
+        assertTrue(exactAnswer.isAnswered)
+        assertTrue(exactAnswer.isCorrect)
+        assertEquals(listOf(0, 2), exactAnswer.effectiveCorrectIndices)
+        assertEquals(listOf(0, 2), exactAnswer.effectiveSelectedIndices)
+    }
+
+    @Test
+    fun testMockTestQuestionEntity_exactSetEqualityGrading_singleChoice() {
+        val options = listOf("Paris", "London", "Berlin", "Madrid")
+        val entity = MockTestQuestionEntity(
+            id = "q-2",
+            testId = "test-2",
+            questionIndex = 0,
+            topic = "Geography",
+            questionText = "Capital of France?",
+            optionsJson = MockTestQuestionEntity.createOptionsJson(options),
+            correctOptionIndex = 0,
+            explanation = "Paris is the capital of France.",
+            questionType = org.opened.app.core.database.entity.QuestionType.SINGLE_CHOICE,
+            correctAnswers = listOf("Paris"),
+            userSelectedAnswers = listOf("Paris")
+        )
+
+        assertTrue(entity.isAnswered)
+        assertTrue(entity.isCorrect)
+        assertEquals(listOf(0), entity.effectiveCorrectIndices)
+        assertEquals(listOf(0), entity.effectiveSelectedIndices)
+
+        // Wrong single choice
+        val wrongAnswer = entity.copy(userSelectedAnswers = listOf("London"))
+        assertTrue(wrongAnswer.isAnswered)
+        assertFalse(wrongAnswer.isCorrect)
+    }
 }

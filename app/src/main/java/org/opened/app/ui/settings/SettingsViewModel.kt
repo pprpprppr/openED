@@ -18,8 +18,6 @@ import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.AiProvider
 import org.opened.app.core.ai.AiProviderModels
 import org.opened.app.core.ai.MultiAiClient
-import org.opened.app.core.ai.TutorPersonaCategory
-import org.opened.app.core.ai.TutorPersonaRegistry
 import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.datastore.UserPreferencesRepository
@@ -119,15 +117,11 @@ class SettingsViewModel @Inject constructor(
                             selectedModel = currentModel,
                             selectionMode = selectionMode,
                             availableModels = if (presets.isNotEmpty()) presets else it.availableModels,
-                            selectedTutorPersonaId = prefs.selectedTutorPersona,
                             customSystemInstructions = prefs.customSystemInstructions,
-                            systemInstructions = run {
-                                val persona = TutorPersonaRegistry.getById(prefs.selectedTutorPersona)
-                                if (prefs.customSystemInstructions.isNotBlank()) {
-                                    "${persona.instruction}\n\nADDITIONAL USER CUSTOM INSTRUCTIONS:\n${prefs.customSystemInstructions}"
-                                } else {
-                                    persona.instruction
-                                }
+                            systemInstructions = if (prefs.customSystemInstructions.isNotBlank()) {
+                                prefs.customSystemInstructions
+                            } else {
+                                UserPreferences.DEFAULT_SYSTEM_INSTRUCTIONS
                             },
                             autoBackupEnabled = prefs.autoBackupEnabled,
                             lastBackupTimestamp = prefs.lastBackupTimestamp,
@@ -383,19 +377,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun selectTutorPersona(personaId: String) {
-        _uiState.update { it.copy(selectedTutorPersonaId = personaId) }
-        viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
-            preferencesRepository.setSelectedTutorPersona(personaId)
-            val persona = TutorPersonaRegistry.getById(personaId)
-            _uiState.update { it.copy(statusMessage = "Tutor persona selected: ${persona.title}") }
-        }
-    }
-
-    fun selectPersonaCategory(category: TutorPersonaCategory) {
-        _uiState.update { it.copy(selectedPersonaCategory = category) }
-    }
-
     fun setCustomSystemInstructions(instructions: String) {
         _uiState.update { it.copy(customSystemInstructions = instructions) }
     }
@@ -504,13 +485,13 @@ class SettingsViewModel @Inject constructor(
 
     fun generateSystemInstructionPrompt() {
         val draft = _uiState.value.promptIdeaDraft.trim()
-        val targetSubject = TutorPersonaRegistry.getById(_uiState.value.selectedTutorPersonaId).title
+        val targetSubject = "Universal Polymath Mentor"
         viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
             val effectiveNotes = if (draft.isNotBlank()) {
                 draft
             } else {
-                "Be a patient, clear, and rigorous mentor in $targetSubject who uses active recall, practical analogies, and step-by-step examples."
+                "Be a patient, clear, and rigorous mentor across academic disciplines who uses active recall, practical analogies, and step-by-step examples."
             }
             val result = aiLearningEngine.generateSystemInstruction(
                 userNotes = effectiveNotes,

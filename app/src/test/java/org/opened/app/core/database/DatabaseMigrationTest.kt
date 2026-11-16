@@ -20,6 +20,19 @@ class DatabaseMigrationTest {
     }
 
     @Test
+    fun testMigration5To6ExecutesExpectedSql() {
+        val statements = mutableListOf<String>()
+        val db = createRecordingDatabase(statements)
+        OpenEDDatabase.MIGRATION_5_6.migrate(db)
+
+        val fullScript = statements.joinToString("\n")
+        assertTrue("Expected study_paths customPrompt column", fullScript.contains("ALTER TABLE `study_paths` ADD COLUMN `customPrompt`"))
+        assertTrue("Expected mock_test_questions questionType column", fullScript.contains("ALTER TABLE `mock_test_questions` ADD COLUMN `questionType`"))
+        assertTrue("Expected mock_test_questions correctAnswers column", fullScript.contains("ALTER TABLE `mock_test_questions` ADD COLUMN `correctAnswers`"))
+        assertTrue("Expected mock_test_questions userSelectedAnswers column", fullScript.contains("ALTER TABLE `mock_test_questions` ADD COLUMN `userSelectedAnswers`"))
+    }
+
+    @Test
     fun testMigration4To5ExecutesExpectedSql() {
         val statements = mutableListOf<String>()
         val db = createRecordingDatabase(statements)

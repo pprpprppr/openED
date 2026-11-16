@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.ai.AiProvider
-import org.opened.app.core.ai.TutorPersonaRegistry
 import org.opened.app.core.ai.formatUserFriendlyAiError
 import org.opened.app.core.datastore.UserPreferencesRepository
 import kotlinx.coroutines.flow.first
@@ -46,7 +45,6 @@ class DiagnosticWizardViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     activeProviderName = provider.displayName,
-                    selectedTutorPersonaId = prefs.selectedTutorPersona,
                     customInstructions = prefs.customSystemInstructions
                 )
             }
@@ -55,24 +53,9 @@ class DiagnosticWizardViewModel @Inject constructor(
 
     fun setTopic(topic: String) {
         _uiState.update { current ->
-            val detectedPersonaId = if (!current.isPersonaUserSelected && topic.isNotBlank()) {
-                TutorPersonaRegistry.detectMatchingPersona(topic).id
-            } else {
-                current.selectedTutorPersonaId
-            }
             current.copy(
                 topic = topic,
-                selectedTutorPersonaId = detectedPersonaId,
                 errorMessage = null
-            )
-        }
-    }
-
-    fun selectTutorPersona(personaId: String) {
-        _uiState.update {
-            it.copy(
-                selectedTutorPersonaId = personaId,
-                isPersonaUserSelected = true
             )
         }
     }
@@ -113,15 +96,14 @@ class DiagnosticWizardViewModel @Inject constructor(
     fun generateCustomPromptFromTopic() {
         val topic = _uiState.value.topic.trim()
         val customExisting = _uiState.value.customInstructions.trim()
-        val persona = TutorPersonaRegistry.getById(_uiState.value.selectedTutorPersonaId)
         val userNotes = if (customExisting.isNotBlank()) {
             customExisting
         } else if (topic.isNotBlank()) {
             "Specialized curriculum on '$topic' for a ${_uiState.value.userLevel.lowercase()} student. Provide step-by-step clarity, real-world examples, active recall, and rigorous domain intuition."
         } else {
-            "Comprehensive, step-by-step mentorship in ${persona.title}."
+            "Comprehensive, step-by-step academic mentorship."
         }
-        val targetSubject = if (topic.isNotBlank()) "$topic (${persona.title})" else persona.title
+        val targetSubject = if (topic.isNotBlank()) topic else "Universal Tutor"
 
         activeAiJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isGeneratingPrompt = true, promptGenerationError = null) }
@@ -172,8 +154,7 @@ class DiagnosticWizardViewModel @Inject constructor(
             try {
                 val result = aiLearningEngine.generateDiagnosticQuestions(
                     topic = topic,
-                    tutorPersonaOverride = state.selectedTutorPersonaId,
-                    customInstructionsOverride = state.customInstructions
+                    customInstructionsOverride = state.customInstructions.trim().ifBlank { null }
                 )
                 result.fold(
                     onSuccess = { questions ->
@@ -260,8 +241,7 @@ class DiagnosticWizardViewModel @Inject constructor(
                     topic = state.topic,
                     userLevel = state.userLevel,
                     answers = compiledAnswers,
-                    tutorPersonaOverride = state.selectedTutorPersonaId,
-                    customInstructionsOverride = state.customInstructions
+                    customInstructionsOverride = state.customInstructions.trim().ifBlank { null }
                 )
 
                 result.fold(
@@ -304,7 +284,8 @@ class DiagnosticWizardViewModel @Inject constructor(
         activeAiJob = viewModelScope.launch(exceptionHandler + Dispatchers.IO) {
             _uiState.update { it.copy(isBusy = true, errorMessage = null) }
             try {
-                val pathId = aiLearningEngine.persistGeneratedSyllabus(syllabus)
+                val customPrompt = _uiState.value.customInstructions.trim()
+                val pathId = aiLearningEngine.persistGeneratedSyllabus(syllabus, customPrompt)
                 _uiState.update { it.copy(isBusy = false, createdPathId = pathId) }
                 kotlinx.coroutines.withContext(Dispatchers.Main) {
                     onSuccess(pathId)

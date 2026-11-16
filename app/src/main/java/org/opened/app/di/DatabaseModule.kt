@@ -40,7 +40,8 @@ object DatabaseModule {
                 OpenEDDatabase.MIGRATION_1_2,
                 OpenEDDatabase.MIGRATION_2_3,
                 OpenEDDatabase.MIGRATION_3_4,
-                OpenEDDatabase.MIGRATION_4_5
+                OpenEDDatabase.MIGRATION_4_5,
+                OpenEDDatabase.MIGRATION_5_6
             )
             .fallbackToDestructiveMigration()
             .build()

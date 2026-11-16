@@ -41,7 +41,7 @@ data class TakeMockTestUiState(
         get() = testWithQuestions?.questions?.size ?: 0
 
     val answeredCount: Int
-        get() = testWithQuestions?.questions?.count { it.userSelectedOption >= 0 } ?: 0
+        get() = testWithQuestions?.questions?.count { it.isAnswered } ?: 0
 
     val flaggedCount: Int
         get() = testWithQuestions?.questions?.count { it.isFlagged } ?: 0
@@ -262,12 +262,35 @@ class TakeMockTestViewModel @Inject constructor(
     fun selectOption(optionIndex: Int) {
         val question = _uiState.value.currentQuestion ?: return
         val currentTwq = _uiState.value.testWithQuestions ?: return
+        val optionText = question.optionsList.getOrNull(optionIndex).orEmpty()
 
-        // Update in-memory state immediately for instant responsive feedback
-        val updatedQuestions = currentTwq.questions.map { q ->
-            if (q.id == question.id) q.copy(userSelectedOption = optionIndex) else q
+        val (newUserSelectedOption, newSelectedAnswers) = if (question.isMultiSelect) {
+            val currentSelected = question.userSelectedAnswers.toMutableList()
+            val existingIdx = currentSelected.indexOfFirst { it.trim().equals(optionText.trim(), ignoreCase = true) }
+            if (existingIdx >= 0) {
+                currentSelected.removeAt(existingIdx)
+            } else if (optionText.isNotBlank()) {
+                currentSelected.add(optionText)
+            }
+            val primaryIdx = if (currentSelected.isNotEmpty()) {
+                val firstMatch = currentSelected.first()
+                question.optionsList.indexOfFirst { it.trim().equals(firstMatch.trim(), ignoreCase = true) }
+            } else -1
+            Pair<Int, List<String>>(primaryIdx, currentSelected)
+        } else {
+            Pair<Int, List<String>>(optionIndex, if (optionText.isNotBlank()) listOf(optionText) else emptyList())
         }
-        val updatedAnsweredCount = updatedQuestions.count { it.userSelectedOption >= 0 }
+
+        // Update in-memory state immediately for instantaneous responsive feedback
+        val updatedQuestions = currentTwq.questions.map { q ->
+            if (q.id == question.id) {
+                q.copy(
+                    userSelectedOption = newUserSelectedOption,
+                    userSelectedAnswers = newSelectedAnswers
+                )
+            } else q
+        }
+        val updatedAnsweredCount = updatedQuestions.count { it.isAnswered }
         val updatedTest = currentTwq.test.copy(totalAnswered = updatedAnsweredCount)
 
         _uiState.update {
@@ -276,7 +299,7 @@ class TakeMockTestViewModel @Inject constructor(
 
         // Persist to Room
         viewModelScope.launch {
-            repository.answerMockTestQuestion(question.id, optionIndex)
+            repository.answerMockTestQuestion(question.id, newUserSelectedOption, newSelectedAnswers)
             repository.updateMockTest(updatedTest)
         }
     }
@@ -286,9 +309,11 @@ class TakeMockTestViewModel @Inject constructor(
         val currentTwq = _uiState.value.testWithQuestions ?: return
 
         val updatedQuestions = currentTwq.questions.map { q ->
-            if (q.id == question.id) q.copy(userSelectedOption = -1) else q
+            if (q.id == question.id) {
+                q.copy(userSelectedOption = -1, userSelectedAnswers = emptyList())
+            } else q
         }
-        val updatedAnsweredCount = updatedQuestions.count { it.userSelectedOption >= 0 }
+        val updatedAnsweredCount = updatedQuestions.count { it.isAnswered }
         val updatedTest = currentTwq.test.copy(totalAnswered = updatedAnsweredCount)
 
         _uiState.update {
@@ -296,7 +321,7 @@ class TakeMockTestViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            repository.answerMockTestQuestion(question.id, -1)
+            repository.answerMockTestQuestion(question.id, -1, emptyList())
             repository.updateMockTest(updatedTest)
         }
     }
@@ -353,9 +378,9 @@ class TakeMockTestViewModel @Inject constructor(
                 val allChapters = pathDetails?.modules?.flatMap { it.chapters }.orEmpty()
 
                 for (q in questions) {
-                    if (q.userSelectedOption >= 0) {
+                    if (q.isAnswered) {
                         totalAnswered++
-                        if (q.userSelectedOption == q.correctOptionIndex) {
+                        if (q.isCorrect) {
                             totalCorrect++
                         } else {
                             // Find a valid chapter in the course or fallback chapter to satisfy foreign key constraint
@@ -364,8 +389,16 @@ class TakeMockTestViewModel @Inject constructor(
                             } ?: allChapters.firstOrNull()
 
                             if (validChapter != null) {
-                                val userSelectedText = q.optionsList.getOrNull(q.userSelectedOption).orEmpty()
-                                val correctText = q.optionsList.getOrNull(q.correctOptionIndex).orEmpty()
+                                val userSelectedText = if (q.userSelectedAnswers.isNotEmpty()) {
+                                    q.userSelectedAnswers.joinToString(", ")
+                                } else {
+                                    q.optionsList.getOrNull(q.userSelectedOption).orEmpty()
+                                }
+                                val correctText = if (q.correctAnswers.isNotEmpty()) {
+                                    q.correctAnswers.joinToString(", ")
+                                } else {
+                                    q.optionsList.getOrNull(q.correctOptionIndex).orEmpty()
+                                }
                                 runCatching {
                                     repository.recordMistake(
                                         MistakeRecordEntity(

@@ -1121,9 +1121,11 @@ CRITICAL PEDAGOGICAL REQUIREMENTS:
 1. Cover the topics listed above thoroughly without repeating previous questions.
 2. Every question must be realistic, rigorous, and representative of what appears in real high-stakes exams.
 3. Each question must have EXACTLY 4 options (indices 0, 1, 2, 3).
-4. For all math formulas, chemical reactions, or code snippets, use appropriate LaTeX math (${'$'}...${'$'} or $${'$'}...$${'$'}) or Markdown code blocks.
-5. In the "explanation", provide a concise, high-yield explanation (2-3 crisp sentences): clearly justify why the correct option is right with the core formula or logic, and highlight the key distractor trap.
-6. The "correctIndex" MUST be an integer between 0 and 3 corresponding to the correct option in "options".
+4. MIXED QUESTION TYPES: Include an authentic mix of single-choice ("SINGLE_CHOICE") and multiple-answer ("MULTI_SELECT") questions (e.g. 60-70% single-choice, 30-40% multi-select; at least one multi-select per batch).
+   - For "SINGLE_CHOICE": Exactly ONE option is correct. Set "type": "SINGLE_CHOICE", "correctIndex": <int 0-3>, and "correctAnswers": [<exact text of correct option>].
+   - For "MULTI_SELECT": Genuinely provide 2 or MORE valid answers (e.g. 2 or 3 correct options). Clearly indicate in the question text (e.g., "Select all that apply"). Set "type": "MULTI_SELECT", "correctIndex": <int index of first correct option>, and "correctAnswers": [<exact text of first correct option>, <exact text of second correct option>, ...].
+5. For all math formulas, chemical reactions, or code snippets, use appropriate LaTeX math (${'$'}...${'$'} or $${'$'}...$${'$'}) or Markdown code blocks.
+6. In the "explanation", provide a concise, high-yield explanation (2-3 crisp sentences): clearly justify why each correct option is right with the core formula or logic, and dissect why the incorrect alternatives are false.
 
 RESPOND ONLY WITH A VALID JSON OBJECT MATCHING THIS EXACT SCHEMA:
 {
@@ -1131,6 +1133,7 @@ RESPOND ONLY WITH A VALID JSON OBJECT MATCHING THIS EXACT SCHEMA:
     {
       "topic": "Specific Topic Name",
       "question": "Question text with clear scenario or premise...",
+      "type": "SINGLE_CHOICE",
       "options": [
         "First option text",
         "Second option text",
@@ -1138,7 +1141,27 @@ RESPOND ONLY WITH A VALID JSON OBJECT MATCHING THIS EXACT SCHEMA:
         "Fourth option text"
       ],
       "correctIndex": 0,
+      "correctAnswers": [
+        "First option text"
+      ],
       "explanation": "Detailed step-by-step reasoning explaining why the correct choice is right and dissecting each incorrect alternative."
+    },
+    {
+      "topic": "Another Topic Name",
+      "question": "Which of the following principles hold true in this scenario? (Select all that apply)",
+      "type": "MULTI_SELECT",
+      "options": [
+        "First valid property",
+        "Second invalid distractor",
+        "Third valid property",
+        "Fourth invalid distractor"
+      ],
+      "correctIndex": 0,
+      "correctAnswers": [
+        "First valid property",
+        "Third valid property"
+      ],
+      "explanation": "Both the first and third properties hold true because... while options 2 and 4 fail because..."
     }
   ]
 }

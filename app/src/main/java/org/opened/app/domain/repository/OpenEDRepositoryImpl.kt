@@ -781,9 +781,23 @@ class OpenEDRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun answerMockTestQuestion(questionId: String, selectedOptionIndex: Int) {
+    override suspend fun answerMockTestQuestion(
+        questionId: String,
+        selectedOptionIndex: Int,
+        userSelectedAnswers: List<String>
+    ) {
         withContext(Dispatchers.IO) {
-            mockTestDao.updateQuestionAnswer(questionId, selectedOptionIndex)
+            if (userSelectedAnswers.isNotEmpty()) {
+                mockTestDao.updateQuestionMultiAnswer(questionId, selectedOptionIndex, userSelectedAnswers)
+            } else {
+                mockTestDao.updateQuestionMultiAnswer(questionId, selectedOptionIndex, emptyList())
+            }
+        }
+    }
+
+    override suspend fun resetMockTestQuestions(testId: String) {
+        withContext(Dispatchers.IO) {
+            mockTestDao.resetQuestionsForTest(testId)
         }
     }
 
