@@ -104,7 +104,11 @@ fun DiagnosticWizardScreen(
         }
     }
 
-    Scaffold(
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
@@ -214,6 +218,7 @@ fun DiagnosticWizardScreen(
             }
         }
     }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
@@ -249,11 +254,12 @@ private fun EnterTopicContent(
 
     val isImeVisible = WindowInsets.isImeVisible
     LaunchedEffect(isImeVisible, isCustomInstructionsExpanded) {
-        if (isImeVisible || isCustomInstructionsExpanded) {
+        if (isImeVisible && isCustomInstructionsExpanded) {
+            delay(250)
+            customPromptRequester.bringIntoView()
+        } else if (isCustomInstructionsExpanded) {
             delay(150)
-            if (isCustomInstructionsExpanded) {
-                customPromptRequester.bringIntoView()
-            }
+            customPromptRequester.bringIntoView()
         }
     }
 
@@ -476,9 +482,8 @@ private fun EnterTopicContent(
                         .onFocusChanged { focusState ->
                             if (focusState.isFocused) {
                                 scope.launch {
-                                    delay(200)
+                                    delay(250)
                                     customPromptRequester.bringIntoView()
-                                    scrollState.animateScrollTo(scrollState.maxValue)
                                 }
                             }
                         },

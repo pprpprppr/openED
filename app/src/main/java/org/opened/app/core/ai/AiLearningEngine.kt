@@ -1050,6 +1050,22 @@ You are an expert psychometrician and high-stakes test design prompt architect. 
 
     companion object {
         /**
+         * Sanitizes exam question text, options, and explanations by unescaping LaTeX percentages/symbols,
+         * removing Obsidian wiki-link syntax [[...]], and stripping unwanted watermark symbols (✦, ★).
+         */
+        fun sanitizeMockTestText(raw: String): String {
+            return raw
+                .replace("\\%", "%")
+                .replace("\\$", "$")
+                .replace("\\&", "&")
+                .replace("\\#", "#")
+                .replace(Regex("""`?\[\[(.*?)\]\]`?""")) { it.groupValues[1] }
+                .replace("✦", "")
+                .replace("★", "")
+                .trim()
+        }
+
+        /**
          * Resilient and flexible parser for LLM-generated mock test question batches.
          * Decodes questions from diverse JSON formats (objects, arrays, wrapper keys) and handles
          * alternative field names (e.g. choices, answer letters 'A'-'D', prompt, stem, etc.).
@@ -1069,24 +1085,27 @@ You are an expert psychometrician and high-stakes test design prompt architect. 
             for (itemElem in questionsArray) {
                 if (itemElem !is JsonObject) continue
 
-                val questionText = itemElem.findFirstString(
+                val rawQuestionText = itemElem.findFirstString(
                     "question", "questionText", "question_text", "text", "prompt", "problem", "stem", "title"
                 )?.trim().orEmpty()
 
-                if (questionText.isBlank()) continue
+                if (rawQuestionText.isBlank()) continue
+                val questionText = sanitizeMockTestText(rawQuestionText)
 
-                val topic = itemElem.findFirstString(
+                val rawTopic = itemElem.findFirstString(
                     "topic", "subject", "category", "domain", "concept", "chapter", "section"
                 )?.trim().orEmpty()
+                val topic = sanitizeMockTestText(rawTopic)
 
                 val options = extractOptions(itemElem)
                 val correctIndex = extractCorrectIndex(itemElem, options)
-                val explanation = itemElem.findFirstString(
+                val rawExplanation = itemElem.findFirstString(
                     "explanation", "rationale", "reason", "solution", "analysis", "detail"
                 )?.trim() ?: "The correct option is Option ${('A' + correctIndex)}."
+                val explanation = sanitizeMockTestText(rawExplanation)
 
                 val rawType = itemElem.findFirstString("type", "questionType", "question_type", "kind")?.trim().orEmpty()
-                val extractedAnswers = extractCorrectAnswers(itemElem, options, correctIndex)
+                val extractedAnswers = extractCorrectAnswers(itemElem, options, correctIndex).map { sanitizeMockTestText(it) }
                 val isMulti = rawType.contains("MULTI", ignoreCase = true) || extractedAnswers.size > 1
                 val questionTypeStr = if (isMulti) "MULTI_SELECT" else "SINGLE_CHOICE"
 
@@ -1171,11 +1190,11 @@ You are an expert psychometrician and high-stakes test design prompt architect. 
                     val list = mutableListOf<String>()
                     for (opt in candidate) {
                         when (opt) {
-                            is JsonPrimitive -> list.add(opt.content.trim())
+                            is JsonPrimitive -> list.add(sanitizeMockTestText(opt.content))
                             is JsonObject -> {
                                 val text = opt.findFirstString("text", "option", "value", "content", "choice")
                                     ?: opt.values.filterIsInstance<JsonPrimitive>().firstOrNull()?.content
-                                if (!text.isNullOrBlank()) list.add(text.trim())
+                                if (!text.isNullOrBlank()) list.add(sanitizeMockTestText(text))
                             }
                             else -> {}
                         }
@@ -1185,7 +1204,8 @@ You are an expert psychometrician and high-stakes test design prompt architect. 
                     val sortedValues = candidate.entries
                         .sortedBy { it.key }
                         .mapNotNull {
-                            (it.value as? JsonPrimitive)?.content?.trim()
+                            val raw = (it.value as? JsonPrimitive)?.content?.trim()
+                            if (!raw.isNullOrBlank()) sanitizeMockTestText(raw) else null
                         }
                     if (sortedValues.size >= 2) return sortedValues
                 }

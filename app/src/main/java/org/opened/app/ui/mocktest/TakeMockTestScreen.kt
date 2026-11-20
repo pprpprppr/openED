@@ -81,6 +81,17 @@ import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.ui.components.RichMarkdownRenderer
 import java.util.Locale
 
+private fun sanitizeDisplayExamText(text: String): String {
+    return text
+        .replace("\\%", "%")
+        .replace("\\$", "$")
+        .replace("\\&", "&")
+        .replace("\\#", "#")
+        .replace(Regex("""`?\[\[(.*?)\]\]`?""")) { it.groupValues[1] }
+        .replace("✦", "")
+        .replace("★", "")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TakeMockTestScreen(
@@ -422,7 +433,7 @@ fun TakeMockTestScreen(
                         ) {
                             Box(modifier = Modifier.padding(18.dp)) {
                                 RichMarkdownRenderer(
-                                    markdown = question.questionText,
+                                    markdown = sanitizeDisplayExamText(question.questionText),
                                     onChapterClick = {},
                                     selectable = false
                                 )
@@ -506,7 +517,7 @@ fun TakeMockTestScreen(
                                 // Option Content with Markdown & LaTeX support
                                 Box(modifier = Modifier.weight(1f)) {
                                     RichMarkdownRenderer(
-                                        markdown = optionText,
+                                        markdown = sanitizeDisplayExamText(optionText),
                                         onChapterClick = {},
                                         selectable = false,
                                         isClickableCard = true

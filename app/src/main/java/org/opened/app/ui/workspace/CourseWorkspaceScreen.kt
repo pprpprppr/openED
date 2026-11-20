@@ -2,6 +2,12 @@ package org.opened.app.ui.workspace
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +30,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,6 +42,8 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
@@ -76,6 +85,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -141,12 +151,16 @@ fun CourseWorkspaceScreen(
         onNavigateBack()
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        drawerContent = {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            drawerContent = {
             CourseTreeDrawer(
                 pathWithModules = uiState.pathWithModules,
                 activeChapterId = uiState.activeChapterId,
@@ -167,6 +181,15 @@ fun CourseWorkspaceScreen(
     ) {
         val chapterDetails = uiState.chapterDetails
         val currentChapter = chapterDetails?.chapter
+        val listState = rememberLazyListState()
+        var isDockExpanded by rememberSaveable { mutableStateOf(false) }
+
+        // Auto-minimize dock when actively scrolling through the lesson so content is never obscured
+        LaunchedEffect(listState.isScrollInProgress) {
+            if (listState.isScrollInProgress && isDockExpanded) {
+                isDockExpanded = false
+            }
+        }
 
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background.copy(alpha = 1f),
@@ -349,9 +372,11 @@ fun CourseWorkspaceScreen(
                     val cleanMarkdown = remember(currentChapter.id, currentChapter.markdownContent, currentChapter.title) {
                         stripLeadingH1(currentChapter.markdownContent, currentChapter.title)
                     }
+
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp, top = 8.dp)
+                        contentPadding = PaddingValues(bottom = 160.dp, top = 8.dp)
                     ) {
                         // Chapter Title and Summary Header
                         item {
@@ -529,25 +554,29 @@ fun CourseWorkspaceScreen(
                                 }
                             }
 
-                            // Extra bottom spacing so content is never obscured by the floating dock
+                            // Extra bottom spacing so content is never obscured by the bottom actions
                             item {
-                                Spacer(modifier = Modifier.height(96.dp))
+                                Spacer(modifier = Modifier.height(140.dp))
                             }
                         }
                     }
                 }
 
-                // Floating bottom dock overlay — only shown when chapter has content and not streaming
+                // Bottom dock overlay — only shown when chapter has content and not streaming
                 if (currentChapter != null && currentChapter.markdownContent.isNotBlank() && !uiState.isStreaming) {
                     Column(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
+                            .align(if (isDockExpanded) Alignment.BottomCenter else Alignment.BottomEnd)
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                            .padding(
+                                start = if (isDockExpanded) 12.dp else 0.dp,
+                                end = 16.dp,
+                                bottom = 8.dp
+                            ),
+                        horizontalAlignment = if (isDockExpanded) Alignment.CenterHorizontally else Alignment.End,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // TTS mini-player sits above the dock
+                        // TTS mini-player sits above the dock when active
                         AnimatedVisibility(visible = isTtsActive) {
                             TtsMiniPlayer(
                                 ttsState = ttsState,
@@ -560,63 +589,141 @@ fun CourseWorkspaceScreen(
                             )
                         }
 
-                        // Floating elevated action dock
-                        Surface(
-                            shape = RoundedCornerShape(26.dp),
-                            tonalElevation = 8.dp,
-                            shadowElevation = 10.dp,
-                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-                            modifier = Modifier
-                                .widthIn(max = 440.dp)
-                                .fillMaxWidth()
+                        // Minimized AI Shortcut Button (Compact, doesn't block reading content)
+                        AnimatedVisibility(
+                            visible = !isDockExpanded,
+                            enter = fadeIn() + scaleIn(initialScale = 0.85f),
+                            exit = fadeOut() + scaleOut(targetScale = 0.85f)
                         ) {
-                            Row(
+                            Surface(
+                                shape = RoundedCornerShape(22.dp),
+                                tonalElevation = 6.dp,
+                                shadowElevation = 8.dp,
+                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceEvenly,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .clickable { isDockExpanded = true }
                             ) {
-                                // 1. Refine
-                                WorkspaceDockItem(
-                                    icon = Icons.Default.AutoAwesome,
-                                    label = "Refine",
-                                    badgeCount = 0,
-                                    accentColor = MaterialTheme.colorScheme.primary,
-                                    onClick = { viewModel.openRefineSheet() },
-                                    modifier = Modifier.weight(1f)
-                                )
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        text = "AI Tools",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (uiState.chapterFlashcards.isNotEmpty()) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                            modifier = Modifier.size(18.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = "${uiState.chapterFlashcards.size}",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onTertiary
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowUp,
+                                        contentDescription = "Expand tools",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
 
-                                // 2. Mastery
-                                WorkspaceDockItem(
-                                    icon = Icons.Default.School,
-                                    label = "Mastery",
-                                    badgeCount = 0,
-                                    accentColor = MaterialTheme.colorScheme.secondary,
-                                    onClick = { viewModel.openMasterySheet() },
-                                    modifier = Modifier.weight(1f)
-                                )
+                        // Expanded Full Action Dock
+                        AnimatedVisibility(
+                            visible = isDockExpanded,
+                            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                            exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(24.dp),
+                                tonalElevation = 8.dp,
+                                shadowElevation = 10.dp,
+                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .widthIn(max = 480.dp)
+                                    .fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // 1. Refine
+                                    WorkspaceDockItem(
+                                        icon = Icons.Default.AutoAwesome,
+                                        label = "Refine",
+                                        badgeCount = 0,
+                                        accentColor = MaterialTheme.colorScheme.primary,
+                                        onClick = { viewModel.openRefineSheet() },
+                                        modifier = Modifier.weight(1f)
+                                    )
 
-                                // 3. Cards
-                                WorkspaceDockItem(
-                                    icon = Icons.Default.Style,
-                                    label = "Cards",
-                                    badgeCount = uiState.chapterFlashcards.size,
-                                    accentColor = MaterialTheme.colorScheme.tertiary,
-                                    onClick = { viewModel.onFlashcardsClicked() },
-                                    modifier = Modifier.weight(1f)
-                                )
+                                    // 2. Mastery
+                                    WorkspaceDockItem(
+                                        icon = Icons.Default.School,
+                                        label = "Mastery",
+                                        badgeCount = 0,
+                                        accentColor = MaterialTheme.colorScheme.secondary,
+                                        onClick = { viewModel.openMasterySheet() },
+                                        modifier = Modifier.weight(1f)
+                                    )
 
-                                // 4. Socratic Q&A
-                                WorkspaceDockItem(
-                                    icon = Icons.AutoMirrored.Filled.Chat,
-                                    label = "Ask AI",
-                                    badgeCount = 0,
-                                    accentColor = MaterialTheme.colorScheme.primary,
-                                    onClick = { viewModel.openSocraticQaSheet() },
-                                    modifier = Modifier.weight(1f)
-                                )
+                                    // 3. Cards
+                                    WorkspaceDockItem(
+                                        icon = Icons.Default.Style,
+                                        label = "Cards",
+                                        badgeCount = uiState.chapterFlashcards.size,
+                                        accentColor = MaterialTheme.colorScheme.tertiary,
+                                        onClick = { viewModel.onFlashcardsClicked() },
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    // 4. Socratic Q&A
+                                    WorkspaceDockItem(
+                                        icon = Icons.AutoMirrored.Filled.Chat,
+                                        label = "Ask AI",
+                                        badgeCount = 0,
+                                        accentColor = MaterialTheme.colorScheme.primary,
+                                        onClick = { viewModel.openSocraticQaSheet() },
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    // 5. Minimize toggle button
+                                    IconButton(
+                                        onClick = { isDockExpanded = false },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = "Minimize dock",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -696,6 +803,7 @@ fun CourseWorkspaceScreen(
             )
         }
     }
+}
 }
 
 private val CHAPTER_PREFIX_REGEX = Regex("^Chapter\\s+\\d+[:\\.\\-]?\\s*", RegexOption.IGNORE_CASE)

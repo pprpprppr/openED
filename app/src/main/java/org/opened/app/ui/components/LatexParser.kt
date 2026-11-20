@@ -263,6 +263,14 @@ object LatexParser {
 
         if (text.isBlank()) return ""
 
+        // Unescape standard escaped LaTeX characters (e.g. 80\% -> 80%, \$ -> $)
+        text = text.replace("\\%", "%")
+            .replace("\\$", "$")
+            .replace("\\&", "&")
+            .replace("\\#", "#")
+            .replace("\\{", "{")
+            .replace("\\}", "}")
+
         // 1. Protect escaped underscores
         val placeholderUnderscore = "\u0000PROTECTEDUNDERSCORE\u0000"
         text = text.replace("\\_", placeholderUnderscore)

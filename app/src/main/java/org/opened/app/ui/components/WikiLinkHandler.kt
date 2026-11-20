@@ -26,7 +26,7 @@ const val TAG_URL_LINK = "TAG_URL_LINK"
 
 // Pre-compiled token regex for high-performance interactive parsing
 private val TOKEN_REGEX = Regex(
-    """(\[\[(.*?)\]\])|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\s\n](?:[^\$\n]*?[^\$\s\n])?)\$)|(~~(.*?)~~)|(<u>(.*?)</u>)|(\*\*(.*?)\*\*)|(\*(.*?)\*)"""
+    """(`?\[\[(.*?)\]\]`?)|(\[(.*?)\]\((.*?)\))|(`(.*?)`)|(\\\((.*?)\\\))|(\\\[(.*?)\\\])|(\$([^\$\s\n](?:[^\$\n]*?[^\$\s\n])?)\$)|(~~(.*?)~~)|(<u>(.*?)</u>)|(\*\*(.*?)\*\*)|(\*(.*?)\*)"""
 )
 
 @Composable
@@ -96,18 +96,25 @@ fun buildInteractiveAnnotatedString(
 
         fun appendCleanedText(raw: String) {
             if (raw.isEmpty()) return
+            val unescaped = raw
+                .replace("\\%", "%")
+                .replace("\\$", "$")
+                .replace("\\&", "&")
+                .replace("\\#", "#")
+                .replace("✦", "")
+                .replace("★", "")
             // Never allow raw LaTeX leaks, unparsed math, or stray braces in body text
             val cleaned = if (
-                raw.contains('\\') ||
-                (raw.contains('{') && raw.contains('}')) ||
-                raw.contains('^') ||
-                raw.contains('_') ||
-                raw.contains("sqrt") ||
-                raw.contains("--")
+                unescaped.contains('\\') ||
+                (unescaped.contains('{') && unescaped.contains('}')) ||
+                unescaped.contains('^') ||
+                unescaped.contains('_') ||
+                unescaped.contains("sqrt") ||
+                unescaped.contains("--")
             ) {
-                LatexParser.cleanInlineLatex(raw)
+                LatexParser.cleanInlineLatex(unescaped)
             } else {
-                raw
+                unescaped
             }
             append(cleaned)
         }
@@ -123,9 +130,9 @@ fun buildInteractiveAnnotatedString(
 
             val fullMatch = match.value
             when {
-                // [[Wiki Link]]
-                fullMatch.startsWith("[[") && fullMatch.endsWith("]]") -> {
-                    val chapterTitle = match.groupValues[2].trim()
+                // [[Wiki Link]] (supports [[Chapter Title]] and `[[Chapter Title]]`)
+                (fullMatch.startsWith("[[") || fullMatch.startsWith("`[[")) && (fullMatch.endsWith("]]") || fullMatch.endsWith("]]`")) -> {
+                    val chapterTitle = match.groupValues[2].trim().removePrefix("[[").removeSuffix("]]").trim()
                     pushStringAnnotation(tag = TAG_WIKI_LINK, annotation = chapterTitle)
                     pushStyle(
                         SpanStyle(
@@ -134,7 +141,7 @@ fun buildInteractiveAnnotatedString(
                             textDecoration = TextDecoration.Underline
                         )
                     )
-                    append("✦ $chapterTitle")
+                    append(chapterTitle)
                     pop()
                     pop()
                 }
@@ -157,17 +164,36 @@ fun buildInteractiveAnnotatedString(
 
                 // `inline code`
                 fullMatch.startsWith("`") && fullMatch.endsWith("`") -> {
-                    val code = fullMatch.removePrefix("`").removeSuffix("`")
-                    pushStyle(
-                        SpanStyle(
-                            fontFamily = FontFamily.Monospace,
-                            background = Color(0x22888888),
-                            color = Color(0xFFF43F5E),
-                            fontSize = 13.sp
+                    val rawCode = fullMatch.removePrefix("`").removeSuffix("`")
+                    val code = if (rawCode.startsWith("[[") && rawCode.endsWith("]]")) {
+                        rawCode.removePrefix("[[").removeSuffix("]]").trim()
+                    } else {
+                        rawCode
+                    }
+                    if (rawCode.startsWith("[[") && rawCode.endsWith("]]")) {
+                        pushStringAnnotation(tag = TAG_WIKI_LINK, annotation = code)
+                        pushStyle(
+                            SpanStyle(
+                                color = wikiLinkColor,
+                                fontWeight = FontWeight.SemiBold,
+                                textDecoration = TextDecoration.Underline
+                            )
                         )
-                    )
-                    append(" $code ")
-                    pop()
+                        append(code)
+                        pop()
+                        pop()
+                    } else {
+                        pushStyle(
+                            SpanStyle(
+                                fontFamily = FontFamily.Monospace,
+                                background = Color(0x22888888),
+                                color = Color(0xFFF43F5E),
+                                fontSize = 13.sp
+                            )
+                        )
+                        append(" $code ")
+                        pop()
+                    }
                 }
 
                 // \(inline math\)

@@ -71,6 +71,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.opened.app.core.database.entity.MockTestQuestionEntity
 import org.opened.app.ui.components.RichMarkdownRenderer
 
+private fun sanitizeDisplayExamText(text: String): String {
+    return text
+        .replace("\\%", "%")
+        .replace("\\$", "$")
+        .replace("\\&", "&")
+        .replace("\\#", "#")
+        .replace(Regex("""`?\[\[(.*?)\]\]`?""")) { it.groupValues[1] }
+        .replace("✦", "")
+        .replace("★", "")
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MockTestResultScreen(
@@ -604,7 +615,7 @@ private fun QuestionSolutionCard(
             // Question Text with LaTeX & Markdown
             Box(modifier = Modifier.fillMaxWidth()) {
                 RichMarkdownRenderer(
-                    markdown = question.questionText,
+                    markdown = sanitizeDisplayExamText(question.questionText),
                     onChapterClick = {}
                 )
             }
@@ -670,7 +681,7 @@ private fun QuestionSolutionCard(
                             }
 
                             Box(modifier = Modifier.weight(1f)) {
-                                RichMarkdownRenderer(markdown = optText, onChapterClick = {})
+                                RichMarkdownRenderer(markdown = sanitizeDisplayExamText(optText), onChapterClick = {})
                             }
 
                             when {
@@ -770,7 +781,7 @@ private fun QuestionSolutionCard(
                         }
 
                         RichMarkdownRenderer(
-                            markdown = question.explanation,
+                            markdown = sanitizeDisplayExamText(question.explanation),
                             onChapterClick = {}
                         )
                     }

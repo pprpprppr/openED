@@ -778,10 +778,10 @@ Do not wrap in markdown quotes or code fences. Return raw JSON only.
         return if (otherChapterTitles.isNotEmpty()) {
             """
 KNOWLEDGE GRAPH WIKI-LINKING RULE:
-Whenever you mention or build upon concepts covered in other chapters of this curriculum or library, enclose the exact chapter title in double brackets like `[[Exact Chapter Title]]`.
+Whenever you mention or build upon concepts covered in other chapters of this curriculum or library, enclose the exact chapter title in double brackets like [[Exact Chapter Title]] (do NOT enclose in code backticks or quotes).
 Here are available chapter titles in the user's workspace:
 ${otherChapterTitles.take(25).joinToString("\n") { "- $it" }}
-Always inject `[[Chapter Title]]` links naturally into the text when discussing those concepts.
+Always inject [[Chapter Title]] links naturally into the text when discussing those concepts (never wrap in backticks).
 """
         } else ""
     }
@@ -1052,8 +1052,9 @@ Exam Category: $examCategory$targetContext$notesContext
 REQUIREMENTS FOR THE GENERATED CUSTOM INSTRUCTION:
 1. Define the exact exam standard, difficulty level, and cognitive domain to target (e.g. multi-step calculation, clinical reasoning, assertion-reason statements, enterprise scenarios).
 2. Mandate specific high-yield subtopics, trap patterns, formula rigor, and distractor design rules tailored to "$topic".
-3. Keep it authoritative, precise, and directly usable as a test-generation directive (between 60 to 150 words).
-4. Do NOT include markdown code fences (```) around the entire output. Do NOT include conversational filler, greetings, or intro/outro text. Output ONLY the raw prompt text that will be fed directly to the exam question generator.
+3. Plain Text Clarity: Do NOT include wiki-link brackets [[...]], escape characters like \% (always output standard percentage % like 80%), or decorative star marks/watermarks (✦, ★).
+4. Keep it authoritative, precise, and directly usable as a test-generation directive (between 60 to 150 words).
+5. Do NOT include markdown code fences (```) around the entire output. Do NOT include conversational filler, greetings, or intro/outro text. Output ONLY the raw prompt text that will be fed directly to the exam question generator.
 """.trimIndent()
     }
 
@@ -1164,6 +1165,7 @@ CRITICAL PEDAGOGICAL REQUIREMENTS:
    - For "MULTI_SELECT": Genuinely provide 2 or MORE valid answers (e.g. 2 or 3 correct options). Clearly indicate in the question text (e.g., "Select all that apply"). Set "type": "MULTI_SELECT", "correctIndex": <int index of first correct option>, and "correctAnswers": [<exact text of first correct option>, <exact text of second correct option>, ...].
 5. For all math formulas, chemical reactions, or code snippets, use appropriate LaTeX math (${'$'}...${'$'} or $${'$'}...$${'$'}) or Markdown code blocks.
 6. In the "explanation", provide a concise, high-yield explanation (2-3 crisp sentences): clearly justify why each correct option is right with the core formula or logic, and dissect why the incorrect alternatives are false.
+7. Clean Plain Text Options & No Watermarks: Do NOT wrap options or question text in wiki-link brackets [[...]], and do NOT include star symbols (✦, ★, *), bullet icons, or watermarks. Always output standard percentage symbols (e.g. "80%", never "80\%").
 
 RESPOND ONLY WITH A VALID JSON OBJECT MATCHING THIS EXACT SCHEMA:
 {

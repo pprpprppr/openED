@@ -62,7 +62,8 @@ class WikiLinkHandlerTest {
     fun testWikiLinksAndMarkdownLinks() {
         val input = "See [[Quantum Electrodynamics]] and [OpenED](https://opened.org)."
         val annotated = buildInteractiveAnnotatedString(input, defaultColor, wikiColor, urlColor)
-        assertTrue(annotated.text.contains("✦ Quantum Electrodynamics"))
+        assertTrue(annotated.text.contains("Quantum Electrodynamics"))
+        assertFalse(annotated.text.contains("✦"))
         assertTrue(annotated.text.contains("OpenED"))
 
         val wikiAnnotations = annotated.getStringAnnotations(tag = TAG_WIKI_LINK, start = 0, end = annotated.length)
@@ -72,5 +73,29 @@ class WikiLinkHandlerTest {
         val urlAnnotations = annotated.getStringAnnotations(tag = TAG_URL_LINK, start = 0, end = annotated.length)
         assertEquals(1, urlAnnotations.size)
         assertEquals("https://opened.org", urlAnnotations.first().item)
+    }
+
+    @Test
+    fun testBacktickWrappedWikiLinks() {
+        val input = "Implementing `[[Resource Hierarchy and IAM Governance]]` using folders."
+        val annotated = buildInteractiveAnnotatedString(input, defaultColor, wikiColor, urlColor)
+        assertTrue(annotated.text.contains("Resource Hierarchy and IAM Governance"))
+        assertFalse(annotated.text.contains("[["))
+        assertFalse(annotated.text.contains("]]"))
+        assertFalse(annotated.text.contains("`"))
+
+        val wikiAnnotations = annotated.getStringAnnotations(tag = TAG_WIKI_LINK, start = 0, end = annotated.length)
+        assertEquals(1, wikiAnnotations.size)
+        assertEquals("Resource Hierarchy and IAM Governance", wikiAnnotations.first().item)
+    }
+
+    @Test
+    fun testEscapedSymbolsAndStarStripping() {
+        val input = "CPU exceeds 80\\% for more than 5 minutes. ✦ Google Cloud"
+        val annotated = buildInteractiveAnnotatedString(input, defaultColor, wikiColor, urlColor)
+        assertTrue("Should clean 80\\% to 80%", annotated.text.contains("80%"))
+        assertFalse("Should not contain escaped backslash", annotated.text.contains("80\\%"))
+        assertFalse("Should strip star ✦", annotated.text.contains("✦"))
+        assertTrue("Should contain Google Cloud", annotated.text.contains("Google Cloud"))
     }
 }

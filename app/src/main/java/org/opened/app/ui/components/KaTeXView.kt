@@ -388,12 +388,15 @@ private fun escapeHtml(text: String): String {
  * Converts basic markdown formatting (bold, italic, code, wiki links) into HTML.
  */
 private fun markdownToHtml(raw: String): String {
-    // Process [[Wiki Links]]
-    var result = raw.replace(Regex("""\[\[(.*?)\]\]""")) { match ->
+    // Process [[Wiki Links]] (with or without backticks)
+    var result = raw.replace(Regex("""`?\[\[(.*?)\]\]`?""")) { match ->
         val title = match.groupValues[1].trim()
         val encoded = Uri.encode(title)
-        """<a href="opened://chapter/$encoded" class="wiki-link">✦ $title</a>"""
+        """<a href="opened://chapter/$encoded" class="wiki-link">$title</a>"""
     }
+
+    // Unescape common escaped symbols e.g. 80\% -> 80%
+    result = result.replace("\\%", "%").replace("\\$", "$")
 
     // Process [Markdown Links](url)
     result = result.replace(Regex("""\[(.*?)\]\((.*?)\)""")) { match ->
