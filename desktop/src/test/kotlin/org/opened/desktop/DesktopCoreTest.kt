@@ -104,4 +104,13 @@ class DesktopCoreTest {
         assertEquals("Quantum Mechanics", restoredPaths.first().studyPath.title)
         assertFalse(restoredPaths.first().allChapters.first().markdownContent.isBlank())
     }
+
+    @Test
+    fun `desktop theme mode parses dark white existing and defaults safely`() {
+        assertEquals(DesktopThemeMode.MODERN_DARK, DesktopThemeMode.fromId("dark"))
+        assertEquals(DesktopThemeMode.MODERN_WHITE, DesktopThemeMode.fromId("WHITE"))
+        assertEquals(DesktopThemeMode.EXISTING, DesktopThemeMode.fromId("existing"))
+        assertEquals(DesktopThemeMode.MODERN_DARK, DesktopThemeMode.fromId(null))
+        assertEquals(DesktopThemeMode.MODERN_DARK, DesktopThemeMode.fromId("unknown"))
+    }
 }

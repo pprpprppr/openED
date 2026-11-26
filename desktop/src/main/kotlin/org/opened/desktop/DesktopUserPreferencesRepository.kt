@@ -17,6 +17,17 @@ import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.platform.UserPreferencesStore
 import java.io.IOException
 
+enum class DesktopThemeMode(val id: String, val label: String, val subtitle: String) {
+    MODERN_DARK("dark", "Dark", "Modern sleek carbon workspace"),
+    MODERN_WHITE("white", "White", "Crisp pure white daylight theme"),
+    EXISTING("existing", "Classic", "Original openED Studio theme");
+
+    companion object {
+        fun fromId(id: String?): DesktopThemeMode =
+            entries.firstOrNull { it.id.equals(id, ignoreCase = true) } ?: MODERN_DARK
+    }
+}
+
 class DesktopUserPreferencesRepository : UserPreferencesStore {
 
     private val dataStore: DataStore<Preferences> = PreferenceDataStoreFactory.createWithPath(
@@ -24,6 +35,7 @@ class DesktopUserPreferencesRepository : UserPreferencesStore {
     )
 
     private object Keys {
+        val DESKTOP_THEME_MODE = stringPreferencesKey("desktop_theme_mode")
         val SELECTED_PROVIDER = stringPreferencesKey("selected_provider")
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
         val SELECTION_MODE = stringPreferencesKey("selection_mode")
@@ -96,6 +108,16 @@ class DesktopUserPreferencesRepository : UserPreferencesStore {
             it[Keys.WEBDAV_USERNAME] = username
         }
     }
+    val desktopThemeModeFlow: Flow<DesktopThemeMode> = dataStore.data
+        .catch { e ->
+            if (e is IOException) emit(emptyPreferences()) else throw e
+        }
+        .map { p -> DesktopThemeMode.fromId(p[Keys.DESKTOP_THEME_MODE]) }
+
+    suspend fun setDesktopThemeMode(mode: DesktopThemeMode) {
+        dataStore.edit { it[Keys.DESKTOP_THEME_MODE] = mode.id }
+    }
+
     override suspend fun setLinkedBackupUri(uri: String?) {
         dataStore.edit { if (uri != null) it[Keys.LINKED_BACKUP_URI] = uri else it.remove(Keys.LINKED_BACKUP_URI) }
     }

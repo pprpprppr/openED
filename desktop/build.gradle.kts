@@ -32,7 +32,7 @@ compose.desktop {
                 TargetFormat.Exe
             )
             packageName = "openED"
-            packageVersion = "1.8.0"
+            packageVersion = "1.9.0"
             description = "openED — Self-Learning & Knowledge Studio"
             vendor = "openED"
 

@@ -7,6 +7,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -19,16 +20,18 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 import org.opened.app.core.datastore.UserPreferences
-import org.opened.app.ui.navigation.OpenEDNavHost
 import org.opened.app.ui.platform.LocalOpenEdViewModelFactory
 import org.opened.app.ui.platform.LocalPlatformBackupSection
-import org.opened.app.ui.theme.OpenEDTheme
+import org.opened.desktop.ui.DesktopAppShell
+import org.opened.desktop.ui.theme.DesktopOpenEDTheme
 import java.awt.Color
 import java.awt.Dimension
 import java.awt.GradientPaint
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
+import javax.imageio.ImageIO
 import javax.swing.UIManager
 
 fun main() {
@@ -39,10 +42,12 @@ fun main() {
     val container = DesktopAppContainer()
 
     application {
-        val windowState = rememberWindowState(width = 1280.dp, height = 840.dp)
+        val windowState = rememberWindowState(width = 1320.dp, height = 860.dp)
         val appIcon = remember { BitmapPainter(createOpenEdAppIcon().toComposeImageBitmap()) }
         val userPrefs by container.preferencesStore.userPreferencesFlow.collectAsState(initial = UserPreferences())
+        val themeMode by container.preferencesStore.desktopThemeModeFlow.collectAsState(initial = DesktopThemeMode.MODERN_DARK)
         val navController = rememberNavController()
+        val scope = rememberCoroutineScope()
 
         Window(
             onCloseRequest = {
@@ -50,7 +55,7 @@ fun main() {
                 exitApplication()
             },
             state = windowState,
-            title = "openED — Self-Learning & Knowledge Studio",
+            title = "openED — PC Knowledge Studio",
             icon = appIcon,
             onKeyEvent = { event ->
                 if (event.type == KeyEventType.KeyUp && event.key == Key.Escape) {
@@ -61,9 +66,10 @@ fun main() {
                 }
             }
         ) {
-            window.minimumSize = Dimension(840, 580)
+            window.minimumSize = Dimension(960, 620)
 
-            OpenEDTheme(
+            DesktopOpenEDTheme(
+                themeMode = themeMode,
                 highContrast = userPrefs.highContrastEnabled,
                 reducedMotion = userPrefs.reducedMotionEnabled
             ) {
@@ -77,7 +83,17 @@ fun main() {
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        OpenEDNavHost(navController = navController)
+                        DesktopAppShell(
+                            container = container,
+                            navController = navController,
+                            appIcon = appIcon,
+                            themeMode = themeMode,
+                            onSelectThemeMode = { selectedMode ->
+                                scope.launch {
+                                    container.preferencesStore.setDesktopThemeMode(selectedMode)
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -88,7 +104,7 @@ fun main() {
 private fun createOpenEdAppIcon(): BufferedImage {
     val stream = DesktopAppContainer::class.java.getResourceAsStream("/icon.png")
     if (stream != null) {
-        val loaded = runCatching { stream.use { javax.imageio.ImageIO.read(it) } }.getOrNull()
+        val loaded = runCatching { stream.use { ImageIO.read(it) } }.getOrNull()
         if (loaded != null) return loaded
     }
     val size = 128
