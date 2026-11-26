@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import org.opened.app.core.ai.AiProvider
+import org.opened.app.core.platform.UserPreferencesStore
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -23,7 +24,7 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 @Singleton
 class UserPreferencesRepository @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : UserPreferencesStore {
     private object PreferencesKeys {
         val SELECTED_PROVIDER = stringPreferencesKey("selected_provider")
         val SELECTED_MODEL = stringPreferencesKey("selected_model")
@@ -48,7 +49,7 @@ class UserPreferencesRepository @Inject constructor(
         val LINKED_BACKUP_URI = stringPreferencesKey("linked_backup_uri")
     }
 
-    val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data
+    override val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -81,49 +82,49 @@ class UserPreferencesRepository @Inject constructor(
             )
         }
 
-    suspend fun setSelectedProvider(provider: String) {
+    override suspend fun setSelectedProvider(provider: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SELECTED_PROVIDER] = provider
         }
     }
 
-    suspend fun setSelectedModel(model: String) {
+    override suspend fun setSelectedModel(model: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SELECTED_MODEL] = model
         }
     }
 
-    suspend fun setSelectionMode(mode: String) {
+    override suspend fun setSelectionMode(mode: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SELECTION_MODE] = mode
         }
     }
 
-    suspend fun setCustomBaseUrl(url: String) {
+    override suspend fun setCustomBaseUrl(url: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.CUSTOM_BASE_URL] = url
         }
     }
 
-    suspend fun setCustomSystemInstructions(instructions: String) {
+    override suspend fun setCustomSystemInstructions(instructions: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SYSTEM_INSTRUCTIONS] = instructions
         }
     }
 
-    suspend fun setAutoBackupEnabled(enabled: Boolean) {
+    override suspend fun setAutoBackupEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.AUTO_BACKUP_ENABLED] = enabled
         }
     }
 
-    suspend fun setLastBackupTimestamp(timestamp: Long) {
+    override suspend fun setLastBackupTimestamp(timestamp: Long) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LAST_BACKUP_TIMESTAMP] = timestamp
         }
     }
 
-    suspend fun setBackupAccountEmail(email: String?) {
+    override suspend fun setBackupAccountEmail(email: String?) {
         context.dataStore.edit { preferences ->
             if (email != null) {
                 preferences[PreferencesKeys.BACKUP_ACCOUNT_EMAIL] = email
@@ -133,7 +134,7 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
-    suspend fun setBackupDriveFileId(fileId: String?) {
+    override suspend fun setBackupDriveFileId(fileId: String?) {
         context.dataStore.edit { preferences ->
             if (fileId != null) {
                 preferences[PreferencesKeys.BACKUP_DRIVE_FILE_ID] = fileId
@@ -143,44 +144,44 @@ class UserPreferencesRepository @Inject constructor(
         }
     }
 
-    suspend fun setLearningLanguage(language: String) {
+    override suspend fun setLearningLanguage(language: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.LEARNING_LANGUAGE] = language
         }
     }
 
-    suspend fun setBilingualTerminologyEnabled(enabled: Boolean) {
+    override suspend fun setBilingualTerminologyEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.BILINGUAL_TERMINOLOGY_ENABLED] = enabled
         }
     }
 
-    suspend fun setHighContrastEnabled(enabled: Boolean) {
+    override suspend fun setHighContrastEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.HIGH_CONTRAST_ENABLED] = enabled
         }
     }
 
-    suspend fun setReducedMotionEnabled(enabled: Boolean) {
+    override suspend fun setReducedMotionEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.REDUCED_MOTION_ENABLED] = enabled
         }
     }
 
-    suspend fun setSyncProviderId(providerId: String) {
+    override suspend fun setSyncProviderId(providerId: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.SYNC_PROVIDER_ID] = providerId
         }
     }
 
-    suspend fun setWebDavConfig(url: String, username: String) {
+    override suspend fun setWebDavConfig(url: String, username: String) {
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.WEBDAV_SERVER_URL] = url
             preferences[PreferencesKeys.WEBDAV_USERNAME] = username
         }
     }
 
-    suspend fun setLinkedBackupUri(uri: String?) {
+    override suspend fun setLinkedBackupUri(uri: String?) {
         context.dataStore.edit { preferences ->
             if (uri != null) {
                 preferences[PreferencesKeys.LINKED_BACKUP_URI] = uri

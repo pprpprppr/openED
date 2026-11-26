@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -15,7 +16,11 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.opened.app.core.datastore.UserPreferences
 import org.opened.app.core.datastore.UserPreferencesRepository
 import org.opened.app.core.worker.BackupScheduler
+import org.opened.app.di.AndroidViewModelFactory
 import org.opened.app.ui.navigation.OpenEDNavHost
+import org.opened.app.ui.platform.LocalOpenEdViewModelFactory
+import org.opened.app.ui.platform.LocalPlatformBackupSection
+import org.opened.app.ui.settings.AndroidBackupAndExportSection
 import org.opened.app.ui.theme.OpenEDTheme
 import javax.inject.Inject
 
@@ -27,6 +32,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var preferencesRepository: UserPreferencesRepository
+
+    @Inject
+    lateinit var viewModelFactory: AndroidViewModelFactory
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,12 +50,19 @@ class MainActivity : ComponentActivity() {
                 highContrast = userPrefs.highContrastEnabled,
                 reducedMotion = userPrefs.reducedMotionEnabled
             ) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                CompositionLocalProvider(
+                    LocalOpenEdViewModelFactory provides viewModelFactory,
+                    LocalPlatformBackupSection provides { uiState, vm ->
+                        AndroidBackupAndExportSection(uiState = uiState, viewModel = vm)
+                    }
                 ) {
-                    val navController = rememberNavController()
-                    OpenEDNavHost(navController = navController)
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        val navController = rememberNavController()
+                        OpenEDNavHost(navController = navController)
+                    }
                 }
             }
         }

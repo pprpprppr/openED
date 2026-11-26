@@ -13,30 +13,19 @@ import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class TtsPlaybackState { IDLE, PLAYING, PAUSED, ERROR }
-
-data class TtsState(
-    val playbackState: TtsPlaybackState = TtsPlaybackState.IDLE,
-    val speedRate: Float = 1.0f,
-    val isEngineReady: Boolean = false,
-    val currentChunkIndex: Int = 0,
-    val totalChunks: Int = 0,
-    val errorMessage: String? = null
-)
-
 @Singleton
 class TtsManager @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : TtsController {
     private val _state = MutableStateFlow(TtsState())
-    val state: StateFlow<TtsState> = _state.asStateFlow()
+    override val state: StateFlow<TtsState> = _state.asStateFlow()
 
     private var tts: TextToSpeech? = null
     private var activeChunks: List<String> = emptyList()
     private var pendingChunks: List<String> = emptyList()
     private var pendingStartIndex: Int = 0
 
-    fun initialize() {
+    override fun initialize() {
         if (tts != null) return
         tts = TextToSpeech(context) { status ->
             if (status == TextToSpeech.SUCCESS) {
@@ -124,7 +113,7 @@ class TtsManager @Inject constructor(
     /**
      * Cleans raw Markdown and initiates chunked spoken audio playback.
      */
-    fun speak(rawMarkdown: String) {
+    override fun speak(rawMarkdown: String) {
         val clean = MarkdownStripper.cleanMarkdownSync(rawMarkdown)
         val chunks = MarkdownStripper.chunkForSpeech(clean, maxChunkChars = 1800)
         if (chunks.isEmpty()) {
@@ -137,7 +126,7 @@ class TtsManager @Inject constructor(
     /**
      * Speaks pre-chunked speech segments, queueing them sequentially.
      */
-    fun speakChunks(chunks: List<String>, startIndex: Int = 0) {
+    override fun speakChunks(chunks: List<String>, startIndex: Int) {
         if (chunks.isEmpty()) return
         activeChunks = chunks
         val safeIndex = startIndex.coerceIn(0, chunks.size - 1)
@@ -170,18 +159,18 @@ class TtsManager @Inject constructor(
         }
     }
 
-    fun pause() {
+    override fun pause() {
         tts?.stop()
         _state.update { it.copy(playbackState = TtsPlaybackState.PAUSED) }
     }
 
-    fun resume() {
+    override fun resume() {
         if (activeChunks.isNotEmpty()) {
             speakChunks(activeChunks, startIndex = _state.value.currentChunkIndex)
         }
     }
 
-    fun stop() {
+    override fun stop() {
         tts?.stop()
         _state.update {
             it.copy(
@@ -191,7 +180,7 @@ class TtsManager @Inject constructor(
         }
     }
 
-    fun setSpeed(rate: Float) {
+    override fun setSpeed(rate: Float) {
         _state.update { it.copy(speedRate = rate) }
         tts?.setSpeechRate(rate)
         if (_state.value.playbackState == TtsPlaybackState.PLAYING && activeChunks.isNotEmpty()) {
@@ -199,7 +188,7 @@ class TtsManager @Inject constructor(
         }
     }
 
-    fun shutdown() {
+    override fun shutdown() {
         tts?.stop()
         tts?.shutdown()
         tts = null

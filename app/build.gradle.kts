@@ -15,8 +15,8 @@ android {
         applicationId = "org.opened.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 19
-        versionName = "1.7.1"
+        versionCode = 20
+        versionName = "1.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -82,6 +82,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

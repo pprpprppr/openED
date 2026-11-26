@@ -20,4 +20,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "openED"
+include(":shared")
 include(":app")
+include(":desktop")

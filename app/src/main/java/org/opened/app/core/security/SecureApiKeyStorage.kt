@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opened.app.core.ai.AiProvider
+import org.opened.app.core.platform.ApiKeyStorageHelper
+import org.opened.app.core.platform.ApiKeyStore
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.Base64
@@ -44,7 +46,7 @@ import javax.inject.Singleton
 class SecureApiKeyStorage internal constructor(
     private val context: Context?,
     private val prefsProvider: () -> SharedPreferences
-) {
+) : ApiKeyStore {
     @Inject
     constructor(@ApplicationContext context: Context) : this(
         context = context,
@@ -62,17 +64,17 @@ class SecureApiKeyStorage internal constructor(
     private var softwareFallbackKey: SecretKey? = null
 
     private val _activeApiKey = MutableStateFlow<String?>(null)
-    val activeApiKey: StateFlow<String?> = _activeApiKey.asStateFlow()
+    override val activeApiKey: StateFlow<String?> = _activeApiKey.asStateFlow()
 
     private val _activeModel = MutableStateFlow<String>(AiProvider.GEMINI.defaultModel)
-    val activeModel: StateFlow<String> = _activeModel.asStateFlow()
+    override val activeModel: StateFlow<String> = _activeModel.asStateFlow()
 
     init {
         // Eagerly pre-warm Keystore on Dispatchers.IO
         warmUp()
     }
 
-    fun warmUp() {
+    override fun warmUp() {
         scope.launch {
             loadPrefs()
             val currentGeminiModel = getModelForProvider(AiProvider.GEMINI)
@@ -327,7 +329,7 @@ class SecureApiKeyStorage internal constructor(
     // API Keys per provider
     // -------------------------------------------------------------------------
 
-    fun getApiKeyForProvider(provider: AiProvider): String? {
+    override fun getApiKeyForProvider(provider: AiProvider): String? {
         val prefKey = getPrefKeyForApiKey(provider)
         val cached = memoryCache[prefKey]
         if (cached != null) {
@@ -345,7 +347,7 @@ class SecureApiKeyStorage internal constructor(
         getApiKeyForProvider(provider)
     }
 
-    fun saveApiKeyForProvider(provider: AiProvider, apiKey: String) {
+    override fun saveApiKeyForProvider(provider: AiProvider, apiKey: String) {
         val prefKey = getPrefKeyForApiKey(provider)
         val cleanKey = apiKey.trim()
         memoryCache[prefKey] = cleanKey
@@ -358,7 +360,7 @@ class SecureApiKeyStorage internal constructor(
         loadPrefs().edit()?.putString(prefKey, encrypted)?.apply()
     }
 
-    fun clearApiKeyForProvider(provider: AiProvider) {
+    override fun clearApiKeyForProvider(provider: AiProvider) {
         val prefKey = getPrefKeyForApiKey(provider)
         memoryCache.remove(prefKey)
 
@@ -369,7 +371,7 @@ class SecureApiKeyStorage internal constructor(
         loadPrefs().edit()?.remove(prefKey)?.apply()
     }
 
-    fun hasApiKeyForProvider(provider: AiProvider): Boolean {
+    override fun hasApiKeyForProvider(provider: AiProvider): Boolean {
         return !getApiKeyForProvider(provider).isNullOrBlank()
     }
 
@@ -377,7 +379,7 @@ class SecureApiKeyStorage internal constructor(
     // Active Model IDs per provider
     // -------------------------------------------------------------------------
 
-    fun getModelForProvider(provider: AiProvider): String {
+    override fun getModelForProvider(provider: AiProvider): String {
         val prefKey = getPrefKeyForModel(provider)
         val cached = memoryCache[prefKey]
         if (!cached.isNullOrBlank()) {
@@ -408,7 +410,7 @@ class SecureApiKeyStorage internal constructor(
         getModelForProvider(provider)
     }
 
-    fun saveModelForProvider(provider: AiProvider, model: String) {
+    override fun saveModelForProvider(provider: AiProvider, model: String) {
         val prefKey = getPrefKeyForModel(provider)
         val cleanModel = if (provider == AiProvider.GEMINI && isDeprecatedGeminiModel(model)) {
             "gemini-3.8-flash"
@@ -429,7 +431,7 @@ class SecureApiKeyStorage internal constructor(
     // Custom Base URL
     // -------------------------------------------------------------------------
 
-    fun getCustomBaseUrl(): String {
+    override fun getCustomBaseUrl(): String {
         val cached = memoryCache[KEY_CUSTOM_BASE_URL]
         if (!cached.isNullOrBlank()) return sanitizeCustomBaseUrl(cached)
         val encryptedVal = loadPrefs().getString(KEY_CUSTOM_BASE_URL, null)
@@ -444,7 +446,7 @@ class SecureApiKeyStorage internal constructor(
         return "http://localhost:11434/v1"
     }
 
-    fun saveCustomBaseUrl(url: String) {
+    override fun saveCustomBaseUrl(url: String) {
         val cleanUrl = sanitizeCustomBaseUrl(url)
         memoryCache[KEY_CUSTOM_BASE_URL] = cleanUrl
         val encrypted = encrypt(cleanUrl)
@@ -455,13 +457,13 @@ class SecureApiKeyStorage internal constructor(
     // Backwards-compatible methods
     // -------------------------------------------------------------------------
 
-    fun getApiKey(): String? = getApiKeyForProvider(AiProvider.GEMINI)
+    override fun getApiKey(): String? = getApiKeyForProvider(AiProvider.GEMINI)
 
-    fun saveApiKey(apiKey: String) = saveApiKeyForProvider(AiProvider.GEMINI, apiKey)
+    override fun saveApiKey(apiKey: String) = saveApiKeyForProvider(AiProvider.GEMINI, apiKey)
 
-    fun clearApiKey() = clearApiKeyForProvider(AiProvider.GEMINI)
+    override fun clearApiKey() = clearApiKeyForProvider(AiProvider.GEMINI)
 
-    fun hasApiKey(): Boolean {
+    override fun hasApiKey(): Boolean {
         return hasApiKeyForProvider(AiProvider.GEMINI) ||
                 hasApiKeyForProvider(AiProvider.CLAUDE) ||
                 hasApiKeyForProvider(AiProvider.OPENAI) ||
@@ -511,40 +513,10 @@ class SecureApiKeyStorage internal constructor(
          * to `https://` (while preserving local development endpoints like localhost, 127.0.0.1, 10.0.2.2,
          * 192.168.*, 10.*).
          */
-        fun sanitizeCustomBaseUrl(rawUrl: String): String {
-            var trimmed = rawUrl.trim().trimEnd('/')
-            if (trimmed.isEmpty()) return trimmed
+        fun sanitizeCustomBaseUrl(rawUrl: String): String =
+            ApiKeyStorageHelper.sanitizeCustomBaseUrl(rawUrl)
 
-            if (!trimmed.startsWith("http://", ignoreCase = true) && !trimmed.startsWith("https://", ignoreCase = true)) {
-                val host = trimmed.substringBefore('/').substringBefore(':')
-                val isLocal = host.equals("localhost", ignoreCase = true) ||
-                        host == "127.0.0.1" ||
-                        host == "10.0.2.2" ||
-                        host.startsWith("192.168.") ||
-                        host.startsWith("10.")
-                trimmed = (if (isLocal) "http://" else "https://") + trimmed
-            } else if (trimmed.startsWith("http://", ignoreCase = true)) {
-                val withoutScheme = trimmed.substring(7)
-                val host = withoutScheme.substringBefore('/').substringBefore(':')
-                val isLocal = host.equals("localhost", ignoreCase = true) ||
-                        host == "127.0.0.1" ||
-                        host == "10.0.2.2" ||
-                        host.startsWith("192.168.") ||
-                        host.startsWith("10.")
-                if (!isLocal) {
-                    trimmed = "https://" + withoutScheme
-                }
-            }
-            return trimmed
-        }
-
-        /**
-         * Checks if a Gemini model string refers to a deprecated 1.5, 2.0, or 2.5 model or legacy 3.5-flash.
-         */
-        fun isDeprecatedGeminiModel(model: String?): Boolean {
-            if (model.isNullOrBlank()) return false
-            val m = model.trim().lowercase()
-            return m.contains("2.5") || m.contains("2.0") || m.contains("1.5") || m == "gemini-3.5-flash"
-        }
+        fun isDeprecatedGeminiModel(model: String?): Boolean =
+            ApiKeyStorageHelper.isDeprecatedGeminiModel(model)
     }
 }
