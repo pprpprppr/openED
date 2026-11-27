@@ -1011,10 +1011,8 @@ fun DesktopTakeMockTestScreen(
                                     val isSelected = idx in selectedIndices
                                     val letter = ('A' + idx).toString()
                                     Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .clickable { viewModel.selectOption(idx) },
+                                        onClick = { viewModel.selectOption(idx) },
+                                        modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(12.dp),
                                         color = if (isSelected) tokens.accentSoft else tokens.card,
                                         border = BorderStroke(1.5.dp, if (isSelected) tokens.accent else tokens.border)
@@ -1026,14 +1024,24 @@ fun DesktopTakeMockTestScreen(
                                             Surface(
                                                 shape = if (question.isMultiSelect) RoundedCornerShape(6.dp) else CircleShape,
                                                 color = if (isSelected) tokens.accent else tokens.cardSubtle,
+                                                border = if (question.isMultiSelect && !isSelected) BorderStroke(1.dp, tokens.borderStrong) else null,
                                                 modifier = Modifier.size(30.dp)
                                             ) {
                                                 Box(contentAlignment = Alignment.Center) {
-                                                    Text(
-                                                        text = letter,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isSelected) Color.White else tokens.textPrimary
-                                                    )
+                                                    if (question.isMultiSelect && isSelected) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = "Selected",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    } else {
+                                                        Text(
+                                                            text = letter,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isSelected) Color.White else tokens.textPrimary
+                                                        )
+                                                    }
                                                 }
                                             }
                                             Spacer(modifier = Modifier.width(14.dp))

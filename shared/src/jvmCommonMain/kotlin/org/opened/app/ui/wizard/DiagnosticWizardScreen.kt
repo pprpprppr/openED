@@ -35,6 +35,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -586,7 +587,7 @@ private fun AnsweringQuestionsContent(
             )
         }
 
-        items(questions, key = { it.id }) { q ->
+        itemsIndexed(questions, key = { index, q -> "${index}_${q.id}" }) { _, q ->
             DiagnosticQuestionCard(
                 question = q,
                 selected = selectedAnswers[q.id].orEmpty(),

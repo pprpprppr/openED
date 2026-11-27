@@ -7,9 +7,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.opened.app.core.ai.AiLearningEngine
 import org.opened.app.core.database.entity.MistakeRecordEntity
 import org.opened.app.core.database.entity.MockTestQuestionEntity
@@ -17,6 +18,7 @@ import org.opened.app.core.database.entity.MockTestStatus
 import org.opened.app.core.database.model.MockTestWithQuestions
 import org.opened.app.domain.repository.OpenEDRepository
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 data class TakeMockTestUiState(
@@ -56,6 +58,9 @@ class TakeMockTestViewModel @Inject constructor(
 
     private var timerJob: Job? = null
     private var questionGenJob: Job? = null
+    private var loadJob: Job? = null
+    private val persistenceMutex = Mutex()
+    private val pendingLocalMutations = AtomicInteger(0)
 
     fun loadTest(testId: String) {
         if (_uiState.value.testId == testId && _uiState.value.testWithQuestions != null && _uiState.value.totalQuestions > 0) {
@@ -64,7 +69,8 @@ class TakeMockTestViewModel @Inject constructor(
 
         _uiState.update { it.copy(testId = testId, isLoading = true, errorMessage = null) }
 
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             try {
                 // Immediate direct load for instantaneous response
                 val directTest = repository.getMockTestById(testId)
@@ -85,10 +91,15 @@ class TakeMockTestViewModel @Inject constructor(
 
                 // Continuous Flow collection for live updates
                 repository.getMockTestWithQuestionsFlow(testId).collect { flowTwq ->
-                    val effectiveTwq = if (flowTwq != null && flowTwq.questions.isEmpty() && directQuestions.isNotEmpty()) {
-                        flowTwq.copy(questions = directQuestions)
-                    } else {
-                        flowTwq ?: directTwq
+                    val currentInMemoryQuestions = _uiState.value.testWithQuestions
+                        ?.takeIf { it.test.id == testId }
+                        ?.questions
+                        ?.takeIf { it.isNotEmpty() }
+                    val effectiveTwq = when {
+                        flowTwq != null && flowTwq.questions.isNotEmpty() -> flowTwq
+                        flowTwq != null && currentInMemoryQuestions != null -> flowTwq.copy(questions = currentInMemoryQuestions)
+                        flowTwq != null && directQuestions.isNotEmpty() -> flowTwq.copy(questions = directQuestions)
+                        else -> flowTwq ?: directTwq
                     }
 
                     if (effectiveTwq != null) {
@@ -102,6 +113,8 @@ class TakeMockTestViewModel @Inject constructor(
                         }
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
@@ -190,6 +203,12 @@ class TakeMockTestViewModel @Inject constructor(
     }
 
     private suspend fun applyTestLoaded(twq: MockTestWithQuestions) {
+        val hasPendingLocalWrites = pendingLocalMutations.get() > 0 &&
+            _uiState.value.testWithQuestions?.test?.id == twq.test.id
+        if (hasPendingLocalWrites) {
+            return
+        }
+
         val test = twq.test
         val sortedQuestions = twq.questions.sortedBy { it.questionIndex }
         val timeLimitSec = (test.timeLimitMinutes.coerceAtLeast(1)) * 60
@@ -199,21 +218,26 @@ class TakeMockTestViewModel @Inject constructor(
             timeLimitSec
         }
 
+        val shouldMarkInProgress = sortedQuestions.isNotEmpty() && test.status == MockTestStatus.NOT_STARTED
+        val effectiveTest = if (shouldMarkInProgress) test.copy(status = MockTestStatus.IN_PROGRESS) else test
+
         _uiState.update { state ->
             val curRemaining = if (state.remainingSeconds > 0) state.remainingSeconds else initialRemaining
             state.copy(
-                testWithQuestions = twq.copy(questions = sortedQuestions),
+                testWithQuestions = twq.copy(test = effectiveTest, questions = sortedQuestions),
                 remainingSeconds = curRemaining,
                 isLoading = false,
                 errorMessage = if (sortedQuestions.isEmpty()) "This mock exam has no questions generated yet." else null
             )
         }
 
-        if (sortedQuestions.isNotEmpty() && test.status == MockTestStatus.NOT_STARTED) {
-            repository.updateMockTest(test.copy(status = MockTestStatus.IN_PROGRESS))
+        if (shouldMarkInProgress) {
+            persistenceMutex.withLock {
+                repository.updateMockTest(effectiveTest)
+            }
         }
 
-        if (timerJob == null && test.status != MockTestStatus.COMPLETED && sortedQuestions.isNotEmpty()) {
+        if (timerJob == null && effectiveTest.status != MockTestStatus.COMPLETED && sortedQuestions.isNotEmpty()) {
             startTimer()
         }
     }
@@ -260,23 +284,24 @@ class TakeMockTestViewModel @Inject constructor(
     fun selectOption(optionIndex: Int) {
         val question = _uiState.value.currentQuestion ?: return
         val currentTwq = _uiState.value.testWithQuestions ?: return
-        val optionText = question.optionsList.getOrNull(optionIndex).orEmpty()
+        if (optionIndex !in question.optionsList.indices) return
+        val optionText = question.optionsList[optionIndex]
 
         val (newUserSelectedOption, newSelectedAnswers) = if (question.isMultiSelect) {
-            val currentSelected = question.userSelectedAnswers.toMutableList()
-            val existingIdx = currentSelected.indexOfFirst { it.trim().equals(optionText.trim(), ignoreCase = true) }
-            if (existingIdx >= 0) {
-                currentSelected.removeAt(existingIdx)
-            } else if (optionText.isNotBlank()) {
-                currentSelected.add(optionText)
+            val currentSelectedIndices = question.effectiveSelectedIndices.toMutableList()
+            if (optionIndex in currentSelectedIndices) {
+                currentSelectedIndices.removeAll { it == optionIndex }
+            } else {
+                currentSelectedIndices.add(optionIndex)
             }
-            val primaryIdx = if (currentSelected.isNotEmpty()) {
-                val firstMatch = currentSelected.first()
-                question.optionsList.indexOfFirst { it.trim().equals(firstMatch.trim(), ignoreCase = true) }
-            } else -1
-            Pair<Int, List<String>>(primaryIdx, currentSelected)
+            val normalizedIndices = currentSelectedIndices.distinct().sorted()
+            val primaryIdx = normalizedIndices.firstOrNull() ?: -1
+            val answers = normalizedIndices.map { idx ->
+                question.optionsList[idx].ifBlank { idx.toString() }
+            }
+            Pair(primaryIdx, answers)
         } else {
-            Pair<Int, List<String>>(optionIndex, if (optionText.isNotBlank()) listOf(optionText) else emptyList())
+            Pair(optionIndex, listOf(optionText.ifBlank { optionIndex.toString() }))
         }
 
         // Update in-memory state immediately for instantaneous responsive feedback
@@ -291,14 +316,21 @@ class TakeMockTestViewModel @Inject constructor(
         val updatedAnsweredCount = updatedQuestions.count { it.isAnswered }
         val updatedTest = currentTwq.test.copy(totalAnswered = updatedAnsweredCount)
 
+        pendingLocalMutations.incrementAndGet()
         _uiState.update {
             it.copy(testWithQuestions = currentTwq.copy(test = updatedTest, questions = updatedQuestions))
         }
 
-        // Persist to Room
+        // Persist sequentially to prevent out-of-order DB writes or stale flow overwrites
         viewModelScope.launch {
-            repository.answerMockTestQuestion(question.id, newUserSelectedOption, newSelectedAnswers)
-            repository.updateMockTest(updatedTest)
+            try {
+                persistenceMutex.withLock {
+                    repository.answerMockTestQuestion(question.id, newUserSelectedOption, newSelectedAnswers)
+                    repository.updateMockTest(updatedTest)
+                }
+            } finally {
+                pendingLocalMutations.decrementAndGet()
+            }
         }
     }
 
@@ -314,13 +346,20 @@ class TakeMockTestViewModel @Inject constructor(
         val updatedAnsweredCount = updatedQuestions.count { it.isAnswered }
         val updatedTest = currentTwq.test.copy(totalAnswered = updatedAnsweredCount)
 
+        pendingLocalMutations.incrementAndGet()
         _uiState.update {
             it.copy(testWithQuestions = currentTwq.copy(test = updatedTest, questions = updatedQuestions))
         }
 
         viewModelScope.launch {
-            repository.answerMockTestQuestion(question.id, -1, emptyList())
-            repository.updateMockTest(updatedTest)
+            try {
+                persistenceMutex.withLock {
+                    repository.answerMockTestQuestion(question.id, -1, emptyList())
+                    repository.updateMockTest(updatedTest)
+                }
+            } finally {
+                pendingLocalMutations.decrementAndGet()
+            }
         }
     }
 
@@ -333,12 +372,19 @@ class TakeMockTestViewModel @Inject constructor(
             if (q.id == question.id) q.copy(isFlagged = newFlag) else q
         }
 
+        pendingLocalMutations.incrementAndGet()
         _uiState.update {
             it.copy(testWithQuestions = currentTwq.copy(questions = updatedQuestions))
         }
 
         viewModelScope.launch {
-            repository.toggleQuestionFlag(question.id, newFlag)
+            try {
+                persistenceMutex.withLock {
+                    repository.toggleQuestionFlag(question.id, newFlag)
+                }
+            } finally {
+                pendingLocalMutations.decrementAndGet()
+            }
         }
     }
 
@@ -359,88 +405,92 @@ class TakeMockTestViewModel @Inject constructor(
     }
 
     fun submitTest(onCompleted: (String) -> Unit) {
-        val twq = _uiState.value.testWithQuestions ?: return
+        if (_uiState.value.testWithQuestions == null) return
         timerJob?.cancel()
 
         _uiState.update { it.copy(isSubmitting = true, showSubmitConfirmDialog = false) }
 
         viewModelScope.launch {
             try {
-                val questions = twq.questions
-                val totalQuestions = questions.size
-                var totalCorrect = 0
-                var totalAnswered = 0
+                persistenceMutex.withLock {
+                    val twq = _uiState.value.testWithQuestions ?: return@withLock
+                    val questions = twq.questions
+                    val totalQuestions = questions.size
+                    var totalCorrect = 0
+                    var totalAnswered = 0
 
-                // Load course chapters if available so mistake records reference a valid chapterId foreign key
-                val pathDetails = runCatching { repository.getStudyPathWithModules(twq.test.pathId) }.getOrNull()
-                val allChapters = pathDetails?.modules?.flatMap { it.chapters }.orEmpty()
+                    // Load course chapters if available so mistake records reference a valid chapterId foreign key
+                    val pathDetails = runCatching { repository.getStudyPathWithModules(twq.test.pathId) }.getOrNull()
+                    val allChapters = pathDetails?.modules?.flatMap { it.chapters }.orEmpty()
 
-                for (q in questions) {
-                    if (q.isAnswered) {
-                        totalAnswered++
-                        if (q.isCorrect) {
-                            totalCorrect++
-                        } else {
-                            // Find a valid chapter in the course or fallback chapter to satisfy foreign key constraint
-                            val validChapter = allChapters.firstOrNull { ch ->
-                                ch.title.contains(q.topic, ignoreCase = true) || q.topic.contains(ch.title, ignoreCase = true)
-                            } ?: allChapters.firstOrNull()
+                    for (q in questions) {
+                        if (q.isAnswered) {
+                            totalAnswered++
+                            if (q.isCorrect) {
+                                totalCorrect++
+                            } else {
+                                // Find a valid chapter in the course or fallback chapter to satisfy foreign key constraint
+                                val validChapter = allChapters.firstOrNull { ch ->
+                                    ch.title.contains(q.topic, ignoreCase = true) || q.topic.contains(ch.title, ignoreCase = true)
+                                } ?: allChapters.firstOrNull()
 
-                            if (validChapter != null) {
-                                val userSelectedText = if (q.userSelectedAnswers.isNotEmpty()) {
-                                    q.userSelectedAnswers.joinToString(", ")
-                                } else {
-                                    q.optionsList.getOrNull(q.userSelectedOption).orEmpty()
-                                }
-                                val correctText = if (q.correctAnswers.isNotEmpty()) {
-                                    q.correctAnswers.joinToString(", ")
-                                } else {
-                                    q.optionsList.getOrNull(q.correctOptionIndex).orEmpty()
-                                }
-                                runCatching {
-                                    repository.recordMistake(
-                                        MistakeRecordEntity(
-                                            id = UUID.randomUUID().toString(),
-                                            chapterId = validChapter.id,
-                                            pathId = twq.test.pathId,
-                                            conceptKey = q.topic,
-                                            questionPrompt = q.questionText,
-                                            userSelectedAnswer = userSelectedText,
-                                            correctAnswer = correctText,
-                                            explanation = q.explanation,
-                                            failureCount = 1,
-                                            timestamp = System.currentTimeMillis()
+                                if (validChapter != null) {
+                                    val userSelectedText = if (q.userSelectedAnswers.isNotEmpty()) {
+                                        q.userSelectedAnswers.joinToString(", ")
+                                    } else {
+                                        q.optionsList.getOrNull(q.userSelectedOption).orEmpty()
+                                    }
+                                    val correctText = if (q.correctAnswers.isNotEmpty()) {
+                                        q.correctAnswers.joinToString(", ")
+                                    } else {
+                                        q.optionsList.getOrNull(q.correctOptionIndex).orEmpty()
+                                    }
+                                    runCatching {
+                                        repository.recordMistake(
+                                            MistakeRecordEntity(
+                                                id = UUID.randomUUID().toString(),
+                                                chapterId = validChapter.id,
+                                                pathId = twq.test.pathId,
+                                                conceptKey = q.topic,
+                                                questionPrompt = q.questionText,
+                                                userSelectedAnswer = userSelectedText,
+                                                correctAnswer = correctText,
+                                                explanation = q.explanation,
+                                                failureCount = 1,
+                                                timestamp = System.currentTimeMillis()
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
                     }
+
+                    val scorePercentage = if (totalQuestions > 0) {
+                        ((totalCorrect.toFloat() / totalQuestions.toFloat()) * 100).toInt()
+                    } else {
+                        0
+                    }
+
+                    val totalLimitSec = twq.test.timeLimitMinutes * 60
+                    val spentSec = (totalLimitSec - _uiState.value.remainingSeconds).coerceAtLeast(0)
+
+                    val completedTest = twq.test.copy(
+                        status = MockTestStatus.COMPLETED,
+                        score = scorePercentage,
+                        totalCorrect = totalCorrect,
+                        totalAnswered = totalAnswered,
+                        timeSpentSeconds = spentSec,
+                        completedAt = System.currentTimeMillis()
+                    )
+
+                    repository.updateMockTest(completedTest)
                 }
 
-                val scorePercentage = if (totalQuestions > 0) {
-                    ((totalCorrect.toFloat() / totalQuestions.toFloat()) * 100).toInt()
-                } else {
-                    0
-                }
-
-                val totalLimitSec = twq.test.timeLimitMinutes * 60
-                val spentSec = (totalLimitSec - _uiState.value.remainingSeconds).coerceAtLeast(0)
-
-                val completedTest = twq.test.copy(
-                    status = MockTestStatus.COMPLETED,
-                    score = scorePercentage,
-                    totalCorrect = totalCorrect,
-                    totalAnswered = totalAnswered,
-                    timeSpentSeconds = spentSec,
-                    completedAt = System.currentTimeMillis()
-                )
-
-                repository.updateMockTest(completedTest)
-
+                val submittedTestId = _uiState.value.testWithQuestions?.test?.id ?: _uiState.value.testId
                 _uiState.update { it.copy(isSubmitting = false) }
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                    onCompleted(twq.test.id)
+                    onCompleted(submittedTestId)
                 }
             } catch (e: Exception) {
                 _uiState.update {

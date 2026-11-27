@@ -154,7 +154,20 @@ ${if (bilingualTerminology) "BILINGUAL TECHNICAL ACCESSIBILITY: When introducing
             )
             val cleanedJson = cleanJsonOutput(rawOutput)
             val response = json.decodeFromString(DiagnosticQuestionsResponse.serializer(), cleanedJson)
-            response.questions
+            val seenIds = mutableSetOf<String>()
+            response.questions.mapIndexed { index, q ->
+                val candidateId = q.id.trim()
+                val uniqueId = if (candidateId.isBlank() || !seenIds.add(candidateId)) {
+                    var fallback = "q_${index + 1}"
+                    while (!seenIds.add(fallback)) {
+                        fallback = "${fallback}_x"
+                    }
+                    fallback
+                } else {
+                    candidateId
+                }
+                q.copy(id = uniqueId)
+            }
         }
     }
 

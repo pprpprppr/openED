@@ -92,6 +92,9 @@ data class MockTestQuestionEntity(
      */
     val effectiveSelectedIndices: List<Int>
         get() {
+            if (!isMultiSelect && userSelectedOption >= 0 && userSelectedOption in optionsList.indices) {
+                return listOf(userSelectedOption)
+            }
             if (userSelectedAnswers.isNotEmpty()) {
                 val indices = mutableListOf<Int>()
                 for (ans in userSelectedAnswers) {

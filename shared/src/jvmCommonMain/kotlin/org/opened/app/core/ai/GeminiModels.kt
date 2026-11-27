@@ -50,9 +50,9 @@ data class GeminiErrorDetails(
 
 @Serializable
 data class DiagnosticQuestion(
-    val id: String,
-    val question: String,
-    val options: List<String>,
+    val id: String = "",
+    val question: String = "",
+    val options: List<String> = emptyList(),
     val isMultiSelect: Boolean = false,
     val rationale: String = ""
 )

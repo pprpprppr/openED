@@ -2,9 +2,10 @@ package org.opened.desktop
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -52,7 +53,7 @@ class DesktopOpenEDRepository(
 
     private val jdbcUrl = "jdbc:sqlite:$dbPath"
     private val dbLock = Any()
-    private val changes = MutableSharedFlow<Unit>(replay = 1).apply { tryEmit(Unit) }
+    private val changes = MutableStateFlow(0L)
 
     init {
         initializeSchema()
@@ -83,11 +84,10 @@ class DesktopOpenEDRepository(
     }
 
     private fun notifyChanged() {
-        changes.tryEmit(Unit)
+        changes.update { it + 1L }
     }
 
     private fun <T> reactiveFlow(loader: () -> T): Flow<T> = flow {
-        emit(loader())
         changes.collect {
             emit(loader())
         }
@@ -172,6 +172,28 @@ class DesktopOpenEDRepository(
                 st.executeUpdate("""CREATE TABLE IF NOT EXISTS `mock_test_questions` (`id` TEXT NOT NULL, `testId` TEXT NOT NULL, `questionIndex` INTEGER NOT NULL, `topic` TEXT NOT NULL, `questionText` TEXT NOT NULL, `optionsJson` TEXT NOT NULL, `correctOptionIndex` INTEGER NOT NULL, `explanation` TEXT NOT NULL, `userSelectedOption` INTEGER NOT NULL, `isFlagged` INTEGER NOT NULL, `questionType` TEXT NOT NULL DEFAULT 'SINGLE_CHOICE', `correctAnswers` TEXT NOT NULL DEFAULT '[]', `userSelectedAnswers` TEXT NOT NULL DEFAULT '[]', PRIMARY KEY(`id`), FOREIGN KEY(`testId`) REFERENCES `mock_tests`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)""")
                 st.executeUpdate("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId` ON `mock_test_questions` (`testId`)")
                 st.executeUpdate("CREATE INDEX IF NOT EXISTS `index_mock_test_questions_testId_questionIndex` ON `mock_test_questions` (`testId`, `questionIndex`)")
+
+                ensureColumnExists(conn, "study_paths", "customPrompt", "TEXT NOT NULL DEFAULT ''")
+                ensureColumnExists(conn, "mock_test_questions", "questionType", "TEXT NOT NULL DEFAULT 'SINGLE_CHOICE'")
+                ensureColumnExists(conn, "mock_test_questions", "correctAnswers", "TEXT NOT NULL DEFAULT '[]'")
+                ensureColumnExists(conn, "mock_test_questions", "userSelectedAnswers", "TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+    }
+
+    private fun ensureColumnExists(conn: Connection, tableName: String, columnName: String, columnDef: String) {
+        val existingColumns = conn.prepareStatement("PRAGMA table_info(`$tableName`)").use { ps ->
+            ps.executeQuery().use { rs ->
+                buildSet {
+                    while (rs.next()) {
+                        add(rs.getString("name"))
+                    }
+                }
+            }
+        }
+        if (columnName !in existingColumns) {
+            conn.createStatement().use { st ->
+                st.executeUpdate("ALTER TABLE `$tableName` ADD COLUMN `$columnName` $columnDef")
             }
         }
     }
@@ -358,8 +380,17 @@ class DesktopOpenEDRepository(
 
     private fun upsertStudyPath(conn: Connection, p: StudyPathEntity) {
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO study_paths (id, title, topic, userLevel, learningGoalsJson, createdAt, updatedAt, progress, customPrompt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO study_paths (id, title, topic, userLevel, learningGoalsJson, createdAt, updatedAt, progress, customPrompt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   title = excluded.title,
+                   topic = excluded.topic,
+                   userLevel = excluded.userLevel,
+                   learningGoalsJson = excluded.learningGoalsJson,
+                   createdAt = excluded.createdAt,
+                   updatedAt = excluded.updatedAt,
+                   progress = excluded.progress,
+                   customPrompt = excluded.customPrompt"""
         ).use { ps ->
             ps.setString(1, p.id); ps.setString(2, p.title); ps.setString(3, p.topic); ps.setString(4, p.userLevel)
             ps.setString(5, p.learningGoalsJson); ps.setLong(6, p.createdAt); ps.setLong(7, p.updatedAt)
@@ -370,7 +401,15 @@ class DesktopOpenEDRepository(
 
     private fun upsertModules(conn: Connection, modules: List<ModuleEntity>) {
         if (modules.isEmpty()) return
-        conn.prepareStatement("""INSERT OR REPLACE INTO modules (id, pathId, title, orderIndex, summary) VALUES (?, ?, ?, ?, ?)""").use { ps ->
+        conn.prepareStatement(
+            """INSERT INTO modules (id, pathId, title, orderIndex, summary)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   pathId = excluded.pathId,
+                   title = excluded.title,
+                   orderIndex = excluded.orderIndex,
+                   summary = excluded.summary"""
+        ).use { ps ->
             for (m in modules) {
                 ps.setString(1, m.id); ps.setString(2, m.pathId); ps.setString(3, m.title); ps.setInt(4, m.orderIndex); ps.setString(5, m.summary)
                 ps.addBatch()
@@ -382,8 +421,18 @@ class DesktopOpenEDRepository(
     private fun upsertChapters(conn: Connection, chapters: List<ChapterEntity>) {
         if (chapters.isEmpty()) return
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO chapters (id, moduleId, pathId, title, orderIndex, markdownContent, summary, status, createdAt, updatedAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO chapters (id, moduleId, pathId, title, orderIndex, markdownContent, summary, status, createdAt, updatedAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   moduleId = excluded.moduleId,
+                   pathId = excluded.pathId,
+                   title = excluded.title,
+                   orderIndex = excluded.orderIndex,
+                   markdownContent = excluded.markdownContent,
+                   summary = excluded.summary,
+                   status = excluded.status,
+                   createdAt = excluded.createdAt,
+                   updatedAt = excluded.updatedAt"""
         ).use { ps ->
             for (c in chapters) {
                 ps.setString(1, c.id); ps.setString(2, c.moduleId); ps.setString(3, c.pathId); ps.setString(4, c.title)
@@ -397,7 +446,15 @@ class DesktopOpenEDRepository(
 
     private fun upsertRevisions(conn: Connection, revisions: List<ChapterRevisionEntity>) {
         if (revisions.isEmpty()) return
-        conn.prepareStatement("""INSERT OR REPLACE INTO chapter_revisions (id, chapterId, previousMarkdown, changeReason, timestamp) VALUES (?, ?, ?, ?, ?)""").use { ps ->
+        conn.prepareStatement(
+            """INSERT INTO chapter_revisions (id, chapterId, previousMarkdown, changeReason, timestamp)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   previousMarkdown = excluded.previousMarkdown,
+                   changeReason = excluded.changeReason,
+                   timestamp = excluded.timestamp"""
+        ).use { ps ->
             for (r in revisions) {
                 ps.setString(1, r.id); ps.setString(2, r.chapterId); ps.setString(3, r.previousMarkdown)
                 ps.setString(4, r.changeReason); ps.setLong(5, r.timestamp)
@@ -409,7 +466,12 @@ class DesktopOpenEDRepository(
 
     private fun upsertLinks(conn: Connection, links: List<ChapterLinkCrossRef>) {
         if (links.isEmpty()) return
-        conn.prepareStatement("""INSERT OR REPLACE INTO chapter_links (sourceChapterId, targetChapterId, anchorText) VALUES (?, ?, ?)""").use { ps ->
+        conn.prepareStatement(
+            """INSERT INTO chapter_links (sourceChapterId, targetChapterId, anchorText)
+               VALUES (?, ?, ?)
+               ON CONFLICT(sourceChapterId, targetChapterId) DO UPDATE SET
+                   anchorText = excluded.anchorText"""
+        ).use { ps ->
             for (l in links) {
                 ps.setString(1, l.sourceChapterId); ps.setString(2, l.targetChapterId); ps.setString(3, l.anchorText)
                 ps.addBatch()
@@ -420,7 +482,16 @@ class DesktopOpenEDRepository(
 
     private fun upsertQas(conn: Connection, qas: List<ChapterQaEntity>) {
         if (qas.isEmpty()) return
-        conn.prepareStatement("""INSERT OR REPLACE INTO chapter_qas (id, chapterId, userQuestion, aiAnswer, isMergedIntoContent, timestamp) VALUES (?, ?, ?, ?, ?, ?)""").use { ps ->
+        conn.prepareStatement(
+            """INSERT INTO chapter_qas (id, chapterId, userQuestion, aiAnswer, isMergedIntoContent, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   userQuestion = excluded.userQuestion,
+                   aiAnswer = excluded.aiAnswer,
+                   isMergedIntoContent = excluded.isMergedIntoContent,
+                   timestamp = excluded.timestamp"""
+        ).use { ps ->
             for (q in qas) {
                 ps.setString(1, q.id); ps.setString(2, q.chapterId); ps.setString(3, q.userQuestion)
                 ps.setString(4, q.aiAnswer); ps.setInt(5, if (q.isMergedIntoContent) 1 else 0); ps.setLong(6, q.timestamp)
@@ -433,8 +504,23 @@ class DesktopOpenEDRepository(
     private fun upsertFlashcards(conn: Connection, cards: List<FlashcardEntity>) {
         if (cards.isEmpty()) return
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO flashcards (id, chapterId, pathId, front, back, intervalDays, easeFactor, repetitions, nextReviewTimestamp, createdAt, stability, difficulty, state, elapsedDays, lastReviewTimestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO flashcards (id, chapterId, pathId, front, back, intervalDays, easeFactor, repetitions, nextReviewTimestamp, createdAt, stability, difficulty, state, elapsedDays, lastReviewTimestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   pathId = excluded.pathId,
+                   front = excluded.front,
+                   back = excluded.back,
+                   intervalDays = excluded.intervalDays,
+                   easeFactor = excluded.easeFactor,
+                   repetitions = excluded.repetitions,
+                   nextReviewTimestamp = excluded.nextReviewTimestamp,
+                   createdAt = excluded.createdAt,
+                   stability = excluded.stability,
+                   difficulty = excluded.difficulty,
+                   state = excluded.state,
+                   elapsedDays = excluded.elapsedDays,
+                   lastReviewTimestamp = excluded.lastReviewTimestamp"""
         ).use { ps ->
             for (c in cards) {
                 ps.setString(1, c.id); ps.setString(2, c.chapterId); ps.setString(3, c.pathId); ps.setString(4, c.front); ps.setString(5, c.back)
@@ -449,7 +535,16 @@ class DesktopOpenEDRepository(
 
     private fun upsertMasteryQuizzes(conn: Connection, quizzes: List<MasteryQuizEntity>) {
         if (quizzes.isEmpty()) return
-        conn.prepareStatement("""INSERT OR REPLACE INTO mastery_quizzes (id, chapterId, quizType, sessionDataJson, score, timestamp) VALUES (?, ?, ?, ?, ?, ?)""").use { ps ->
+        conn.prepareStatement(
+            """INSERT INTO mastery_quizzes (id, chapterId, quizType, sessionDataJson, score, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   quizType = excluded.quizType,
+                   sessionDataJson = excluded.sessionDataJson,
+                   score = excluded.score,
+                   timestamp = excluded.timestamp"""
+        ).use { ps ->
             for (q in quizzes) {
                 ps.setString(1, q.id); ps.setString(2, q.chapterId); ps.setString(3, q.quizType)
                 ps.setString(4, q.sessionDataJson); ps.setInt(5, q.score); ps.setLong(6, q.timestamp)
@@ -462,8 +557,19 @@ class DesktopOpenEDRepository(
     private fun upsertObjectives(conn: Connection, objectives: List<LearningObjectiveEntity>) {
         if (objectives.isEmpty()) return
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO learning_objectives (id, chapterId, pathId, objectiveText, conceptKey, masteryScore, status, confidenceScore, studyDurationSeconds, reviewCount, lastEvaluatedAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO learning_objectives (id, chapterId, pathId, objectiveText, conceptKey, masteryScore, status, confidenceScore, studyDurationSeconds, reviewCount, lastEvaluatedAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   pathId = excluded.pathId,
+                   objectiveText = excluded.objectiveText,
+                   conceptKey = excluded.conceptKey,
+                   masteryScore = excluded.masteryScore,
+                   status = excluded.status,
+                   confidenceScore = excluded.confidenceScore,
+                   studyDurationSeconds = excluded.studyDurationSeconds,
+                   reviewCount = excluded.reviewCount,
+                   lastEvaluatedAt = excluded.lastEvaluatedAt"""
         ).use { ps ->
             for (o in objectives) {
                 ps.setString(1, o.id); ps.setString(2, o.chapterId); ps.setString(3, o.pathId); ps.setString(4, o.objectiveText)
@@ -477,8 +583,18 @@ class DesktopOpenEDRepository(
 
     private fun upsertMistake(conn: Connection, m: MistakeRecordEntity) {
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO mistake_records (id, chapterId, pathId, conceptKey, questionPrompt, userSelectedAnswer, correctAnswer, explanation, failureCount, timestamp)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO mistake_records (id, chapterId, pathId, conceptKey, questionPrompt, userSelectedAnswer, correctAnswer, explanation, failureCount, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   pathId = excluded.pathId,
+                   conceptKey = excluded.conceptKey,
+                   questionPrompt = excluded.questionPrompt,
+                   userSelectedAnswer = excluded.userSelectedAnswer,
+                   correctAnswer = excluded.correctAnswer,
+                   explanation = excluded.explanation,
+                   failureCount = excluded.failureCount,
+                   timestamp = excluded.timestamp"""
         ).use { ps ->
             ps.setString(1, m.id); ps.setString(2, m.chapterId); ps.setString(3, m.pathId); ps.setString(4, m.conceptKey)
             ps.setString(5, m.questionPrompt); ps.setString(6, m.userSelectedAnswer); ps.setString(7, m.correctAnswer)
@@ -489,8 +605,17 @@ class DesktopOpenEDRepository(
 
     private fun upsertRemedial(conn: Connection, r: RemedialLessonEntity) {
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO remedial_lessons (id, chapterId, pathId, conceptKey, title, diagnosisReason, targetedMarkdown, isCompleted, createdAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO remedial_lessons (id, chapterId, pathId, conceptKey, title, diagnosisReason, targetedMarkdown, isCompleted, createdAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   chapterId = excluded.chapterId,
+                   pathId = excluded.pathId,
+                   conceptKey = excluded.conceptKey,
+                   title = excluded.title,
+                   diagnosisReason = excluded.diagnosisReason,
+                   targetedMarkdown = excluded.targetedMarkdown,
+                   isCompleted = excluded.isCompleted,
+                   createdAt = excluded.createdAt"""
         ).use { ps ->
             ps.setString(1, r.id); ps.setString(2, r.chapterId); ps.setString(3, r.pathId); ps.setString(4, r.conceptKey)
             ps.setString(5, r.title); ps.setString(6, r.diagnosisReason); ps.setString(7, r.targetedMarkdown)
@@ -501,8 +626,17 @@ class DesktopOpenEDRepository(
 
     private fun upsertDocument(conn: Connection, d: DocumentEntity) {
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO documents (id, title, fileName, mimeType, fileSizeBytes, pageCount, chunkCount, summary, createdAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO documents (id, title, fileName, mimeType, fileSizeBytes, pageCount, chunkCount, summary, createdAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   title = excluded.title,
+                   fileName = excluded.fileName,
+                   mimeType = excluded.mimeType,
+                   fileSizeBytes = excluded.fileSizeBytes,
+                   pageCount = excluded.pageCount,
+                   chunkCount = excluded.chunkCount,
+                   summary = excluded.summary,
+                   createdAt = excluded.createdAt"""
         ).use { ps ->
             ps.setString(1, d.id); ps.setString(2, d.title); ps.setString(3, d.fileName); ps.setString(4, d.mimeType)
             ps.setLong(5, d.fileSizeBytes); ps.setInt(6, d.pageCount); ps.setInt(7, d.chunkCount)
@@ -514,8 +648,17 @@ class DesktopOpenEDRepository(
     private fun upsertDocumentChunks(conn: Connection, chunks: List<DocumentChunkEntity>) {
         if (chunks.isEmpty()) return
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO document_chunks (id, documentId, chunkIndex, pageNumber, sectionTitle, rawText, tokenEstimate, keywords, createdAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO document_chunks (id, documentId, chunkIndex, pageNumber, sectionTitle, rawText, tokenEstimate, keywords, createdAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   documentId = excluded.documentId,
+                   chunkIndex = excluded.chunkIndex,
+                   pageNumber = excluded.pageNumber,
+                   sectionTitle = excluded.sectionTitle,
+                   rawText = excluded.rawText,
+                   tokenEstimate = excluded.tokenEstimate,
+                   keywords = excluded.keywords,
+                   createdAt = excluded.createdAt"""
         ).use { ps ->
             for (c in chunks) {
                 ps.setString(1, c.id); ps.setString(2, c.documentId); ps.setInt(3, c.chunkIndex); ps.setInt(4, c.pageNumber)
@@ -528,7 +671,12 @@ class DesktopOpenEDRepository(
     }
 
     private fun upsertTombstone(conn: Connection, t: SyncTombstoneEntity) {
-        conn.prepareStatement("""INSERT OR REPLACE INTO sync_tombstones (id, entityType, entityId, deletedAt) VALUES (?, ?, ?, ?)""").use { ps ->
+        conn.prepareStatement(
+            """INSERT INTO sync_tombstones (id, entityType, entityId, deletedAt)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(entityType, entityId) DO UPDATE SET
+                   deletedAt = MAX(sync_tombstones.deletedAt, excluded.deletedAt)"""
+        ).use { ps ->
             ps.setString(1, t.id); ps.setString(2, t.entityType); ps.setString(3, t.entityId); ps.setLong(4, t.deletedAt)
             ps.executeUpdate()
         }
@@ -536,8 +684,22 @@ class DesktopOpenEDRepository(
 
     private fun upsertMockTest(conn: Connection, t: MockTestEntity) {
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO mock_tests (id, pathId, title, examCategory, targetExamName, totalQuestions, timeLimitMinutes, status, score, totalCorrect, totalAnswered, timeSpentSeconds, completedAt, createdAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO mock_tests (id, pathId, title, examCategory, targetExamName, totalQuestions, timeLimitMinutes, status, score, totalCorrect, totalAnswered, timeSpentSeconds, completedAt, createdAt)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   pathId = excluded.pathId,
+                   title = excluded.title,
+                   examCategory = excluded.examCategory,
+                   targetExamName = excluded.targetExamName,
+                   totalQuestions = excluded.totalQuestions,
+                   timeLimitMinutes = excluded.timeLimitMinutes,
+                   status = excluded.status,
+                   score = excluded.score,
+                   totalCorrect = excluded.totalCorrect,
+                   totalAnswered = excluded.totalAnswered,
+                   timeSpentSeconds = excluded.timeSpentSeconds,
+                   completedAt = excluded.completedAt,
+                   createdAt = excluded.createdAt"""
         ).use { ps ->
             ps.setString(1, t.id); ps.setString(2, t.pathId); ps.setString(3, t.title); ps.setString(4, t.examCategory.name)
             ps.setString(5, t.targetExamName); ps.setInt(6, t.totalQuestions); ps.setInt(7, t.timeLimitMinutes); ps.setString(8, t.status.name)
@@ -550,8 +712,21 @@ class DesktopOpenEDRepository(
     private fun upsertMockTestQuestions(conn: Connection, questions: List<MockTestQuestionEntity>) {
         if (questions.isEmpty()) return
         conn.prepareStatement(
-            """INSERT OR REPLACE INTO mock_test_questions (id, testId, questionIndex, topic, questionText, optionsJson, correctOptionIndex, explanation, userSelectedOption, isFlagged, questionType, correctAnswers, userSelectedAnswers)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+            """INSERT INTO mock_test_questions (id, testId, questionIndex, topic, questionText, optionsJson, correctOptionIndex, explanation, userSelectedOption, isFlagged, questionType, correctAnswers, userSelectedAnswers)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   testId = excluded.testId,
+                   questionIndex = excluded.questionIndex,
+                   topic = excluded.topic,
+                   questionText = excluded.questionText,
+                   optionsJson = excluded.optionsJson,
+                   correctOptionIndex = excluded.correctOptionIndex,
+                   explanation = excluded.explanation,
+                   userSelectedOption = excluded.userSelectedOption,
+                   isFlagged = excluded.isFlagged,
+                   questionType = excluded.questionType,
+                   correctAnswers = excluded.correctAnswers,
+                   userSelectedAnswers = excluded.userSelectedAnswers"""
         ).use { ps ->
             for (q in questions) {
                 ps.setString(1, q.id); ps.setString(2, q.testId); ps.setInt(3, q.questionIndex); ps.setString(4, q.topic)
@@ -1344,7 +1519,13 @@ class DesktopOpenEDRepository(
         withContext(Dispatchers.IO) {
             withConnection(transactional = true) { conn ->
                 upsertMockTest(conn, test)
-                upsertMockTestQuestions(conn, questions)
+                if (questions.isNotEmpty()) {
+                    conn.prepareStatement("DELETE FROM mock_test_questions WHERE testId = ?").use { ps ->
+                        ps.setString(1, test.id)
+                        ps.executeUpdate()
+                    }
+                    upsertMockTestQuestions(conn, questions)
+                }
             }
             notifyChanged()
         }

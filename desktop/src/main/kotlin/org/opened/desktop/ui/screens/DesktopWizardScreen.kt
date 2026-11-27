@@ -2,7 +2,6 @@ package org.opened.desktop.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,7 +49,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -496,7 +494,7 @@ private fun DesktopWizardQuestionsStep(
                 }
             }
 
-            itemsIndexed(questions, key = { _, q -> q.id }) { index, q ->
+            itemsIndexed(questions, key = { index, q -> "${index}_${q.id}" }) { index, q ->
                 val selected = selectedAnswers[q.id].orEmpty()
                 val customText = customTextAnswers[q.id].orEmpty()
                 DesktopCard(contentPadding = 18.dp) {
@@ -533,9 +531,7 @@ private fun DesktopWizardQuestionsStep(
                         q.options.forEach { option ->
                             val isChecked = selected.contains(option)
                             Surface(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(9.dp))
-                                    .clickable { onToggleOption(q.id, option, q.isMultiSelect) },
+                                onClick = { onToggleOption(q.id, option, q.isMultiSelect) },
                                 shape = RoundedCornerShape(9.dp),
                                 color = if (isChecked) tokens.accentSoft else tokens.cardSubtle,
                                 border = BorderStroke(1.dp, if (isChecked) tokens.accent else tokens.border)

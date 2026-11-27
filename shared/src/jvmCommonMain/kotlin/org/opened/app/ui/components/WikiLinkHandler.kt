@@ -35,7 +35,8 @@ fun InteractiveMarkdownText(
     onChapterClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     style: TextStyle = MaterialTheme.typography.bodyLarge,
-    color: Color = MaterialTheme.colorScheme.onSurface
+    color: Color = MaterialTheme.colorScheme.onSurface,
+    isClickableCard: Boolean = false
 ) {
     val primaryColor = MaterialTheme.colorScheme.primary
     val secondaryColor = MaterialTheme.colorScheme.secondary
@@ -57,7 +58,7 @@ fun InteractiveMarkdownText(
         annotatedString.getStringAnnotations(tag = TAG_URL_LINK, start = 0, end = annotatedString.length).isNotEmpty()
     }
 
-    if (!hasLinks) {
+    if (isClickableCard || !hasLinks) {
         Text(
             text = annotatedString,
             modifier = modifier,

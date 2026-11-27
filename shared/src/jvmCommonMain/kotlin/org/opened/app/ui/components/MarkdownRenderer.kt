@@ -131,7 +131,8 @@ fun RichMarkdownRenderer(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
-                                modifier = Modifier.padding(bottom = 6.dp)
+                                modifier = Modifier.padding(bottom = 6.dp),
+                                isClickableCard = isClickableCard
                             )
                             2 -> InteractiveMarkdownText(
                                 text = node.text,
@@ -140,7 +141,8 @@ fun RichMarkdownRenderer(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
-                                modifier = Modifier.padding(bottom = 6.dp)
+                                modifier = Modifier.padding(bottom = 6.dp),
+                                isClickableCard = isClickableCard
                             )
                             3 -> InteractiveMarkdownText(
                                 text = node.text,
@@ -149,7 +151,8 @@ fun RichMarkdownRenderer(
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
-                                modifier = Modifier.padding(bottom = 4.dp)
+                                modifier = Modifier.padding(bottom = 4.dp),
+                                isClickableCard = isClickableCard
                             )
                             else -> InteractiveMarkdownText(
                                 text = node.text,
@@ -158,7 +161,8 @@ fun RichMarkdownRenderer(
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
-                                modifier = Modifier.padding(bottom = 4.dp)
+                                modifier = Modifier.padding(bottom = 4.dp),
+                                isClickableCard = isClickableCard
                             )
                         }
                     }
@@ -206,7 +210,8 @@ fun RichMarkdownRenderer(
                         TableBlockView(
                             headers = node.headers,
                             rows = node.rows,
-                            onChapterClick = onChapterClick
+                            onChapterClick = onChapterClick,
+                            isClickableCard = isClickableCard
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                     }
@@ -220,7 +225,8 @@ fun RichMarkdownRenderer(
                                 InteractiveMarkdownText(
                                     text = node.content,
                                     onChapterClick = onChapterClick,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    isClickableCard = isClickableCard
                                 )
                             }
                         )
@@ -243,7 +249,8 @@ fun RichMarkdownRenderer(
                                 style = MaterialTheme.typography.bodyMedium.copy(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 ),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                isClickableCard = isClickableCard
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -278,7 +285,8 @@ fun RichMarkdownRenderer(
                                 text = node.text,
                                 onChapterClick = onChapterClick,
                                 style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                isClickableCard = isClickableCard
                             )
                         }
                     }
@@ -322,7 +330,8 @@ fun RichMarkdownRenderer(
                                     color = if (node.checked) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f) else MaterialTheme.colorScheme.onSurface,
                                     textDecoration = if (node.checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else androidx.compose.ui.text.style.TextDecoration.None
                                 ),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                isClickableCard = isClickableCard
                             )
                         }
                         Spacer(modifier = Modifier.height(3.dp))
@@ -334,7 +343,8 @@ fun RichMarkdownRenderer(
                             InteractiveMarkdownText(
                                 text = node.text,
                                 onChapterClick = onChapterClick,
-                                style = MaterialTheme.typography.bodyLarge
+                                style = MaterialTheme.typography.bodyLarge,
+                                isClickableCard = isClickableCard
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                         }
@@ -369,7 +379,8 @@ fun TableBlockView(
     headers: List<String>,
     rows: List<List<String>>,
     onChapterClick: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isClickableCard: Boolean = false
 ) {
     if (headers.isEmpty()) return
     val borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
@@ -433,7 +444,8 @@ fun TableBlockView(
                                 InteractiveMarkdownText(
                                     text = cellText,
                                     onChapterClick = onChapterClick,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    isClickableCard = isClickableCard
                                 )
                             }
                         }

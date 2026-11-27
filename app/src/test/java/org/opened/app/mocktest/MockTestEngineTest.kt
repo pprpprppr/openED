@@ -437,6 +437,23 @@ class MockTestEngineTest {
         val wrongAnswer = entity.copy(userSelectedAnswers = listOf("London"))
         assertTrue(wrongAnswer.isAnswered)
         assertFalse(wrongAnswer.isCorrect)
+
+        // Exact userSelectedOption index wins for SINGLE_CHOICE even if options have case variants
+        val caseVariantEntity = MockTestQuestionEntity(
+            id = "q-3",
+            testId = "test-3",
+            questionIndex = 0,
+            topic = "Logic",
+            questionText = "Pick second option",
+            optionsJson = MockTestQuestionEntity.createOptionsJson(listOf("True", "true")),
+            correctOptionIndex = 1,
+            explanation = "Second option",
+            userSelectedOption = 1,
+            questionType = org.opened.app.core.database.entity.QuestionType.SINGLE_CHOICE,
+            correctAnswers = listOf("true"),
+            userSelectedAnswers = listOf("true")
+        )
+        assertEquals(listOf(1), caseVariantEntity.effectiveSelectedIndices)
     }
 
     @Test
